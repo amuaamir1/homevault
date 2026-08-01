@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../warranty/warranty_screen.dart';
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -23,33 +25,43 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Sprint 3 development build'),
+                  const Text('Sprint 4 development build'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
+          Card(
             child: Column(
               children: [
-                ListTile(
+                const ListTile(
                   leading: Icon(Icons.storage_outlined),
                   title: Text('Storage'),
                   subtitle: Text(
                     'Appliance records and document references are saved locally on this device.',
                   ),
                 ),
-                Divider(height: 1),
-                ListTile(
+                const Divider(height: 1),
+                const ListTile(
                   leading: Icon(Icons.cloud_outlined),
                   title: Text('Cloud backup'),
                   subtitle: Text('Planned for a later phase.'),
                 ),
-                Divider(height: 1),
+                const Divider(height: 1),
                 ListTile(
-                  leading: Icon(Icons.notifications_outlined),
-                  title: Text('Warranty reminders'),
-                  subtitle: Text('Planned for Sprint 4.'),
+                  leading: const Icon(Icons.notifications_outlined),
+                  title: const Text('Warranty reminders'),
+                  subtitle: const Text(
+                    'Manage warranty status and local expiry notifications.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const WarrantyScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -66,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.3.0',
+                  applicationVersion: '1.4.0',
                   children: const [
                     Text(
                       'A personal appliance support and document organizer under active development.',

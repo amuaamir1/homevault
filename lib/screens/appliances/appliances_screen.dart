@@ -174,6 +174,9 @@ class _ApplianceCard extends StatelessWidget {
     if (normalized.contains('computer')) {
       return Icons.computer;
     }
+    if (normalized.contains('water heater')) {
+      return Icons.water_drop_outlined;
+    }
     if (normalized.contains('mobile')) {
       return Icons.smartphone;
     }

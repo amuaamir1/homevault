@@ -1,24 +1,26 @@
 # HomeVault
 
-HomeVault is a Flutter Android application for keeping appliance details, warranty information, invoices, manuals, service records, and customer-support contacts in one place.
+HomeVault is an offline-first Flutter application for keeping household appliance details, invoices, warranty documents, customer-support contacts, and warranty reminders together.
 
-## Current milestone: Sprint 3
+## Current release
 
-Implemented:
-- Dashboard and five-section navigation
-- Add, search, view, edit, and delete appliances
-- Permanent offline appliance storage
-- Warranty-status calculation
-- Invoice and warranty-card attachments
-- Multi-document vault for manuals, receipts, reports, and other files
-- Document search, category filters, edit, replace, open, and delete actions
-- Customer support center with provider details and notes
-- Direct phone, email, and website actions
-- Support search and contact-method filters
-- Startup loading and storage error handling
-- Automated widget, serialization, migration, persistence, and support-action tests
+**Sprint 4 — version 1.4.0+5**
 
-## Run locally
+### Available features
+
+- Add, edit, search, and delete appliances.
+- Persist appliance records locally after restart.
+- Attach invoices, warranty cards, manuals, service receipts, installation reports, and other documents.
+- Search, filter, edit, replace, open, and delete documents.
+- Store and use customer-support phone, email, website, and notes.
+- Dedicated Warranty Center with status filters and sorting.
+- Standard and extended warranty tracking.
+- Warranty terms, coverage notes, claim number, claim status, and manual out-of-warranty control.
+- Timezone-aware local warranty reminders.
+- Android notification permission and a test-notification action.
+- Open the related appliance by tapping its warranty notification.
+
+## Development setup
 
 ```powershell
 flutter clean
@@ -28,6 +30,20 @@ flutter test
 flutter run
 ```
 
-The project intentionally keeps `file_picker: 10.3.10` because it works with the Android/Kotlin configuration currently used by the project. Sprint 3 adds the official `url_launcher` plugin for phone, email, and browser actions.
+Use a complete restart after applying Sprint 4 because notification plugins and Android manifest configuration were added.
 
-See `SPRINT_3.md` for the acceptance test and emulator notes.
+## Important dependency note
+
+Keep the document picker pinned to:
+
+```yaml
+file_picker: 10.3.10
+```
+
+This is the version already proven to work with the Android configuration used by this project.
+
+## Data safety
+
+HomeVault currently stores records and copied documents inside the application's private local storage. Do not uninstall the app or clear its Android storage unless a separate copy of important invoices and warranty documents exists. Backup and restore are planned for a later sprint.
+
+See `SPRINT_4.md` for the complete Sprint 4 test checklist.
