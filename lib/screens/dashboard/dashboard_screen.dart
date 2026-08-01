@@ -6,17 +6,21 @@ import '../../theme/app_colors.dart';
 import '../../widgets/dashboard_card.dart';
 import '../../widgets/quick_action_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
-import '../main_navigation.dart';
+import '../warranty/warranty_screen.dart';
+import '../../models/app_section.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
     required this.onNavigate,
     required this.onAddAppliance,
+    required this.onOpenWarrantyCenter,
   });
 
   final ValueChanged<AppSection> onNavigate;
   final Future<void> Function() onAddAppliance;
+  final Future<void> Function(WarrantyFilter initialFilter)
+  onOpenWarrantyCenter;
 
   String _greeting() {
     final hour = DateTime.now().hour;
@@ -79,7 +83,7 @@ class DashboardScreen extends StatelessWidget {
                     title: 'Active warranty',
                     value: '${store.warrantyCount(WarrantyStatus.active)}',
                     color: AppColors.success,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
                   ),
                   DashboardCard(
                     icon: Icons.warning_amber,
@@ -87,14 +91,15 @@ class DashboardScreen extends StatelessWidget {
                     value:
                         '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
                     color: AppColors.warning,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () =>
+                        onOpenWarrantyCenter(WarrantyFilter.expiringSoon),
                   ),
                   DashboardCard(
                     icon: Icons.cancel,
                     title: 'Expired',
                     value: '${store.warrantyCount(WarrantyStatus.expired)}',
                     color: AppColors.danger,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.expired),
                   ),
                 ],
               ),
@@ -135,10 +140,10 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => onNavigate(AppSection.support),
                   ),
                   QuickActionTile(
-                    icon: Icons.settings,
-                    title: 'Settings',
+                    icon: Icons.verified_user_outlined,
+                    title: 'Warranty center',
                     color: AppColors.textSecondary,
-                    onTap: () => onNavigate(AppSection.settings),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.all),
                   ),
                 ],
               ),

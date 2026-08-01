@@ -139,4 +139,55 @@ void main() {
     expect(find.text('Website'), findsWidgets);
     expect(find.text('Sunday to Thursday'), findsOneWidget);
   });
+
+  testWidgets('warranty center shows warranty status and reminders', (
+    tester,
+  ) async {
+    final appliance = Appliance(
+      id: 'ac-warranty-1',
+      name: 'Family room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      warrantyProvider: 'Daikin Care',
+      warrantyExpiryDate: DateTime(2028, 8, 1),
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 30,
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final warrantyButton = find.text('Warranty center').first;
+    await tester.ensureVisible(warrantyButton);
+    await tester.tap(warrantyButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Warranty center'), findsOneWidget);
+
+    // This section is visible at the top of the screen.
+    expect(find.text('Warranty reminders'), findsOneWidget);
+
+    final warrantyList = find.byKey(const Key('warrantyCenterList'));
+
+    expect(warrantyList, findsOneWidget);
+
+    // The appliance card is below the test viewport.
+    await tester.dragUntilVisible(
+      find.text('Family room AC'),
+      warrantyList,
+      const Offset(0, -350),
+      maxIteration: 10,
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Family room AC'), findsOneWidget);
+    expect(
+      find.textContaining('Reminder 30 days before expiry'),
+      findsOneWidget,
+    );
+  });
 }

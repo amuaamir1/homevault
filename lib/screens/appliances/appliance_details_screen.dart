@@ -26,6 +26,17 @@ class ApplianceDetailsScreen extends StatelessWidget {
     return '$day/$month/${value.year}';
   }
 
+  String _remainingWarrantyText(Appliance appliance) {
+    final days = appliance.warrantyDaysRemainingAt(DateTime.now());
+    if (days == null) return 'Not provided';
+    if (days < 0) {
+      final elapsed = days.abs();
+      return 'Expired $elapsed day${elapsed == 1 ? '' : 's'} ago';
+    }
+    if (days == 0) return 'Expires today';
+    return '$days day${days == 1 ? '' : 's'} remaining';
+  }
+
   Future<void> _copy(BuildContext context, String label, String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!context.mounted) return;
@@ -287,7 +298,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 value: _date(appliance.purchaseDate),
               ),
               _DetailRow(
-                label: 'Warranty expiry',
+                label: 'Standard warranty',
                 value: _date(appliance.warrantyExpiryDate),
               ),
             ],
@@ -319,7 +330,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _DetailsSection(
-            title: 'Warranty card',
+            title: 'Warranty management',
             children: [
               _DetailRow(
                 label: 'Provider',
@@ -330,6 +341,92 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 label: 'Reference',
                 value: appliance.warrantyReference,
                 emptyText: 'No warranty card reference added',
+              ),
+              _DetailRow(
+                label: 'Effective expiry',
+                value: _date(appliance.effectiveWarrantyExpiryDate),
+              ),
+              _DetailRow(
+                label: 'Time remaining',
+                value: _remainingWarrantyText(appliance),
+              ),
+              if (appliance.warrantyTerms.trim().isNotEmpty)
+                _DetailRow(label: 'Terms', value: appliance.warrantyTerms),
+              if (appliance.warrantyCoverageNotes.trim().isNotEmpty)
+                _DetailRow(
+                  label: 'Coverage',
+                  value: appliance.warrantyCoverageNotes,
+                ),
+              if (appliance.hasExtendedWarranty) ...[
+                const Divider(height: 24),
+                Text(
+                  'Extended warranty',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                _DetailRow(
+                  label: 'Provider',
+                  value: appliance.extendedWarrantyProvider,
+                ),
+                _DetailRow(
+                  label: 'Reference',
+                  value: appliance.extendedWarrantyReference,
+                ),
+                _DetailRow(
+                  label: 'Expiry',
+                  value: _date(appliance.extendedWarrantyExpiryDate),
+                ),
+              ],
+              if (appliance.warrantyClaimStatus != WarrantyClaimStatus.none ||
+                  appliance.warrantyClaimNumber.trim().isNotEmpty) ...[
+                const Divider(height: 24),
+                Text(
+                  'Warranty claim',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                _DetailRow(
+                  label: 'Claim number',
+                  value: appliance.warrantyClaimNumber,
+                ),
+                _DetailRow(
+                  label: 'Claim status',
+                  value: appliance.warrantyClaimStatus.label,
+                ),
+              ],
+              if (appliance.warrantyMarkedExpired) ...[
+                const Divider(height: 24),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.gpp_bad_outlined),
+                  title: Text('Marked as out of warranty'),
+                  subtitle: Text(
+                    'This warranty was manually marked as ended or voided.',
+                  ),
+                ),
+              ],
+              const Divider(height: 24),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  appliance.warrantyReminderEnabled
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_off_outlined,
+                ),
+                title: Text(
+                  appliance.warrantyReminderEnabled
+                      ? 'Reminder enabled'
+                      : 'Reminder disabled',
+                ),
+                subtitle: Text(
+                  appliance.warrantyReminderEnabled
+                      ? '${appliance.warrantyReminderDaysBefore} days before the effective expiry date'
+                      : 'Edit the appliance to enable a reminder.',
+                ),
               ),
               if (appliance.warrantyDocument != null) ...[
                 const Divider(height: 24),

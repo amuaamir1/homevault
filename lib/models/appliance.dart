@@ -2,6 +2,26 @@ import 'stored_document.dart';
 
 enum WarrantyStatus { active, expiringSoon, expired, notProvided }
 
+enum WarrantyClaimStatus {
+  none,
+  submitted,
+  inReview,
+  approved,
+  rejected,
+  resolved,
+}
+
+extension WarrantyClaimStatusLabel on WarrantyClaimStatus {
+  String get label => switch (this) {
+    WarrantyClaimStatus.none => 'No claim',
+    WarrantyClaimStatus.submitted => 'Submitted',
+    WarrantyClaimStatus.inReview => 'In review',
+    WarrantyClaimStatus.approved => 'Approved',
+    WarrantyClaimStatus.rejected => 'Rejected',
+    WarrantyClaimStatus.resolved => 'Resolved',
+  };
+}
+
 class Appliance {
   Appliance({
     required this.id,
@@ -21,6 +41,16 @@ class Appliance {
     this.invoiceReference = '',
     this.warrantyProvider = '',
     this.warrantyReference = '',
+    this.warrantyTerms = '',
+    this.warrantyCoverageNotes = '',
+    this.extendedWarrantyProvider = '',
+    this.extendedWarrantyReference = '',
+    this.extendedWarrantyExpiryDate,
+    this.warrantyClaimNumber = '',
+    this.warrantyClaimStatus = WarrantyClaimStatus.none,
+    this.warrantyMarkedExpired = false,
+    this.warrantyReminderEnabled = false,
+    this.warrantyReminderDaysBefore = 30,
     this.invoiceDocument,
     this.warrantyDocument,
     List<StoredDocument> additionalDocuments = const [],
@@ -57,6 +87,23 @@ class Appliance {
       invoiceReference: json['invoiceReference'] as String? ?? '',
       warrantyProvider: json['warrantyProvider'] as String? ?? '',
       warrantyReference: json['warrantyReference'] as String? ?? '',
+      warrantyTerms: json['warrantyTerms'] as String? ?? '',
+      warrantyCoverageNotes: json['warrantyCoverageNotes'] as String? ?? '',
+      extendedWarrantyProvider:
+          json['extendedWarrantyProvider'] as String? ?? '',
+      extendedWarrantyReference:
+          json['extendedWarrantyReference'] as String? ?? '',
+      extendedWarrantyExpiryDate: _dateFromJson(
+        json['extendedWarrantyExpiryDate'],
+      ),
+      warrantyClaimNumber: json['warrantyClaimNumber'] as String? ?? '',
+      warrantyClaimStatus: _claimStatusFromJson(json['warrantyClaimStatus']),
+      warrantyMarkedExpired: json['warrantyMarkedExpired'] as bool? ?? false,
+      warrantyReminderEnabled:
+          json['warrantyReminderEnabled'] as bool? ?? false,
+      warrantyReminderDaysBefore: _reminderDaysFromJson(
+        json['warrantyReminderDaysBefore'],
+      ),
       invoiceDocument: invoiceDocument,
       warrantyDocument: warrantyDocument,
       additionalDocuments: additionalJson is List
@@ -92,6 +139,16 @@ class Appliance {
   final String invoiceReference;
   final String warrantyProvider;
   final String warrantyReference;
+  final String warrantyTerms;
+  final String warrantyCoverageNotes;
+  final String extendedWarrantyProvider;
+  final String extendedWarrantyReference;
+  final DateTime? extendedWarrantyExpiryDate;
+  final String warrantyClaimNumber;
+  final WarrantyClaimStatus warrantyClaimStatus;
+  final bool warrantyMarkedExpired;
+  final bool warrantyReminderEnabled;
+  final int warrantyReminderDaysBefore;
   final StoredDocument? invoiceDocument;
   final StoredDocument? warrantyDocument;
   final List<StoredDocument> additionalDocuments;
@@ -105,6 +162,44 @@ class Appliance {
   ]);
 
   int get documentCount => allDocuments.length;
+
+  DateTime? get effectiveWarrantyExpiryDate {
+    final standard = warrantyExpiryDate;
+    final extended = extendedWarrantyExpiryDate;
+    if (standard == null) return extended;
+    if (extended == null) return standard;
+    return extended.isAfter(standard) ? extended : standard;
+  }
+
+  bool get hasExtendedWarranty =>
+      extendedWarrantyExpiryDate != null ||
+      extendedWarrantyProvider.trim().isNotEmpty ||
+      extendedWarrantyReference.trim().isNotEmpty;
+
+  int? warrantyDaysRemainingAt(DateTime now) {
+    final expiryDate = effectiveWarrantyExpiryDate;
+    if (expiryDate == null) return null;
+
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    return expiry.difference(today).inDays;
+  }
+
+  DateTime? warrantyReminderDateAt({int hour = 9}) {
+    final expiryDate = effectiveWarrantyExpiryDate;
+    if (warrantyMarkedExpired ||
+        !warrantyReminderEnabled ||
+        expiryDate == null) {
+      return null;
+    }
+
+    return DateTime(
+      expiryDate.year,
+      expiryDate.month,
+      expiryDate.day,
+      hour,
+    ).subtract(Duration(days: warrantyReminderDaysBefore));
+  }
 
   Appliance withAdditionalDocument(StoredDocument document) {
     return _rebuild(additionalDocuments: [...additionalDocuments, document]);
@@ -176,6 +271,16 @@ class Appliance {
       invoiceReference: invoiceReference,
       warrantyProvider: warrantyProvider,
       warrantyReference: warrantyReference,
+      warrantyTerms: warrantyTerms,
+      warrantyCoverageNotes: warrantyCoverageNotes,
+      extendedWarrantyProvider: extendedWarrantyProvider,
+      extendedWarrantyReference: extendedWarrantyReference,
+      extendedWarrantyExpiryDate: extendedWarrantyExpiryDate,
+      warrantyClaimNumber: warrantyClaimNumber,
+      warrantyClaimStatus: warrantyClaimStatus,
+      warrantyMarkedExpired: warrantyMarkedExpired,
+      warrantyReminderEnabled: warrantyReminderEnabled,
+      warrantyReminderDaysBefore: warrantyReminderDaysBefore,
       invoiceDocument: setInvoiceDocument
           ? invoiceDocument
           : this.invoiceDocument,
@@ -206,6 +311,17 @@ class Appliance {
       'invoiceReference': invoiceReference,
       'warrantyProvider': warrantyProvider,
       'warrantyReference': warrantyReference,
+      'warrantyTerms': warrantyTerms,
+      'warrantyCoverageNotes': warrantyCoverageNotes,
+      'extendedWarrantyProvider': extendedWarrantyProvider,
+      'extendedWarrantyReference': extendedWarrantyReference,
+      'extendedWarrantyExpiryDate': extendedWarrantyExpiryDate
+          ?.toIso8601String(),
+      'warrantyClaimNumber': warrantyClaimNumber,
+      'warrantyClaimStatus': warrantyClaimStatus.name,
+      'warrantyMarkedExpired': warrantyMarkedExpired,
+      'warrantyReminderEnabled': warrantyReminderEnabled,
+      'warrantyReminderDaysBefore': warrantyReminderDaysBefore,
       'invoiceDocument': invoiceDocument?.toJson(),
       'warrantyDocument': warrantyDocument?.toJson(),
       'additionalDocuments': additionalDocuments
@@ -248,16 +364,30 @@ class Appliance {
     );
   }
 
+  static WarrantyClaimStatus _claimStatusFromJson(Object? value) {
+    final name = value as String?;
+    return WarrantyClaimStatus.values.firstWhere(
+      (status) => status.name == name,
+      orElse: () => WarrantyClaimStatus.none,
+    );
+  }
+
+  static int _reminderDaysFromJson(Object? value) {
+    final days = value is int ? value : int.tryParse('$value');
+    if (days == null || days < 0) return 30;
+    if (days > 365) return 365;
+    return days;
+  }
+
   WarrantyStatus warrantyStatusAt(DateTime now) {
-    final expiryDate = warrantyExpiryDate;
-    if (expiryDate == null) {
-      return WarrantyStatus.notProvided;
+    if (warrantyMarkedExpired) {
+      return WarrantyStatus.expired;
     }
 
-    final today = DateTime(now.year, now.month, now.day);
-    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
-    final remainingDays = expiry.difference(today).inDays;
-
+    final remainingDays = warrantyDaysRemainingAt(now);
+    if (remainingDays == null) {
+      return WarrantyStatus.notProvided;
+    }
     if (remainingDays < 0) {
       return WarrantyStatus.expired;
     }
