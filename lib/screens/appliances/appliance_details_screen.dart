@@ -5,13 +5,17 @@ import 'package:open_filex/open_filex.dart';
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/document_form_result.dart';
+import '../../models/service_form_result.dart';
+import '../../models/service_record.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
 import '../../services/support_action_service.dart';
 import '../../state/app_scope.dart';
+import '../../widgets/service_record_tile.dart';
 import '../../widgets/stored_document_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
 import '../documents/add_document_screen.dart';
+import '../service/add_service_record_screen.dart';
 import 'add_appliance_screen.dart';
 
 class ApplianceDetailsScreen extends StatelessWidget {
@@ -155,6 +159,136 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _addServiceRecord(
+    BuildContext context,
+    Appliance appliance,
+  ) async {
+    final store = AppScope.read(context);
+    final result = await Navigator.of(context).push<ServiceFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddServiceRecordScreen(
+          appliances: store.appliances.toList(growable: false),
+          initialApplianceId: appliance.id,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    await _saveServiceResult(context, result);
+  }
+
+  Future<void> _editServiceRecord(
+    BuildContext context,
+    Appliance appliance,
+    ServiceRecord record,
+  ) async {
+    final store = AppScope.read(context);
+    final result = await Navigator.of(context).push<ServiceFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddServiceRecordScreen(
+          appliances: store.appliances.toList(growable: false),
+          initialApplianceId: appliance.id,
+          record: record,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    await _saveServiceResult(context, result);
+  }
+
+  Future<void> _saveServiceResult(
+    BuildContext context,
+    ServiceFormResult result,
+  ) async {
+    try {
+      final store = AppScope.read(context);
+      if (result.isEditing) {
+        await store.updateServiceRecord(result.applianceId, result.record);
+      } else {
+        await store.addServiceRecord(result.applianceId, result.record);
+      }
+
+      for (final document in result.documentsToDelete) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // The record is saved even if a stale attachment remains.
+        }
+      }
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isEditing
+                ? 'Service record updated.'
+                : 'Service record saved.',
+          ),
+        ),
+      );
+    } catch (_) {
+      for (final document in result.documentsAdded) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // Keep the original save failure as the important error.
+        }
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The service record could not be saved.')),
+      );
+    }
+  }
+
+  Future<void> _deleteServiceRecord(
+    BuildContext context,
+    Appliance appliance,
+    ServiceRecord record,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete service record?'),
+        content: const Text(
+          'The service details and attached receipt/report will be removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await AppScope.read(context).removeServiceRecord(appliance.id, record.id);
+      for (final document in record.documents) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // The record is removed even if a stale file remains.
+        }
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Service record deleted.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The service record could not be deleted.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _delete(BuildContext context, Appliance appliance) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -233,6 +367,11 @@ class ApplianceDetailsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Appliance details'),
         actions: [
+          IconButton(
+            tooltip: 'Add service record',
+            onPressed: () => _addServiceRecord(context, appliance),
+            icon: const Icon(Icons.build_circle_outlined),
+          ),
           IconButton(
             tooltip: 'Add document',
             onPressed: () => _addDocument(context, appliance),
@@ -441,6 +580,48 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.only(top: 10),
                   child: Text('No warranty card file attached.'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _DetailsSection(
+            title: 'Service and maintenance',
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'} • Total cost ${appliance.totalServiceCost.toStringAsFixed(2)}',
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _addServiceRecord(context, appliance),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add service'),
+                  ),
+                ],
+              ),
+              if (appliance.nextServiceDate != null)
+                _DetailRow(
+                  label: 'Next service',
+                  value: _date(appliance.nextServiceDate),
+                ),
+              if (appliance.serviceRecords.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No service or maintenance records added.'),
+                )
+              else
+                ...([
+                  ...appliance.serviceRecords,
+                ]..sort((a, b) => b.serviceDate.compareTo(a.serviceDate))).map(
+                  (record) => ServiceRecordTile(
+                    record: record,
+                    onEdit: () =>
+                        _editServiceRecord(context, appliance, record),
+                    onDelete: () =>
+                        _deleteServiceRecord(context, appliance, record),
+                  ),
                 ),
             ],
           ),

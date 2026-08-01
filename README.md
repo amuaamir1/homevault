@@ -1,49 +1,42 @@
 # HomeVault
 
-HomeVault is an offline-first Flutter application for keeping household appliance details, invoices, warranty documents, customer-support contacts, and warranty reminders together.
+HomeVault is an offline-first Flutter Android application for appliance details, invoices, warranties, support contacts, and maintenance history.
 
-## Current release
+**Current build: Sprint 5 — version 1.5.0+6**
 
-**Sprint 4 — version 1.4.0+5**
-
-### Available features
+## Current capabilities
 
 - Add, edit, search, and delete appliances.
-- Persist appliance records locally after restart.
-- Attach invoices, warranty cards, manuals, service receipts, installation reports, and other documents.
-- Search, filter, edit, replace, open, and delete documents.
-- Store and use customer-support phone, email, website, and notes.
-- Dedicated Warranty Center with status filters and sorting.
-- Standard and extended warranty tracking.
-- Warranty terms, coverage notes, claim number, claim status, and manual out-of-warranty control.
-- Timezone-aware local warranty reminders.
-- Android notification permission and a test-notification action.
-- Open the related appliance by tapping its warranty notification.
+- Permanent local appliance storage.
+- Invoice, warranty card, manual, installation, and other document storage.
+- Customer support directory with call, email, and website actions.
+- Warranty Center, extended warranties, claims, and expiry reminders.
+- Service Center with repair history, costs, receipts, reports, and next-service reminders.
+- Dashboard warranty and maintenance counters.
+- Geyser / Water Heater appliance category.
 
-## Development setup
+## Development checks
 
 ```powershell
-flutter clean
 flutter pub get
+dart format lib test
 flutter analyze
 flutter test
 flutter run
 ```
 
-Use a complete restart after applying Sprint 4 because notification plugins and Android manifest configuration were added.
+## Build an APK
 
-## Important dependency note
-
-Keep the document picker pinned to:
-
-```yaml
-file_picker: 10.3.10
+```powershell
+flutter build apk --release
 ```
 
-This is the version already proven to work with the Android configuration used by this project.
+Output:
 
-## Data safety
+```text
+build\app\outputs\flutter-apk\app-release.apk
+```
 
-HomeVault currently stores records and copied documents inside the application's private local storage. Do not uninstall the app or clear its Android storage unless a separate copy of important invoices and warranty documents exists. Backup and restore are planned for a later sprint.
+HomeVault stores data in private application storage. Do not uninstall the app or clear its Android storage until backup and restore is implemented.
 
-See `SPRINT_4.md` for the complete Sprint 4 test checklist.
+See `SPRINT_5.md` for the Sprint 5 acceptance test.

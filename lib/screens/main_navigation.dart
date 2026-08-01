@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/app_section.dart';
 import '../models/appliance_form_result.dart';
 import '../services/document_storage_service.dart';
 import '../services/warranty_notification_service.dart';
@@ -11,10 +12,10 @@ import 'appliances/appliance_details_screen.dart';
 import 'appliances/appliances_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'documents/documents_screen.dart';
+import 'service/service_center_screen.dart';
 import 'settings/settings_screen.dart';
 import 'support/support_screen.dart';
 import 'warranty/warranty_screen.dart';
-import '../models/app_section.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -102,9 +103,17 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
-  Future<void> _openWarrantyCenter(WarrantyFilter initialFilter) async {
+  Future<void> _openServiceCenter(ServiceFilter initialFilter) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
+        builder: (context) => ServiceCenterScreen(initialFilter: initialFilter),
+      ),
+    );
+  }
+
+  Future<void> _openWarrantyCenter(WarrantyFilter initialFilter) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
         builder: (context) => WarrantyScreen(initialFilter: initialFilter),
       ),
     );
@@ -117,6 +126,7 @@ class _MainNavigationState extends State<MainNavigation> {
         onNavigate: _goToSection,
         onAddAppliance: _openAddAppliance,
         onOpenWarrantyCenter: _openWarrantyCenter,
+        onOpenServiceCenter: _openServiceCenter,
       ),
       AppliancesScreen(onAddAppliance: _openAddAppliance),
       const DocumentsScreen(),

@@ -212,7 +212,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               icon: Icons.folder_copy_outlined,
               title: 'Your document vault is empty',
               message:
-                  'Add invoices, warranty cards, manuals, service receipts, and installation reports.',
+                  'Add invoices, warranty cards, manuals, service receipts, service reports, and installation reports.',
               actionLabel: 'Add document',
               onAction: () => _addDocument(context),
             )
