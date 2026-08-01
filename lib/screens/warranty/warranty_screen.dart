@@ -71,7 +71,7 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
         SnackBar(
           content: Text(
             granted
-                ? 'Warranty notifications are enabled.'
+                ? 'HomeVault notifications are enabled.'
                 : 'Notification permission was not granted.',
           ),
         ),
@@ -339,7 +339,7 @@ class _NotificationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Warranty reminders',
+                    'Warranty and maintenance reminders',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -349,7 +349,7 @@ class _NotificationCard extends StatelessWidget {
                     isChecking
                         ? 'Checking notification permission...'
                         : enabled
-                        ? '$pendingCount reminder${pendingCount == 1 ? '' : 's'} currently scheduled.'
+                        ? '$pendingCount reminder${pendingCount == 1 ? '' : 's'} currently scheduled across warranties and maintenance.'
                         : 'Enable notifications to receive warranty expiry alerts.',
                   ),
                   if (!isChecking) ...[

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -25,7 +26,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Sprint 4 development build'),
+                  const Text('Sprint 5 development build'),
                 ],
               ),
             ),
@@ -63,6 +64,22 @@ class SettingsScreen extends StatelessWidget {
                     );
                   },
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.home_repair_service_outlined),
+                  title: const Text('Service center'),
+                  subtitle: const Text(
+                    'Manage maintenance history, costs, and next-service reminders.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const ServiceCenterScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -78,10 +95,10 @@ class SettingsScreen extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.4.0',
+                  applicationVersion: '1.5.0',
                   children: const [
                     Text(
-                      'A personal appliance support and document organizer under active development.',
+                      'A personal appliance support, warranty, document, and maintenance organizer under active development.',
                     ),
                   ],
                 );

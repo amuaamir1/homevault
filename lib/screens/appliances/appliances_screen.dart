@@ -168,14 +168,14 @@ class _ApplianceCard extends StatelessWidget {
     if (normalized.contains('laundry')) {
       return Icons.local_laundry_service_outlined;
     }
+    if (normalized.contains('geyser') || normalized.contains('water heater')) {
+      return Icons.water_drop_outlined;
+    }
     if (normalized.contains('television')) {
       return Icons.tv;
     }
     if (normalized.contains('computer')) {
       return Icons.computer;
-    }
-    if (normalized.contains('water heater')) {
-      return Icons.water_drop_outlined;
     }
     if (normalized.contains('mobile')) {
       return Icons.smartphone;

@@ -25,8 +25,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     'Air Conditioner',
     'Kitchen Appliance',
     'Laundry',
+    'Geyser / Water Heater',
     'Television',
-    'Water Heater',
     'Computer',
     'Mobile Device',
     'Home Appliance',
@@ -413,6 +413,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         reference: _warrantyReferenceController.text.trim(),
       ),
       additionalDocuments: existingAppliance?.additionalDocuments ?? const [],
+      serviceRecords: existingAppliance?.serviceRecords ?? const [],
       notes: _notesController.text.trim(),
       createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );

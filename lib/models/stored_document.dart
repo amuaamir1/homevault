@@ -3,6 +3,7 @@ enum DocumentType {
   warrantyCard,
   userManual,
   serviceReceipt,
+  serviceReport,
   installationReport,
   other,
 }
@@ -18,6 +19,8 @@ extension DocumentTypeDetails on DocumentType {
         return 'User manual';
       case DocumentType.serviceReceipt:
         return 'Service receipt';
+      case DocumentType.serviceReport:
+        return 'Service report';
       case DocumentType.installationReport:
         return 'Installation report';
       case DocumentType.other:
@@ -35,6 +38,8 @@ extension DocumentTypeDetails on DocumentType {
         return 'manuals';
       case DocumentType.serviceReceipt:
         return 'service_receipts';
+      case DocumentType.serviceReport:
+        return 'service_reports';
       case DocumentType.installationReport:
         return 'installation_reports';
       case DocumentType.other:
