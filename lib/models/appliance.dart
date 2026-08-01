@@ -1,11 +1,6 @@
 import 'stored_document.dart';
 
-enum WarrantyStatus {
-  active,
-  expiringSoon,
-  expired,
-  notProvided,
-}
+enum WarrantyStatus { active, expiringSoon, expired, notProvided }
 
 class Appliance {
   Appliance({
@@ -18,9 +13,11 @@ class Appliance {
     this.serialNumber = '',
     this.purchaseDate,
     this.warrantyExpiryDate,
+    this.supportProvider = '',
     this.supportPhone = '',
     this.supportEmail = '',
     this.supportWebsite = '',
+    this.supportNotes = '',
     this.invoiceReference = '',
     this.warrantyProvider = '',
     this.warrantyReference = '',
@@ -31,24 +28,17 @@ class Appliance {
   }) : additionalDocuments = List.unmodifiable(additionalDocuments);
 
   factory Appliance.fromJson(Map<String, dynamic> json) {
-    final invoiceJson = json['invoiceDocument'];
-    final warrantyJson = json['warrantyDocument'];
+    final invoiceDocument = _upgradeLegacyDocument(
+      _documentFromJson(json['invoiceDocument']),
+      type: DocumentType.invoice,
+      fallbackTitle: 'Invoice',
+    );
+    final warrantyDocument = _upgradeLegacyDocument(
+      _documentFromJson(json['warrantyDocument']),
+      type: DocumentType.warrantyCard,
+      fallbackTitle: 'Warranty card',
+    );
     final additionalJson = json['additionalDocuments'];
-
-    final legacyInvoice = _documentFromJson(invoiceJson);
-    final legacyWarranty = _documentFromJson(warrantyJson);
-    final invoiceDocument = legacyInvoice?.copyWith(
-            type: DocumentType.invoice,
-            title: legacyInvoice.title.trim().isEmpty
-                ? 'Invoice'
-                : legacyInvoice.title,
-          );
-    final warrantyDocument = legacyWarranty?.copyWith(
-            type: DocumentType.warrantyCard,
-            title: legacyWarranty.title.trim().isEmpty
-                ? 'Warranty card'
-                : legacyWarranty.title,
-          );
 
     return Appliance(
       id: json['id'] as String? ?? '',
@@ -59,9 +49,11 @@ class Appliance {
       serialNumber: json['serialNumber'] as String? ?? '',
       purchaseDate: _dateFromJson(json['purchaseDate']),
       warrantyExpiryDate: _dateFromJson(json['warrantyExpiryDate']),
+      supportProvider: json['supportProvider'] as String? ?? '',
       supportPhone: json['supportPhone'] as String? ?? '',
       supportEmail: json['supportEmail'] as String? ?? '',
       supportWebsite: json['supportWebsite'] as String? ?? '',
+      supportNotes: json['supportNotes'] as String? ?? '',
       invoiceReference: json['invoiceReference'] as String? ?? '',
       warrantyProvider: json['warrantyProvider'] as String? ?? '',
       warrantyReference: json['warrantyReference'] as String? ?? '',
@@ -69,17 +61,17 @@ class Appliance {
       warrantyDocument: warrantyDocument,
       additionalDocuments: additionalJson is List
           ? additionalJson
-              .whereType<Map>()
-              .map(
-                (item) => StoredDocument.fromJson(
-                  Map<String, dynamic>.from(item),
-                ),
-              )
-              .where((document) => document.localPath.isNotEmpty)
-              .toList(growable: false)
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      StoredDocument.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .where((document) => document.localPath.isNotEmpty)
+                .toList(growable: false)
           : const [],
       notes: json['notes'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
@@ -92,9 +84,11 @@ class Appliance {
   final String serialNumber;
   final DateTime? purchaseDate;
   final DateTime? warrantyExpiryDate;
+  final String supportProvider;
   final String supportPhone;
   final String supportEmail;
   final String supportWebsite;
+  final String supportNotes;
   final String invoiceReference;
   final String warrantyProvider;
   final String warrantyReference;
@@ -105,23 +99,18 @@ class Appliance {
   final DateTime createdAt;
 
   List<StoredDocument> get allDocuments => List.unmodifiable([
-        ?invoiceDocument,
-        ?warrantyDocument,
-        ...additionalDocuments,
-      ]);
+    ?invoiceDocument,
+    ?warrantyDocument,
+    ...additionalDocuments,
+  ]);
 
   int get documentCount => allDocuments.length;
 
   Appliance withAdditionalDocument(StoredDocument document) {
-    return _rebuild(
-      additionalDocuments: [...additionalDocuments, document],
-    );
+    return _rebuild(additionalDocuments: [...additionalDocuments, document]);
   }
 
-  Appliance replaceDocument(
-    String documentId,
-    StoredDocument replacement,
-  ) {
+  Appliance replaceDocument(String documentId, StoredDocument replacement) {
     if (invoiceDocument?.id == documentId) {
       return _rebuild(
         invoiceDocument: replacement.copyWith(type: DocumentType.invoice),
@@ -130,8 +119,7 @@ class Appliance {
     }
     if (warrantyDocument?.id == documentId) {
       return _rebuild(
-        warrantyDocument:
-            replacement.copyWith(type: DocumentType.warrantyCard),
+        warrantyDocument: replacement.copyWith(type: DocumentType.warrantyCard),
         setWarrantyDocument: true,
       );
     }
@@ -150,11 +138,13 @@ class Appliance {
 
   Appliance withoutDocument(String documentId) {
     return _rebuild(
-      invoiceDocument:
-          invoiceDocument?.id == documentId ? null : invoiceDocument,
+      invoiceDocument: invoiceDocument?.id == documentId
+          ? null
+          : invoiceDocument,
       setInvoiceDocument: invoiceDocument?.id == documentId,
-      warrantyDocument:
-          warrantyDocument?.id == documentId ? null : warrantyDocument,
+      warrantyDocument: warrantyDocument?.id == documentId
+          ? null
+          : warrantyDocument,
       setWarrantyDocument: warrantyDocument?.id == documentId,
       additionalDocuments: additionalDocuments
           .where((document) => document.id != documentId)
@@ -178,16 +168,20 @@ class Appliance {
       serialNumber: serialNumber,
       purchaseDate: purchaseDate,
       warrantyExpiryDate: warrantyExpiryDate,
+      supportProvider: supportProvider,
       supportPhone: supportPhone,
       supportEmail: supportEmail,
       supportWebsite: supportWebsite,
+      supportNotes: supportNotes,
       invoiceReference: invoiceReference,
       warrantyProvider: warrantyProvider,
       warrantyReference: warrantyReference,
-      invoiceDocument:
-          setInvoiceDocument ? invoiceDocument : this.invoiceDocument,
-      warrantyDocument:
-          setWarrantyDocument ? warrantyDocument : this.warrantyDocument,
+      invoiceDocument: setInvoiceDocument
+          ? invoiceDocument
+          : this.invoiceDocument,
+      warrantyDocument: setWarrantyDocument
+          ? warrantyDocument
+          : this.warrantyDocument,
       additionalDocuments: additionalDocuments ?? this.additionalDocuments,
       notes: notes,
       createdAt: createdAt,
@@ -204,16 +198,19 @@ class Appliance {
       'serialNumber': serialNumber,
       'purchaseDate': purchaseDate?.toIso8601String(),
       'warrantyExpiryDate': warrantyExpiryDate?.toIso8601String(),
+      'supportProvider': supportProvider,
       'supportPhone': supportPhone,
       'supportEmail': supportEmail,
       'supportWebsite': supportWebsite,
+      'supportNotes': supportNotes,
       'invoiceReference': invoiceReference,
       'warrantyProvider': warrantyProvider,
       'warrantyReference': warrantyReference,
       'invoiceDocument': invoiceDocument?.toJson(),
       'warrantyDocument': warrantyDocument?.toJson(),
-      'additionalDocuments':
-          additionalDocuments.map((document) => document.toJson()).toList(),
+      'additionalDocuments': additionalDocuments
+          .map((document) => document.toJson())
+          .toList(),
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -236,6 +233,21 @@ class Appliance {
     return null;
   }
 
+  static StoredDocument? _upgradeLegacyDocument(
+    StoredDocument? document, {
+    required DocumentType type,
+    required String fallbackTitle,
+  }) {
+    if (document == null) {
+      return null;
+    }
+
+    return document.copyWith(
+      type: type,
+      title: document.title.trim().isEmpty ? fallbackTitle : document.title,
+    );
+  }
+
   WarrantyStatus warrantyStatusAt(DateTime now) {
     final expiryDate = warrantyExpiryDate;
     if (expiryDate == null) {
@@ -256,6 +268,13 @@ class Appliance {
   }
 
   bool get hasSupportDetails =>
+      supportProvider.trim().isNotEmpty ||
+      supportPhone.trim().isNotEmpty ||
+      supportEmail.trim().isNotEmpty ||
+      supportWebsite.trim().isNotEmpty ||
+      supportNotes.trim().isNotEmpty;
+
+  bool get hasSupportAction =>
       supportPhone.trim().isNotEmpty ||
       supportEmail.trim().isNotEmpty ||
       supportWebsite.trim().isNotEmpty;

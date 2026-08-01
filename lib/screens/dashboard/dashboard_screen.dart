@@ -48,15 +48,15 @@ class DashboardScreen extends StatelessWidget {
               Text(
                 '👋 ${_greeting()}',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Manage appliance details, warranties, invoices, and support contacts in one place.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
               GridView.count(
@@ -84,7 +84,8 @@ class DashboardScreen extends StatelessWidget {
                   DashboardCard(
                     icon: Icons.warning_amber,
                     title: 'Expiring soon',
-                    value: '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
+                    value:
+                        '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
                     color: AppColors.warning,
                     onTap: () => onNavigate(AppSection.appliances),
                   ),
@@ -100,9 +101,9 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 30),
               Text(
                 'Quick actions',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 14),
               GridView.count(
@@ -148,8 +149,8 @@ class DashboardScreen extends StatelessWidget {
                     child: Text(
                       'Recent appliances',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   if (recentAppliances.isNotEmpty)

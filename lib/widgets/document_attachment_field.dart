@@ -42,17 +42,17 @@ class DocumentAttachmentField extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           description,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                         const SizedBox(height: 12),
@@ -61,10 +61,14 @@ class DocumentAttachmentField extends StatelessWidget {
                           icon: isLoading
                               ? const SizedBox.square(
                                   dimension: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Icon(Icons.upload_file_outlined),
-                          label: Text(isLoading ? 'Selecting...' : 'Choose file'),
+                          label: Text(
+                            isLoading ? 'Selecting...' : 'Choose file',
+                          ),
                         ),
                       ],
                     ),
@@ -95,10 +99,11 @@ class DocumentAttachmentField extends StatelessWidget {
                         const SizedBox(height: 3),
                         Text(
                           selectedDocument.formattedSize,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ],

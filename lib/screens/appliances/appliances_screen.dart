@@ -159,14 +159,24 @@ class _ApplianceCard extends StatelessWidget {
 
   IconData _categoryIcon(String category) {
     final normalized = category.toLowerCase();
-    if (normalized.contains('air')) return Icons.ac_unit;
-    if (normalized.contains('kitchen')) return Icons.kitchen_outlined;
+    if (normalized.contains('air')) {
+      return Icons.ac_unit;
+    }
+    if (normalized.contains('kitchen')) {
+      return Icons.kitchen_outlined;
+    }
     if (normalized.contains('laundry')) {
       return Icons.local_laundry_service_outlined;
     }
-    if (normalized.contains('television')) return Icons.tv;
-    if (normalized.contains('computer')) return Icons.computer;
-    if (normalized.contains('mobile')) return Icons.smartphone;
+    if (normalized.contains('television')) {
+      return Icons.tv;
+    }
+    if (normalized.contains('computer')) {
+      return Icons.computer;
+    }
+    if (normalized.contains('mobile')) {
+      return Icons.smartphone;
+    }
     return Icons.devices_other;
   }
 }
