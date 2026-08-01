@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/appliance.dart';
+import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
 
 class ApplianceStore extends ChangeNotifier {
@@ -94,6 +95,44 @@ class ApplianceStore extends ChangeNotifier {
     await _repository.saveAppliances(updated);
     _appliances = updated;
     notifyListeners();
+  }
+
+
+  Future<void> addDocument(
+    String applianceId,
+    StoredDocument document,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.withAdditionalDocument(document));
+  }
+
+  Future<void> replaceDocument(
+    String applianceId,
+    String documentId,
+    StoredDocument replacement,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.replaceDocument(documentId, replacement));
+  }
+
+  Future<void> removeDocument(
+    String applianceId,
+    String documentId,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.withoutDocument(documentId));
   }
 
   Future<void> delete(String applianceId) async {

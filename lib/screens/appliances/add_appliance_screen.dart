@@ -279,8 +279,18 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       invoiceReference: _invoiceController.text.trim(),
       warrantyProvider: _warrantyProviderController.text.trim(),
       warrantyReference: _warrantyReferenceController.text.trim(),
-      invoiceDocument: _invoiceDocument,
-      warrantyDocument: _warrantyDocument,
+      invoiceDocument: _invoiceDocument?.copyWith(
+        type: DocumentType.invoice,
+        title: 'Invoice',
+        reference: _invoiceController.text.trim(),
+      ),
+      warrantyDocument: _warrantyDocument?.copyWith(
+        type: DocumentType.warrantyCard,
+        title: 'Warranty card',
+        reference: _warrantyReferenceController.text.trim(),
+      ),
+      additionalDocuments:
+          existingAppliance?.additionalDocuments ?? const [],
       notes: _notesController.text.trim(),
       createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );

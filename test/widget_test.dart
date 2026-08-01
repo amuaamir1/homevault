@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/app.dart';
+import 'package:homevault/models/appliance.dart';
+import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/state/appliance_store.dart';
 
-Future<ApplianceStore> _createStore() async {
-  final store = ApplianceStore(repository: MemoryApplianceRepository());
+Future<ApplianceStore> _createStore({
+  List<Appliance> initialAppliances = const [],
+}) async {
+  final store = ApplianceStore(
+    repository: MemoryApplianceRepository(
+      initialAppliances: initialAppliances,
+    ),
+  );
   await store.initialize();
   return store;
 }
@@ -22,7 +30,7 @@ void main() {
     expect(find.text('Quick actions'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Appliances'), findsWidgets);
-    expect(find.text('Documents'), findsOneWidget);
+    expect(find.text('Documents'), findsWidgets);
     expect(find.text('Support'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
   });
@@ -61,5 +69,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(saveButton, findsOneWidget);
+  });
+
+  testWidgets('document vault shows saved appliance documents', (tester) async {
+    final appliance = Appliance(
+      id: 'ac-1',
+      name: 'Living room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      additionalDocuments: [
+        StoredDocument(
+          id: 'manual-1',
+          type: DocumentType.userManual,
+          title: 'AC manual',
+          fileName: 'manual.pdf',
+          localPath: '/documents/manual.pdf',
+          sizeBytes: 1024,
+          attachedAt: DateTime(2026, 8, 1),
+        ),
+      ],
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final documentsDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Documents'),
+    );
+    await tester.tap(documentsDestination);
+    await tester.pumpAndSettle();
+
+    expect(find.text('AC manual'), findsOneWidget);
+    expect(find.textContaining('Living room AC'), findsOneWidget);
+    expect(find.text('Add document'), findsOneWidget);
   });
 }

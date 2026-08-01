@@ -7,10 +7,7 @@ import '../../widgets/warranty_status_chip.dart';
 import 'appliance_details_screen.dart';
 
 class AppliancesScreen extends StatefulWidget {
-  const AppliancesScreen({
-    super.key,
-    required this.onAddAppliance,
-  });
+  const AppliancesScreen({super.key, required this.onAddAppliance});
 
   final Future<void> Function() onAddAppliance;
 
@@ -25,19 +22,22 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
   Widget build(BuildContext context) {
     final store = AppScope.of(context);
     final query = _query.trim().toLowerCase();
-    final appliances = store.appliances.where((appliance) {
-      if (query.isEmpty) {
-        return true;
-      }
-      return appliance.name.toLowerCase().contains(query) ||
-          appliance.brand.toLowerCase().contains(query) ||
-          appliance.category.toLowerCase().contains(query) ||
-          appliance.modelNumber.toLowerCase().contains(query);
-    }).toList(growable: false);
+    final appliances = store.appliances
+        .where((appliance) {
+          if (query.isEmpty) {
+            return true;
+          }
+          return appliance.name.toLowerCase().contains(query) ||
+              appliance.brand.toLowerCase().contains(query) ||
+              appliance.category.toLowerCase().contains(query) ||
+              appliance.modelNumber.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Appliances')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'appliances_add_fab',
         onPressed: widget.onAddAppliance,
         icon: const Icon(Icons.add),
         label: const Text('Add'),
@@ -106,9 +106,8 @@ class _ApplianceCard extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => ApplianceDetailsScreen(
-                applianceId: appliance.id,
-              ),
+              builder: (context) =>
+                  ApplianceDetailsScreen(applianceId: appliance.id),
             ),
           );
         },
@@ -128,19 +127,20 @@ class _ApplianceCard extends StatelessWidget {
                     Text(
                       appliance.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      [appliance.brand, appliance.modelNumber]
-                          .where((value) => value.trim().isNotEmpty)
-                          .join(' • '),
+                      [
+                        appliance.brand,
+                        appliance.modelNumber,
+                      ].where((value) => value.trim().isNotEmpty).join(' • '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     WarrantyStatusChip(
@@ -161,7 +161,9 @@ class _ApplianceCard extends StatelessWidget {
     final normalized = category.toLowerCase();
     if (normalized.contains('air')) return Icons.ac_unit;
     if (normalized.contains('kitchen')) return Icons.kitchen_outlined;
-    if (normalized.contains('laundry')) return Icons.local_laundry_service_outlined;
+    if (normalized.contains('laundry')) {
+      return Icons.local_laundry_service_outlined;
+    }
     if (normalized.contains('television')) return Icons.tv;
     if (normalized.contains('computer')) return Icons.computer;
     if (normalized.contains('mobile')) return Icons.smartphone;
