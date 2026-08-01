@@ -3,19 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../models/appliance.dart';
+import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/stored_document_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
+import 'add_appliance_screen.dart';
 
 class ApplianceDetailsScreen extends StatelessWidget {
   const ApplianceDetailsScreen({
     super.key,
-    required this.appliance,
+    required this.applianceId,
   });
 
-  final Appliance appliance;
+  final String applianceId;
 
   String _date(DateTime? value) {
     if (value == null) return 'Not provided';
@@ -48,7 +50,53 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _delete(BuildContext context) async {
+  Future<void> _edit(BuildContext context, Appliance appliance) async {
+    final result = await Navigator.of(context).push<ApplianceFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddApplianceScreen(appliance: appliance),
+      ),
+    );
+
+    if (result == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      await AppScope.read(context).update(result.appliance);
+
+      for (final document in result.documentsToDelete) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // The record is already correct; a stale file can be cleaned later.
+        }
+      }
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.appliance.name} was updated.')),
+      );
+    } catch (_) {
+      for (final document in result.documentsAdded) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // Preserve the original error message if cleanup also fails.
+        }
+      }
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The changes could not be saved. Please check the device storage and try again.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _delete(BuildContext context, Appliance appliance) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -72,18 +120,44 @@ class ApplianceDetailsScreen extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
+      await AppScope.read(context).delete(appliance.id);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The appliance could not be deleted. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    try {
       await DocumentStorageService().deleteApplianceDocuments(appliance.id);
     } catch (_) {
-      // The appliance record should still be removable if a stale file path exists.
+      // The saved record was deleted successfully even if a stale file remains.
     }
 
     if (!context.mounted) return;
-    AppScope.read(context).delete(appliance.id);
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
+    messenger.showSnackBar(
+      SnackBar(content: Text('${appliance.name} was deleted.')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final appliance = AppScope.of(context).applianceById(applianceId);
+
+    if (appliance == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Appliance details')),
+        body: const Center(
+          child: Text('This appliance is no longer available.'),
+        ),
+      );
+    }
+
     final supportRows = <_DetailRowData>[
       if (appliance.supportPhone.isNotEmpty)
         _DetailRowData('Phone', appliance.supportPhone, Icons.phone_outlined),
@@ -98,8 +172,13 @@ class ApplianceDetailsScreen extends StatelessWidget {
         title: const Text('Appliance details'),
         actions: [
           IconButton(
+            tooltip: 'Edit appliance',
+            onPressed: () => _edit(context, appliance),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
             tooltip: 'Delete appliance',
-            onPressed: () => _delete(context),
+            onPressed: () => _delete(context, appliance),
             icon: const Icon(Icons.delete_outline),
           ),
         ],

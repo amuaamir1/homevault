@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/appliance.dart';
+import '../models/appliance_form_result.dart';
+import '../services/document_storage_service.dart';
 import '../state/app_scope.dart';
 import 'appliances/add_appliance_screen.dart';
 import 'appliances/appliances_screen.dart';
@@ -32,22 +33,41 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _openAddAppliance() async {
-    final appliance = await Navigator.of(context).push<Appliance>(
+    final result = await Navigator.of(context).push<ApplianceFormResult>(
       MaterialPageRoute(
         builder: (context) => const AddApplianceScreen(),
       ),
     );
 
-    if (!mounted || appliance == null) {
+    if (!mounted || result == null) {
       return;
     }
 
-    AppScope.read(context).add(appliance);
-    setState(() => _selectedSection = AppSection.appliances);
+    try {
+      await AppScope.read(context).add(result.appliance);
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${appliance.name} was added.')),
-    );
+      setState(() => _selectedSection = AppSection.appliances);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.appliance.name} was saved.')),
+      );
+    } catch (_) {
+      try {
+        await DocumentStorageService()
+            .deleteApplianceDocuments(result.appliance.id);
+      } catch (_) {
+        // A failed cleanup should not hide the original save error.
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The appliance could not be saved. Please check the device storage and try again.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
