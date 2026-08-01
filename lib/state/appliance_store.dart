@@ -3,13 +3,20 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/appliance.dart';
+import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
+import '../services/warranty_notification_service.dart';
 
 class ApplianceStore extends ChangeNotifier {
-  ApplianceStore({ApplianceRepository? repository})
-      : _repository = repository ?? FileApplianceRepository();
+  ApplianceStore({
+    ApplianceRepository? repository,
+    WarrantyReminderScheduler? reminderScheduler,
+  }) : _repository = repository ?? FileApplianceRepository(),
+       _reminderScheduler =
+           reminderScheduler ?? const NoOpWarrantyReminderScheduler();
 
   final ApplianceRepository _repository;
+  final WarrantyReminderScheduler _reminderScheduler;
   List<Appliance> _appliances = [];
   bool _isLoading = true;
   bool _isInitialized = false;
@@ -53,6 +60,7 @@ class ApplianceStore extends ChangeNotifier {
     try {
       _appliances = await _repository.loadAppliances();
       _isInitialized = true;
+      await _syncRemindersSafely();
     } catch (error) {
       _loadError = error.toString();
       _isInitialized = false;
@@ -66,7 +74,9 @@ class ApplianceStore extends ChangeNotifier {
   int warrantyCount(WarrantyStatus status, {DateTime? now}) {
     final referenceDate = now ?? DateTime.now();
     return _appliances
-        .where((appliance) => appliance.warrantyStatusAt(referenceDate) == status)
+        .where(
+          (appliance) => appliance.warrantyStatusAt(referenceDate) == status,
+        )
         .length;
   }
 
@@ -81,6 +91,7 @@ class ApplianceStore extends ChangeNotifier {
     await _repository.saveAppliances(updated);
     _appliances = updated;
     notifyListeners();
+    await _scheduleReminderSafely(appliance);
   }
 
   Future<void> update(Appliance appliance) async {
@@ -94,6 +105,42 @@ class ApplianceStore extends ChangeNotifier {
     await _repository.saveAppliances(updated);
     _appliances = updated;
     notifyListeners();
+    await _scheduleReminderSafely(appliance);
+  }
+
+  Future<void> rescheduleWarrantyReminders() async {
+    await _syncRemindersSafely();
+  }
+
+  Future<void> addDocument(String applianceId, StoredDocument document) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.withAdditionalDocument(document));
+  }
+
+  Future<void> replaceDocument(
+    String applianceId,
+    String documentId,
+    StoredDocument replacement,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.replaceDocument(documentId, replacement));
+  }
+
+  Future<void> removeDocument(String applianceId, String documentId) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    await update(appliance.withoutDocument(documentId));
   }
 
   Future<void> delete(String applianceId) async {
@@ -108,5 +155,30 @@ class ApplianceStore extends ChangeNotifier {
     await _repository.saveAppliances(updated);
     _appliances = updated;
     notifyListeners();
+    await _cancelReminderSafely(applianceId);
+  }
+
+  Future<void> _syncRemindersSafely() async {
+    try {
+      await _reminderScheduler.syncAll(_appliances);
+    } catch (_) {
+      // Reminder failures must never block local appliance storage.
+    }
+  }
+
+  Future<void> _scheduleReminderSafely(Appliance appliance) async {
+    try {
+      await _reminderScheduler.scheduleFor(appliance);
+    } catch (_) {
+      // Reminder failures must never block local appliance storage.
+    }
+  }
+
+  Future<void> _cancelReminderSafely(String applianceId) async {
+    try {
+      await _reminderScheduler.cancelFor(applianceId);
+    } catch (_) {
+      // Reminder failures must never block local appliance storage.
+    }
   }
 }

@@ -6,13 +6,11 @@ import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/support_action_service.dart';
 import '../../widgets/document_attachment_field.dart';
 
 class AddApplianceScreen extends StatefulWidget {
-  const AddApplianceScreen({
-    super.key,
-    this.appliance,
-  });
+  const AddApplianceScreen({super.key, this.appliance});
 
   final Appliance? appliance;
 
@@ -21,11 +19,14 @@ class AddApplianceScreen extends StatefulWidget {
 }
 
 class _AddApplianceScreenState extends State<AddApplianceScreen> {
+  static const _reminderOptions = [7, 14, 30, 60, 90];
+
   static const _categories = [
     'Air Conditioner',
     'Kitchen Appliance',
     'Laundry',
     'Television',
+    'Water Heater',
     'Computer',
     'Mobile Device',
     'Home Appliance',
@@ -39,12 +40,19 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late final TextEditingController _brandController;
   late final TextEditingController _modelController;
   late final TextEditingController _serialController;
+  late final TextEditingController _supportProviderController;
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
   late final TextEditingController _websiteController;
+  late final TextEditingController _supportNotesController;
   late final TextEditingController _invoiceController;
   late final TextEditingController _warrantyProviderController;
   late final TextEditingController _warrantyReferenceController;
+  late final TextEditingController _warrantyTermsController;
+  late final TextEditingController _warrantyCoverageController;
+  late final TextEditingController _extendedWarrantyProviderController;
+  late final TextEditingController _extendedWarrantyReferenceController;
+  late final TextEditingController _warrantyClaimNumberController;
   late final TextEditingController _notesController;
   late final String _draftId;
 
@@ -55,6 +63,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late String _category;
   DateTime? _purchaseDate;
   DateTime? _warrantyExpiryDate;
+  DateTime? _extendedWarrantyExpiryDate;
+  WarrantyClaimStatus _warrantyClaimStatus = WarrantyClaimStatus.none;
+  bool _warrantyMarkedExpired = false;
+  bool _warrantyReminderEnabled = false;
+  int _warrantyReminderDaysBefore = 30;
   StoredDocument? _invoiceDocument;
   StoredDocument? _warrantyDocument;
   bool _isPickingInvoice = false;
@@ -75,6 +88,15 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         : _categories.first;
     _purchaseDate = appliance?.purchaseDate;
     _warrantyExpiryDate = appliance?.warrantyExpiryDate;
+    _extendedWarrantyExpiryDate = appliance?.extendedWarrantyExpiryDate;
+    _warrantyClaimStatus =
+        appliance?.warrantyClaimStatus ?? WarrantyClaimStatus.none;
+    _warrantyMarkedExpired = appliance?.warrantyMarkedExpired ?? false;
+    _warrantyReminderEnabled = appliance?.warrantyReminderEnabled ?? false;
+    final savedReminderDays = appliance?.warrantyReminderDaysBefore ?? 30;
+    _warrantyReminderDaysBefore = _reminderOptions.contains(savedReminderDays)
+        ? savedReminderDays
+        : 30;
     _invoiceDocument = appliance?.invoiceDocument;
     _warrantyDocument = appliance?.warrantyDocument;
     _originalDocumentPaths = {
@@ -86,22 +108,51 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
     _nameController = TextEditingController(text: appliance?.name ?? '');
     _brandController = TextEditingController(text: appliance?.brand ?? '');
-    _modelController =
-        TextEditingController(text: appliance?.modelNumber ?? '');
-    _serialController =
-        TextEditingController(text: appliance?.serialNumber ?? '');
-    _phoneController =
-        TextEditingController(text: appliance?.supportPhone ?? '');
-    _emailController =
-        TextEditingController(text: appliance?.supportEmail ?? '');
-    _websiteController =
-        TextEditingController(text: appliance?.supportWebsite ?? '');
-    _invoiceController =
-        TextEditingController(text: appliance?.invoiceReference ?? '');
-    _warrantyProviderController =
-        TextEditingController(text: appliance?.warrantyProvider ?? '');
-    _warrantyReferenceController =
-        TextEditingController(text: appliance?.warrantyReference ?? '');
+    _modelController = TextEditingController(
+      text: appliance?.modelNumber ?? '',
+    );
+    _serialController = TextEditingController(
+      text: appliance?.serialNumber ?? '',
+    );
+    _supportProviderController = TextEditingController(
+      text: appliance?.supportProvider ?? '',
+    );
+    _phoneController = TextEditingController(
+      text: appliance?.supportPhone ?? '',
+    );
+    _emailController = TextEditingController(
+      text: appliance?.supportEmail ?? '',
+    );
+    _websiteController = TextEditingController(
+      text: appliance?.supportWebsite ?? '',
+    );
+    _supportNotesController = TextEditingController(
+      text: appliance?.supportNotes ?? '',
+    );
+    _invoiceController = TextEditingController(
+      text: appliance?.invoiceReference ?? '',
+    );
+    _warrantyProviderController = TextEditingController(
+      text: appliance?.warrantyProvider ?? '',
+    );
+    _warrantyReferenceController = TextEditingController(
+      text: appliance?.warrantyReference ?? '',
+    );
+    _warrantyTermsController = TextEditingController(
+      text: appliance?.warrantyTerms ?? '',
+    );
+    _warrantyCoverageController = TextEditingController(
+      text: appliance?.warrantyCoverageNotes ?? '',
+    );
+    _extendedWarrantyProviderController = TextEditingController(
+      text: appliance?.extendedWarrantyProvider ?? '',
+    );
+    _extendedWarrantyReferenceController = TextEditingController(
+      text: appliance?.extendedWarrantyReference ?? '',
+    );
+    _warrantyClaimNumberController = TextEditingController(
+      text: appliance?.warrantyClaimNumber ?? '',
+    );
     _notesController = TextEditingController(text: appliance?.notes ?? '');
   }
 
@@ -117,28 +168,43 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _brandController.dispose();
     _modelController.dispose();
     _serialController.dispose();
+    _supportProviderController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _websiteController.dispose();
+    _supportNotesController.dispose();
     _invoiceController.dispose();
     _warrantyProviderController.dispose();
     _warrantyReferenceController.dispose();
+    _warrantyTermsController.dispose();
+    _warrantyCoverageController.dispose();
+    _extendedWarrantyProviderController.dispose();
+    _extendedWarrantyReferenceController.dispose();
+    _warrantyClaimNumberController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
-  Future<void> _selectDate({required bool isWarrantyDate}) async {
-    final initialDate = isWarrantyDate
-        ? (_warrantyExpiryDate ?? DateTime.now().add(const Duration(days: 365)))
-        : (_purchaseDate ?? DateTime.now());
+  Future<void> _selectDate({required _DateSelection selection}) async {
+    final currentValue = switch (selection) {
+      _DateSelection.purchase => _purchaseDate,
+      _DateSelection.warranty => _warrantyExpiryDate,
+      _DateSelection.extendedWarranty => _extendedWarrantyExpiryDate,
+    };
+    final isPurchaseDate = selection == _DateSelection.purchase;
+    final initialDate =
+        currentValue ??
+        (isPurchaseDate
+            ? DateTime.now()
+            : DateTime.now().add(const Duration(days: 365)));
 
     final selectedDate = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: DateTime(1990),
-      lastDate: isWarrantyDate
-          ? DateTime.now().add(const Duration(days: 3650))
-          : DateTime.now(),
+      lastDate: isPurchaseDate
+          ? DateTime.now()
+          : DateTime.now().add(const Duration(days: 7300)),
     );
 
     if (selectedDate == null) {
@@ -146,10 +212,12 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     }
 
     setState(() {
-      if (isWarrantyDate) {
+      if (selection == _DateSelection.purchase) {
+        _purchaseDate = selectedDate;
+      } else if (selection == _DateSelection.warranty) {
         _warrantyExpiryDate = selectedDate;
       } else {
-        _purchaseDate = selectedDate;
+        _extendedWarrantyExpiryDate = selectedDate;
       }
     });
   }
@@ -173,8 +241,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         return;
       }
 
-      final previousDocument =
-          isInvoice ? _invoiceDocument : _warrantyDocument;
+      final previousDocument = isInvoice ? _invoiceDocument : _warrantyDocument;
 
       if (previousDocument != null) {
         await _queueOrDeletePreviousDocument(previousDocument);
@@ -190,14 +257,16 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       });
     } on DocumentStorageException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The document could not be attached. Please try again.'),
+          content: Text(
+            'The document could not be attached. Please try again.',
+          ),
         ),
       );
     } finally {
@@ -263,6 +332,47 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       return;
     }
 
+    final extendedWarrantyDate = _extendedWarrantyExpiryDate;
+    if (extendedWarrantyDate != null &&
+        purchaseDate != null &&
+        extendedWarrantyDate.isBefore(purchaseDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Extended warranty expiry cannot be before the purchase date.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (extendedWarrantyDate != null &&
+        warrantyDate != null &&
+        extendedWarrantyDate.isBefore(warrantyDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Extended warranty expiry cannot be before the standard warranty expiry.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!_warrantyMarkedExpired &&
+        _warrantyReminderEnabled &&
+        warrantyDate == null &&
+        extendedWarrantyDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add a warranty expiry date before enabling reminders.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final existingAppliance = widget.appliance;
     final appliance = Appliance(
       id: _draftId,
@@ -273,14 +383,36 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       serialNumber: _serialController.text.trim(),
       purchaseDate: _purchaseDate,
       warrantyExpiryDate: _warrantyExpiryDate,
+      supportProvider: _supportProviderController.text.trim(),
       supportPhone: _phoneController.text.trim(),
       supportEmail: _emailController.text.trim(),
       supportWebsite: _websiteController.text.trim(),
+      supportNotes: _supportNotesController.text.trim(),
       invoiceReference: _invoiceController.text.trim(),
       warrantyProvider: _warrantyProviderController.text.trim(),
       warrantyReference: _warrantyReferenceController.text.trim(),
-      invoiceDocument: _invoiceDocument,
-      warrantyDocument: _warrantyDocument,
+      warrantyTerms: _warrantyTermsController.text.trim(),
+      warrantyCoverageNotes: _warrantyCoverageController.text.trim(),
+      extendedWarrantyProvider: _extendedWarrantyProviderController.text.trim(),
+      extendedWarrantyReference: _extendedWarrantyReferenceController.text
+          .trim(),
+      extendedWarrantyExpiryDate: _extendedWarrantyExpiryDate,
+      warrantyClaimNumber: _warrantyClaimNumberController.text.trim(),
+      warrantyClaimStatus: _warrantyClaimStatus,
+      warrantyMarkedExpired: _warrantyMarkedExpired,
+      warrantyReminderEnabled: _warrantyReminderEnabled,
+      warrantyReminderDaysBefore: _warrantyReminderDaysBefore,
+      invoiceDocument: _invoiceDocument?.copyWith(
+        type: DocumentType.invoice,
+        title: 'Invoice',
+        reference: _invoiceController.text.trim(),
+      ),
+      warrantyDocument: _warrantyDocument?.copyWith(
+        type: DocumentType.warrantyCard,
+        title: 'Warranty card',
+        reference: _warrantyReferenceController.text.trim(),
+      ),
+      additionalDocuments: existingAppliance?.additionalDocuments ?? const [],
       notes: _notesController.text.trim(),
       createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );
@@ -290,8 +422,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       ApplianceFormResult(
         appliance: appliance,
         documentsAdded: _newDocuments.values.toList(growable: false),
-        documentsToDelete:
-            _documentsToDelete.values.toList(growable: false),
+        documentsToDelete: _documentsToDelete.values.toList(growable: false),
       ),
     );
   }
@@ -392,7 +523,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 label: 'Purchase date',
                 value: _purchaseDate,
                 icon: Icons.shopping_bag_outlined,
-                onTap: () => _selectDate(isWarrantyDate: false),
+                onTap: () => _selectDate(selection: _DateSelection.purchase),
                 onClear: () => setState(() => _purchaseDate = null),
               ),
               const SizedBox(height: 12),
@@ -400,7 +531,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 label: 'Warranty expiry date',
                 value: _warrantyExpiryDate,
                 icon: Icons.verified_outlined,
-                onTap: () => _selectDate(isWarrantyDate: true),
+                onTap: () => _selectDate(selection: _DateSelection.warranty),
                 onClear: () => setState(() => _warrantyExpiryDate = null),
               ),
               const SizedBox(height: 12),
@@ -453,16 +584,173 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 onPick: () => _pickDocument(isInvoice: false),
                 onRemove: () => _removeDocument(isInvoice: false),
               ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _warrantyTermsController,
+                decoration: const InputDecoration(
+                  labelText: 'Warranty terms',
+                  hintText: 'Example: 2 years comprehensive warranty',
+                  prefixIcon: Icon(Icons.description_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _warrantyCoverageController,
+                decoration: const InputDecoration(
+                  labelText: 'Coverage and exclusions',
+                  hintText: 'Parts covered, exclusions, and claim conditions',
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.shield_outlined),
+                ),
+                minLines: 2,
+                maxLines: 4,
+              ),
+              const SizedBox(height: 20),
+              const _SectionTitle(
+                title: 'Extended warranty',
+                subtitle:
+                    'Optional coverage purchased after the original warranty.',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _extendedWarrantyProviderController,
+                decoration: const InputDecoration(
+                  labelText: 'Extended warranty provider',
+                  prefixIcon: Icon(Icons.add_business_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _extendedWarrantyReferenceController,
+                decoration: const InputDecoration(
+                  labelText: 'Extended warranty reference',
+                  prefixIcon: Icon(Icons.confirmation_number_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              _DateField(
+                label: 'Extended warranty expiry date',
+                value: _extendedWarrantyExpiryDate,
+                icon: Icons.verified_user_outlined,
+                onTap: () =>
+                    _selectDate(selection: _DateSelection.extendedWarranty),
+                onClear: () =>
+                    setState(() => _extendedWarrantyExpiryDate = null),
+              ),
+              const SizedBox(height: 20),
+              const _SectionTitle(
+                title: 'Warranty claim',
+                subtitle: 'Track an existing claim or support case.',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _warrantyClaimNumberController,
+                decoration: const InputDecoration(
+                  labelText: 'Claim number',
+                  prefixIcon: Icon(Icons.assignment_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<WarrantyClaimStatus>(
+                initialValue: _warrantyClaimStatus,
+                decoration: const InputDecoration(
+                  labelText: 'Claim status',
+                  prefixIcon: Icon(Icons.fact_check_outlined),
+                ),
+                items: WarrantyClaimStatus.values
+                    .map(
+                      (status) => DropdownMenuItem(
+                        value: status,
+                        child: Text(status.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _warrantyClaimStatus = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Mark as out of warranty'),
+                subtitle: const Text(
+                  'Use this when the warranty was voided or ended before its recorded date.',
+                ),
+                value: _warrantyMarkedExpired,
+                onChanged: (value) {
+                  setState(() {
+                    _warrantyMarkedExpired = value;
+                    if (value) {
+                      _warrantyReminderEnabled = false;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 4),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Warranty reminder'),
+                subtitle: const Text(
+                  'Schedule a local notification before the effective expiry date.',
+                ),
+                value: _warrantyReminderEnabled,
+                onChanged: _warrantyMarkedExpired
+                    ? null
+                    : (value) {
+                        setState(() => _warrantyReminderEnabled = value);
+                      },
+              ),
+              if (_warrantyReminderEnabled) ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  initialValue: _warrantyReminderDaysBefore,
+                  decoration: const InputDecoration(
+                    labelText: 'Remind me before expiry',
+                    prefixIcon: Icon(Icons.notifications_active_outlined),
+                  ),
+                  items: _reminderOptions
+                      .map(
+                        (days) => DropdownMenuItem(
+                          value: days,
+                          child: Text('$days days before'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _warrantyReminderDaysBefore = value);
+                    }
+                  },
+                ),
+              ],
               const SizedBox(height: 24),
               const _SectionTitle(
                 title: 'Customer support',
-                subtitle: 'Keep the brand support details beside the appliance.',
+                subtitle:
+                    'Keep the brand support details beside the appliance.',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _supportProviderController,
+                decoration: const InputDecoration(
+                  labelText: 'Support provider',
+                  hintText: 'Brand, retailer, or authorized service center',
+                  prefixIcon: Icon(Icons.support_agent_outlined),
+                ),
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Support phone',
+                  hintText: 'Include the country code when possible',
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
                 keyboardType: TextInputType.phone,
@@ -490,17 +778,44 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 controller: _websiteController,
                 decoration: const InputDecoration(
                   labelText: 'Support website',
+                  hintText: 'support.example.com',
                   prefixIcon: Icon(Icons.language),
                 ),
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.next,
+                validator: (value) {
+                  final website = value?.trim() ?? '';
+                  if (!SupportActionService.isValidWebsite(website)) {
+                    return 'Enter a valid website address.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _supportNotesController,
+                decoration: const InputDecoration(
+                  labelText: 'Support notes',
+                  hintText: 'Working hours, service center, or account details',
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.contact_support_outlined),
+                ),
+                minLines: 2,
+                maxLines: 4,
+                textInputAction: TextInputAction.newline,
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle(
+                title: 'General notes',
+                subtitle: 'Save any other information about the appliance.',
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
                 decoration: const InputDecoration(
                   labelText: 'Notes',
-                  hintText: 'Service history, installation details, or reminders',
+                  hintText:
+                      'Service history, installation details, or reminders',
                   alignLabelWithHint: true,
                   prefixIcon: Icon(Icons.notes),
                 ),
@@ -522,6 +837,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   }
 }
 
+enum _DateSelection { purchase, warranty, extendedWarranty }
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.subtitle});
 
@@ -538,8 +855,8 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );

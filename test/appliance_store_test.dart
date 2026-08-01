@@ -2,7 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
+import 'package:homevault/services/warranty_notification_service.dart';
 import 'package:homevault/state/appliance_store.dart';
+
+class _RecordingReminderScheduler implements WarrantyReminderScheduler {
+  final List<List<Appliance>> synced = [];
+  final List<Appliance> scheduled = [];
+  final List<String> cancelled = [];
+
+  @override
+  Future<void> syncAll(List<Appliance> appliances) async {
+    synced.add(List<Appliance>.from(appliances));
+  }
+
+  @override
+  Future<void> scheduleFor(Appliance appliance) async {
+    scheduled.add(appliance);
+  }
+
+  @override
+  Future<void> cancelFor(String applianceId) async {
+    cancelled.add(applianceId);
+  }
+}
 
 void main() {
   test('appliance JSON preserves dates and document details', () {
@@ -13,14 +35,44 @@ void main() {
       brand: 'Daikin',
       modelNumber: 'FTKM50',
       serialNumber: 'SN-100',
+      supportProvider: 'Daikin Care',
+      supportPhone: '+966 11 123 4567',
+      supportEmail: 'care@example.com',
+      supportWebsite: 'support.example.com',
+      supportNotes: 'Sunday to Thursday, 9 AM to 5 PM',
       purchaseDate: DateTime(2026, 1, 15),
       warrantyExpiryDate: DateTime(2028, 1, 15),
+      warrantyTerms: 'Two-year comprehensive warranty',
+      warrantyCoverageNotes: 'Compressor and electrical components',
+      extendedWarrantyProvider: 'Retailer Protect',
+      extendedWarrantyReference: 'EXT-100',
+      extendedWarrantyExpiryDate: DateTime(2030, 1, 15),
+      warrantyClaimNumber: 'CLM-10',
+      warrantyClaimStatus: WarrantyClaimStatus.inReview,
+      warrantyMarkedExpired: false,
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 60,
       invoiceDocument: StoredDocument(
+        id: 'invoice-1',
+        type: DocumentType.invoice,
+        title: 'Purchase invoice',
+        reference: 'INV-100',
         fileName: 'invoice.pdf',
         localPath: '/documents/invoice.pdf',
         sizeBytes: 2048,
         attachedAt: DateTime(2026, 1, 15, 10, 30),
       ),
+      additionalDocuments: [
+        StoredDocument(
+          id: 'manual-1',
+          type: DocumentType.userManual,
+          title: 'AC user manual',
+          fileName: 'manual.pdf',
+          localPath: '/documents/manual.pdf',
+          sizeBytes: 4096,
+          attachedAt: DateTime(2026, 1, 15, 10, 40),
+        ),
+      ],
       createdAt: DateTime(2026, 1, 15, 10),
     );
 
@@ -30,8 +82,50 @@ void main() {
     expect(restored.name, appliance.name);
     expect(restored.purchaseDate, appliance.purchaseDate);
     expect(restored.warrantyExpiryDate, appliance.warrantyExpiryDate);
+    expect(restored.warrantyTerms, 'Two-year comprehensive warranty');
+    expect(
+      restored.warrantyCoverageNotes,
+      'Compressor and electrical components',
+    );
+    expect(restored.extendedWarrantyProvider, 'Retailer Protect');
+    expect(restored.extendedWarrantyReference, 'EXT-100');
+    expect(restored.extendedWarrantyExpiryDate, DateTime(2030, 1, 15));
+    expect(restored.effectiveWarrantyExpiryDate, DateTime(2030, 1, 15));
+    expect(restored.warrantyClaimNumber, 'CLM-10');
+    expect(restored.warrantyClaimStatus, WarrantyClaimStatus.inReview);
+    expect(restored.warrantyMarkedExpired, isFalse);
+    expect(restored.warrantyReminderEnabled, isTrue);
+    expect(restored.warrantyReminderDaysBefore, 60);
+    expect(restored.supportProvider, 'Daikin Care');
+    expect(restored.supportPhone, '+966 11 123 4567');
+    expect(restored.supportEmail, 'care@example.com');
+    expect(restored.supportWebsite, 'support.example.com');
+    expect(restored.supportNotes, 'Sunday to Thursday, 9 AM to 5 PM');
     expect(restored.invoiceDocument?.fileName, 'invoice.pdf');
-    expect(restored.invoiceDocument?.sizeBytes, 2048);
+    expect(restored.invoiceDocument?.type, DocumentType.invoice);
+    expect(restored.invoiceDocument?.reference, 'INV-100');
+    expect(restored.additionalDocuments.single.type, DocumentType.userManual);
+    expect(restored.documentCount, 2);
+  });
+
+  test('legacy invoice JSON is upgraded with invoice metadata', () {
+    final restored = Appliance.fromJson({
+      'id': 'legacy-1',
+      'name': 'Legacy appliance',
+      'category': 'Other',
+      'brand': '',
+      'createdAt': DateTime(2026, 1, 1).toIso8601String(),
+      'invoiceDocument': {
+        'fileName': 'old-invoice.pdf',
+        'localPath': '/documents/old-invoice.pdf',
+        'sizeBytes': 100,
+        'attachedAt': DateTime(2026, 1, 1).toIso8601String(),
+      },
+    });
+
+    expect(restored.invoiceDocument?.type, DocumentType.invoice);
+    expect(restored.invoiceDocument?.displayTitle, 'Invoice');
+    expect(restored.invoiceDocument?.id, '/documents/old-invoice.pdf');
   });
 
   test('saved appliances are available to a newly initialized store', () async {
@@ -59,6 +153,61 @@ void main() {
     reloadedStore.dispose();
   });
 
+  test('document add and delete operations are persisted', () async {
+    final original = Appliance(
+      id: 'fridge-1',
+      name: 'Kitchen fridge',
+      category: 'Kitchen Appliance',
+      brand: 'Samsung',
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final repository = MemoryApplianceRepository(initialAppliances: [original]);
+    final store = ApplianceStore(repository: repository);
+    await store.initialize();
+
+    final document = StoredDocument(
+      id: 'manual-1',
+      type: DocumentType.userManual,
+      title: 'Fridge manual',
+      fileName: 'manual.pdf',
+      localPath: '/documents/manual.pdf',
+      sizeBytes: 2048,
+      attachedAt: DateTime(2026, 8, 1, 11),
+    );
+
+    await store.addDocument(original.id, document);
+    expect(store.appliances.single.additionalDocuments.single.id, 'manual-1');
+
+    final updatedDocument = document.copyWith(
+      title: 'Updated fridge manual',
+      reference: 'MAN-2026',
+    );
+    await store.replaceDocument(original.id, document.id, updatedDocument);
+    expect(
+      store.appliances.single.additionalDocuments.single.displayTitle,
+      'Updated fridge manual',
+    );
+
+    final reloadedAfterAdd = ApplianceStore(repository: repository);
+    await reloadedAfterAdd.initialize();
+    expect(reloadedAfterAdd.appliances.single.documentCount, 1);
+    expect(
+      reloadedAfterAdd.appliances.single.additionalDocuments.single.reference,
+      'MAN-2026',
+    );
+
+    await store.removeDocument(original.id, document.id);
+    expect(store.appliances.single.allDocuments, isEmpty);
+
+    final reloadedAfterDelete = ApplianceStore(repository: repository);
+    await reloadedAfterDelete.initialize();
+    expect(reloadedAfterDelete.appliances.single.allDocuments, isEmpty);
+
+    store.dispose();
+    reloadedAfterAdd.dispose();
+    reloadedAfterDelete.dispose();
+  });
+
   test('update and delete are persisted', () async {
     final original = Appliance(
       id: 'fridge-1',
@@ -67,9 +216,7 @@ void main() {
       brand: 'Samsung',
       createdAt: DateTime(2026, 8, 1),
     );
-    final repository = MemoryApplianceRepository(
-      initialAppliances: [original],
-    );
+    final repository = MemoryApplianceRepository(initialAppliances: [original]);
     final store = ApplianceStore(repository: repository);
     await store.initialize();
 
@@ -93,5 +240,105 @@ void main() {
 
     store.dispose();
     reloadedStore.dispose();
+  });
+
+  test('extended warranty drives status and reminder date', () {
+    final appliance = Appliance(
+      id: 'tv-1',
+      name: 'Living room TV',
+      category: 'Television',
+      brand: 'LG',
+      warrantyExpiryDate: DateTime(2026, 1, 1),
+      extendedWarrantyExpiryDate: DateTime(2027, 3, 31),
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 30,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    expect(
+      appliance.warrantyStatusAt(DateTime(2026, 8, 1)),
+      WarrantyStatus.active,
+    );
+    expect(appliance.warrantyReminderDateAt(), DateTime(2027, 3, 1, 9));
+    expect(appliance.warrantyDaysRemainingAt(DateTime(2027, 3, 1)), 30);
+  });
+
+  test(
+    'store synchronizes, schedules, and cancels warranty reminders',
+    () async {
+      final existing = Appliance(
+        id: 'ac-existing',
+        name: 'Existing AC',
+        category: 'Air Conditioner',
+        brand: 'Daikin',
+        warrantyExpiryDate: DateTime(2028, 8, 1),
+        warrantyReminderEnabled: true,
+        createdAt: DateTime(2026, 8, 1),
+      );
+      final repository = MemoryApplianceRepository(
+        initialAppliances: [existing],
+      );
+      final scheduler = _RecordingReminderScheduler();
+      final store = ApplianceStore(
+        repository: repository,
+        reminderScheduler: scheduler,
+      );
+
+      await store.initialize();
+      expect(scheduler.synced.single.single.id, existing.id);
+
+      final added = Appliance(
+        id: 'fridge-new',
+        name: 'New fridge',
+        category: 'Kitchen Appliance',
+        brand: 'Samsung',
+        warrantyExpiryDate: DateTime(2029, 8, 1),
+        warrantyReminderEnabled: true,
+        createdAt: DateTime(2026, 8, 1),
+      );
+      await store.add(added);
+      expect(scheduler.scheduled.last.id, added.id);
+
+      final updated = Appliance.fromJson({
+        ...added.toJson(),
+        'warrantyReminderDaysBefore': 60,
+      });
+      await store.update(updated);
+      expect(scheduler.scheduled.last.warrantyReminderDaysBefore, 60);
+
+      await store.delete(added.id);
+      expect(scheduler.cancelled.last, added.id);
+
+      store.dispose();
+    },
+  );
+
+  test('notification ids are stable and appliance-specific', () {
+    final first = WarrantyNotificationService.notificationIdFor('appliance-1');
+    final again = WarrantyNotificationService.notificationIdFor('appliance-1');
+    final second = WarrantyNotificationService.notificationIdFor('appliance-2');
+
+    expect(first, again);
+    expect(first, isNot(second));
+    expect(first, greaterThanOrEqualTo(0));
+  });
+
+  test('manual out-of-warranty status disables reminder scheduling date', () {
+    final appliance = Appliance(
+      id: 'voided-1',
+      name: 'Voided appliance',
+      category: 'Other',
+      brand: '',
+      warrantyExpiryDate: DateTime(2030, 1, 1),
+      warrantyMarkedExpired: true,
+      warrantyReminderEnabled: true,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    expect(
+      appliance.warrantyStatusAt(DateTime(2026, 8, 1)),
+      WarrantyStatus.expired,
+    );
+    expect(appliance.warrantyReminderDateAt(), isNull);
   });
 }

@@ -4,18 +4,18 @@ import 'package:open_filex/open_filex.dart';
 
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
+import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/support_action_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/stored_document_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
+import '../documents/add_document_screen.dart';
 import 'add_appliance_screen.dart';
 
 class ApplianceDetailsScreen extends StatelessWidget {
-  const ApplianceDetailsScreen({
-    super.key,
-    required this.applianceId,
-  });
+  const ApplianceDetailsScreen({super.key, required this.applianceId});
 
   final String applianceId;
 
@@ -26,12 +26,37 @@ class ApplianceDetailsScreen extends StatelessWidget {
     return '$day/$month/${value.year}';
   }
 
+  String _remainingWarrantyText(Appliance appliance) {
+    final days = appliance.warrantyDaysRemainingAt(DateTime.now());
+    if (days == null) return 'Not provided';
+    if (days < 0) {
+      final elapsed = days.abs();
+      return 'Expired $elapsed day${elapsed == 1 ? '' : 's'} ago';
+    }
+    if (days == 0) return 'Expires today';
+    return '$days day${days == 1 ? '' : 's'} remaining';
+  }
+
   Future<void> _copy(BuildContext context, String label, String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label copied.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label copied.')));
+  }
+
+  Future<void> _runSupportAction(
+    BuildContext context,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+    } on SupportActionException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    }
   }
 
   Future<void> _openDocument(
@@ -96,13 +121,47 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _addDocument(BuildContext context, Appliance appliance) async {
+    final store = AppScope.read(context);
+    final result = await Navigator.of(context).push<DocumentFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddDocumentScreen(
+          appliances: store.appliances.toList(growable: false),
+          initialApplianceId: appliance.id,
+        ),
+      ),
+    );
+
+    if (result == null || !context.mounted) return;
+
+    try {
+      await AppScope.read(
+        context,
+      ).addDocument(result.applianceId, result.document);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.document.displayTitle} was saved.')),
+      );
+    } catch (_) {
+      try {
+        await DocumentStorageService().deleteStoredDocument(result.document);
+      } catch (_) {
+        // Preserve the original save error if cleanup also fails.
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The document could not be saved.')),
+      );
+    }
+  }
+
   Future<void> _delete(BuildContext context, Appliance appliance) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete appliance?'),
         content: Text(
-          'This will remove ${appliance.name} and its attached invoice and warranty files.',
+          'This will remove ${appliance.name} and all attached documents.',
         ),
         actions: [
           TextButton(
@@ -125,7 +184,9 @@ class ApplianceDetailsScreen extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The appliance could not be deleted. Please try again.'),
+          content: Text(
+            'The appliance could not be deleted. Please try again.',
+          ),
         ),
       );
       return;
@@ -159,18 +220,24 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
 
     final supportRows = <_DetailRowData>[
-      if (appliance.supportPhone.isNotEmpty)
+      if (appliance.supportPhone.trim().isNotEmpty)
         _DetailRowData('Phone', appliance.supportPhone, Icons.phone_outlined),
-      if (appliance.supportEmail.isNotEmpty)
+      if (appliance.supportEmail.trim().isNotEmpty)
         _DetailRowData('Email', appliance.supportEmail, Icons.email_outlined),
-      if (appliance.supportWebsite.isNotEmpty)
+      if (appliance.supportWebsite.trim().isNotEmpty)
         _DetailRowData('Website', appliance.supportWebsite, Icons.language),
     ];
+    const supportActions = SupportActionService();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Appliance details'),
         actions: [
+          IconButton(
+            tooltip: 'Add document',
+            onPressed: () => _addDocument(context, appliance),
+            icon: const Icon(Icons.note_add_outlined),
+          ),
           IconButton(
             tooltip: 'Edit appliance',
             onPressed: () => _edit(context, appliance),
@@ -203,9 +270,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           appliance.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
@@ -233,7 +298,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 value: _date(appliance.purchaseDate),
               ),
               _DetailRow(
-                label: 'Warranty expiry',
+                label: 'Standard warranty',
                 value: _date(appliance.warrantyExpiryDate),
               ),
             ],
@@ -265,7 +330,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _DetailsSection(
-            title: 'Warranty card',
+            title: 'Warranty management',
             children: [
               _DetailRow(
                 label: 'Provider',
@@ -276,6 +341,92 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 label: 'Reference',
                 value: appliance.warrantyReference,
                 emptyText: 'No warranty card reference added',
+              ),
+              _DetailRow(
+                label: 'Effective expiry',
+                value: _date(appliance.effectiveWarrantyExpiryDate),
+              ),
+              _DetailRow(
+                label: 'Time remaining',
+                value: _remainingWarrantyText(appliance),
+              ),
+              if (appliance.warrantyTerms.trim().isNotEmpty)
+                _DetailRow(label: 'Terms', value: appliance.warrantyTerms),
+              if (appliance.warrantyCoverageNotes.trim().isNotEmpty)
+                _DetailRow(
+                  label: 'Coverage',
+                  value: appliance.warrantyCoverageNotes,
+                ),
+              if (appliance.hasExtendedWarranty) ...[
+                const Divider(height: 24),
+                Text(
+                  'Extended warranty',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                _DetailRow(
+                  label: 'Provider',
+                  value: appliance.extendedWarrantyProvider,
+                ),
+                _DetailRow(
+                  label: 'Reference',
+                  value: appliance.extendedWarrantyReference,
+                ),
+                _DetailRow(
+                  label: 'Expiry',
+                  value: _date(appliance.extendedWarrantyExpiryDate),
+                ),
+              ],
+              if (appliance.warrantyClaimStatus != WarrantyClaimStatus.none ||
+                  appliance.warrantyClaimNumber.trim().isNotEmpty) ...[
+                const Divider(height: 24),
+                Text(
+                  'Warranty claim',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                _DetailRow(
+                  label: 'Claim number',
+                  value: appliance.warrantyClaimNumber,
+                ),
+                _DetailRow(
+                  label: 'Claim status',
+                  value: appliance.warrantyClaimStatus.label,
+                ),
+              ],
+              if (appliance.warrantyMarkedExpired) ...[
+                const Divider(height: 24),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.gpp_bad_outlined),
+                  title: Text('Marked as out of warranty'),
+                  subtitle: Text(
+                    'This warranty was manually marked as ended or voided.',
+                  ),
+                ),
+              ],
+              const Divider(height: 24),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  appliance.warrantyReminderEnabled
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_off_outlined,
+                ),
+                title: Text(
+                  appliance.warrantyReminderEnabled
+                      ? 'Reminder enabled'
+                      : 'Reminder disabled',
+                ),
+                subtitle: Text(
+                  appliance.warrantyReminderEnabled
+                      ? '${appliance.warrantyReminderDaysBefore} days before the effective expiry date'
+                      : 'Edit the appliance to enable a reminder.',
+                ),
               ),
               if (appliance.warrantyDocument != null) ...[
                 const Divider(height: 24),
@@ -293,18 +444,79 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ),
             ],
           ),
+          if (appliance.additionalDocuments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _DetailsSection(
+              title: 'Additional documents',
+              children: appliance.additionalDocuments
+                  .map(
+                    (document) => StoredDocumentTile(
+                      document: document,
+                      title: document.displayTitle,
+                      subtitle: document.type.label,
+                      onOpen: () => _openDocument(context, document),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
           const SizedBox(height: 16),
           _DetailsSection(
             title: 'Customer support',
-            children: supportRows.isEmpty
+            children: !appliance.hasSupportDetails
                 ? const [
                     Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text('No support contact details added.'),
                     ),
                   ]
-                : supportRows
-                    .map(
+                : [
+                    if (appliance.supportProvider.trim().isNotEmpty)
+                      _DetailRow(
+                        label: 'Provider',
+                        value: appliance.supportProvider,
+                      ),
+                    if (appliance.hasSupportAction) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (appliance.supportPhone.trim().isNotEmpty)
+                            FilledButton.tonalIcon(
+                              onPressed: () => _runSupportAction(
+                                context,
+                                () =>
+                                    supportActions.call(appliance.supportPhone),
+                              ),
+                              icon: const Icon(Icons.phone_outlined),
+                              label: const Text('Call'),
+                            ),
+                          if (appliance.supportEmail.trim().isNotEmpty)
+                            FilledButton.tonalIcon(
+                              onPressed: () => _runSupportAction(
+                                context,
+                                () => supportActions.email(appliance),
+                              ),
+                              icon: const Icon(Icons.email_outlined),
+                              label: const Text('Email'),
+                            ),
+                          if (appliance.supportWebsite.trim().isNotEmpty)
+                            FilledButton.tonalIcon(
+                              onPressed: () => _runSupportAction(
+                                context,
+                                () => supportActions.openWebsite(
+                                  appliance.supportWebsite,
+                                ),
+                              ),
+                              icon: const Icon(Icons.language),
+                              label: const Text('Website'),
+                            ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                    ],
+                    ...supportRows.map(
                       (row) => ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(row.icon),
@@ -316,8 +528,15 @@ class ApplianceDetailsScreen extends StatelessWidget {
                           icon: const Icon(Icons.copy_outlined),
                         ),
                       ),
-                    )
-                    .toList(),
+                    ),
+                    if (appliance.supportNotes.trim().isNotEmpty) ...[
+                      const Divider(height: 24),
+                      _DetailRow(
+                        label: 'Support notes',
+                        value: appliance.supportNotes,
+                      ),
+                    ],
+                  ],
           ),
           if (appliance.notes.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -353,9 +572,9 @@ class _DetailsSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const Divider(height: 24),
             ...children,

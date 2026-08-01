@@ -6,17 +6,21 @@ import '../../theme/app_colors.dart';
 import '../../widgets/dashboard_card.dart';
 import '../../widgets/quick_action_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
-import '../main_navigation.dart';
+import '../warranty/warranty_screen.dart';
+import '../../models/app_section.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
     required this.onNavigate,
     required this.onAddAppliance,
+    required this.onOpenWarrantyCenter,
   });
 
   final ValueChanged<AppSection> onNavigate;
   final Future<void> Function() onAddAppliance;
+  final Future<void> Function(WarrantyFilter initialFilter)
+  onOpenWarrantyCenter;
 
   String _greeting() {
     final hour = DateTime.now().hour;
@@ -48,15 +52,15 @@ class DashboardScreen extends StatelessWidget {
               Text(
                 '👋 ${_greeting()}',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Manage appliance details, warranties, invoices, and support contacts in one place.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 24),
               GridView.count(
@@ -79,30 +83,32 @@ class DashboardScreen extends StatelessWidget {
                     title: 'Active warranty',
                     value: '${store.warrantyCount(WarrantyStatus.active)}',
                     color: AppColors.success,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
                   ),
                   DashboardCard(
                     icon: Icons.warning_amber,
                     title: 'Expiring soon',
-                    value: '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
+                    value:
+                        '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
                     color: AppColors.warning,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () =>
+                        onOpenWarrantyCenter(WarrantyFilter.expiringSoon),
                   ),
                   DashboardCard(
                     icon: Icons.cancel,
                     title: 'Expired',
                     value: '${store.warrantyCount(WarrantyStatus.expired)}',
                     color: AppColors.danger,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.expired),
                   ),
                 ],
               ),
               const SizedBox(height: 30),
               Text(
                 'Quick actions',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 14),
               GridView.count(
@@ -123,7 +129,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   QuickActionTile(
                     icon: Icons.receipt_long_outlined,
-                    title: 'Invoices',
+                    title: 'Documents',
                     color: AppColors.warning,
                     onTap: () => onNavigate(AppSection.documents),
                   ),
@@ -134,10 +140,10 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => onNavigate(AppSection.support),
                   ),
                   QuickActionTile(
-                    icon: Icons.settings,
-                    title: 'Settings',
+                    icon: Icons.verified_user_outlined,
+                    title: 'Warranty center',
                     color: AppColors.textSecondary,
-                    onTap: () => onNavigate(AppSection.settings),
+                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.all),
                   ),
                 ],
               ),
@@ -148,8 +154,8 @@ class DashboardScreen extends StatelessWidget {
                     child: Text(
                       'Recent appliances',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   if (recentAppliances.isNotEmpty)

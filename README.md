@@ -1,53 +1,49 @@
 # HomeVault
 
-HomeVault is a Flutter Android application that keeps appliance details, warranty dates, invoice files, warranty-card files, and customer-support contacts in one place.
+HomeVault is an offline-first Flutter application for keeping household appliance details, invoices, warranty documents, customer-support contacts, and warranty reminders together.
 
-## Current sprint: 0.2 — Document attachments
+## Current release
 
-This build adds:
+**Sprint 4 — version 1.4.0+5**
 
-- Invoice number/reference field
-- Invoice PDF or image upload
-- Warranty provider and card/reference fields
-- Warranty-card PDF or image upload
-- Secure copies of selected files inside the app documents directory
-- File-size limit of 15 MB per attachment
-- PDF, JPG, JPEG, and PNG support
-- Document list in the Documents tab
-- Open-document actions from the appliance details and Documents screens
-- File replacement and removal before saving
-- Attached-file cleanup when an appliance is deleted
-- Keyboard dismissal while scrolling the form
+### Available features
 
-## Important limitation
+- Add, edit, search, and delete appliances.
+- Persist appliance records locally after restart.
+- Attach invoices, warranty cards, manuals, service receipts, installation reports, and other documents.
+- Search, filter, edit, replace, open, and delete documents.
+- Store and use customer-support phone, email, website, and notes.
+- Dedicated Warranty Center with status filters and sorting.
+- Standard and extended warranty tracking.
+- Warranty terms, coverage notes, claim number, claim status, and manual out-of-warranty control.
+- Timezone-aware local warranty reminders.
+- Android notification permission and a test-notification action.
+- Open the related appliance by tapping its warranty notification.
 
-Appliance records are still stored in memory. The selected files are copied into app storage, but the appliance-to-document links will be lost after a full app restart until Sprint 1 adds persistent local data storage.
+## Development setup
 
-Do not use this build as the only copy of an important invoice yet.
-
-## Run in VS Code
-
-```bash
+```powershell
+flutter clean
 flutter pub get
 flutter analyze
 flutter test
 flutter run
 ```
 
-Because native plugins were added, stop the current app and run `flutter run` again. A normal hot reload is not enough after adding plugin dependencies.
+Use a complete restart after applying Sprint 4 because notification plugins and Android manifest configuration were added.
 
-## Test the new feature
+## Important dependency note
 
-1. Open **Add appliance**.
-2. Enter an appliance name.
-3. Scroll to **Purchase and warranty**.
-4. Tap **Choose file** under Invoice file.
-5. Select a PDF or image.
-6. Tap **Choose file** under Warranty card file.
-7. Save the appliance.
-8. Open the appliance details and tap each attachment.
-9. Open the Documents tab and verify both files are listed.
+Keep the document picker pinned to:
 
-## Next sprint
+```yaml
+file_picker: 10.3.10
+```
 
-Sprint 1 will store appliance records and document metadata permanently so everything remains after closing and reopening the app.
+This is the version already proven to work with the Android configuration used by this project.
+
+## Data safety
+
+HomeVault currently stores records and copied documents inside the application's private local storage. Do not uninstall the app or clear its Android storage unless a separate copy of important invoices and warranty documents exists. Backup and restore are planned for a later sprint.
+
+See `SPRINT_4.md` for the complete Sprint 4 test checklist.

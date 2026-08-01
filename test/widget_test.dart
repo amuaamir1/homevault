@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/app.dart';
+import 'package:homevault/models/appliance.dart';
+import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/state/appliance_store.dart';
 
-Future<ApplianceStore> _createStore() async {
-  final store = ApplianceStore(repository: MemoryApplianceRepository());
+Future<ApplianceStore> _createStore({
+  List<Appliance> initialAppliances = const [],
+}) async {
+  final store = ApplianceStore(
+    repository: MemoryApplianceRepository(initialAppliances: initialAppliances),
+  );
   await store.initialize();
   return store;
 }
@@ -22,7 +28,7 @@ void main() {
     expect(find.text('Quick actions'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Appliances'), findsWidgets);
-    expect(find.text('Documents'), findsOneWidget);
+    expect(find.text('Documents'), findsWidgets);
     expect(find.text('Support'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
   });
@@ -61,5 +67,127 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(saveButton, findsOneWidget);
+  });
+
+  testWidgets('document vault shows saved appliance documents', (tester) async {
+    final appliance = Appliance(
+      id: 'ac-1',
+      name: 'Living room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      additionalDocuments: [
+        StoredDocument(
+          id: 'manual-1',
+          type: DocumentType.userManual,
+          title: 'AC manual',
+          fileName: 'manual.pdf',
+          localPath: '/documents/manual.pdf',
+          sizeBytes: 1024,
+          attachedAt: DateTime(2026, 8, 1),
+        ),
+      ],
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final documentsDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Documents'),
+    );
+    await tester.tap(documentsDestination);
+    await tester.pumpAndSettle();
+
+    expect(find.text('AC manual'), findsOneWidget);
+    expect(find.textContaining('Living room AC'), findsOneWidget);
+    expect(find.text('Add document'), findsOneWidget);
+  });
+
+  testWidgets('support directory shows direct contact actions', (tester) async {
+    final appliance = Appliance(
+      id: 'ac-support-1',
+      name: 'Bedroom AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      supportProvider: 'Daikin Care',
+      supportPhone: '+966 11 123 4567',
+      supportEmail: 'care@example.com',
+      supportWebsite: 'support.example.com',
+      supportNotes: 'Sunday to Thursday',
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final supportDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Support'),
+    );
+    await tester.tap(supportDestination);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bedroom AC'), findsOneWidget);
+    expect(find.text('Daikin Care'), findsOneWidget);
+    expect(find.text('Call'), findsOneWidget);
+    expect(find.text('Email'), findsWidgets);
+    expect(find.text('Website'), findsWidgets);
+    expect(find.text('Sunday to Thursday'), findsOneWidget);
+  });
+
+  testWidgets('warranty center shows warranty status and reminders', (
+    tester,
+  ) async {
+    final appliance = Appliance(
+      id: 'ac-warranty-1',
+      name: 'Family room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      warrantyProvider: 'Daikin Care',
+      warrantyExpiryDate: DateTime(2028, 8, 1),
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 30,
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final warrantyButton = find.text('Warranty center').first;
+    await tester.ensureVisible(warrantyButton);
+    await tester.tap(warrantyButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Warranty center'), findsOneWidget);
+
+    // This section is visible at the top of the screen.
+    expect(find.text('Warranty reminders'), findsOneWidget);
+
+    final warrantyList = find.byKey(const Key('warrantyCenterList'));
+
+    expect(warrantyList, findsOneWidget);
+
+    // The appliance card is below the test viewport.
+    await tester.dragUntilVisible(
+      find.text('Family room AC'),
+      warrantyList,
+      const Offset(0, -350),
+      maxIteration: 10,
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Family room AC'), findsOneWidget);
+    expect(
+      find.textContaining('Reminder 30 days before expiry'),
+      findsOneWidget,
+    );
   });
 }

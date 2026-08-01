@@ -6,10 +6,7 @@ import 'state/appliance_store.dart';
 import 'theme/app_theme.dart';
 
 class HomeVaultApp extends StatefulWidget {
-  const HomeVaultApp({
-    super.key,
-    this.applianceStore,
-  });
+  const HomeVaultApp({super.key, this.applianceStore});
 
   final ApplianceStore? applianceStore;
 
@@ -94,10 +91,7 @@ class _StartupGate extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    store.loadError!,
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(store.loadError!, textAlign: TextAlign.center),
                   const SizedBox(height: 20),
                   FilledButton.icon(
                     onPressed: () => store.initialize(force: true),

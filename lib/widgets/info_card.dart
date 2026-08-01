@@ -27,18 +27,10 @@ class InfoCard extends StatelessWidget {
               child: Icon(icon, color: color),
             ),
             const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
             Text(
               value,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
           ],
         ),
