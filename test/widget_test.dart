@@ -10,9 +10,7 @@ Future<ApplianceStore> _createStore({
   List<Appliance> initialAppliances = const [],
 }) async {
   final store = ApplianceStore(
-    repository: MemoryApplianceRepository(
-      initialAppliances: initialAppliances,
-    ),
+    repository: MemoryApplianceRepository(initialAppliances: initialAppliances),
   );
   await store.initialize();
   return store;
@@ -106,5 +104,39 @@ void main() {
     expect(find.text('AC manual'), findsOneWidget);
     expect(find.textContaining('Living room AC'), findsOneWidget);
     expect(find.text('Add document'), findsOneWidget);
+  });
+
+  testWidgets('support directory shows direct contact actions', (tester) async {
+    final appliance = Appliance(
+      id: 'ac-support-1',
+      name: 'Bedroom AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      supportProvider: 'Daikin Care',
+      supportPhone: '+966 11 123 4567',
+      supportEmail: 'care@example.com',
+      supportWebsite: 'support.example.com',
+      supportNotes: 'Sunday to Thursday',
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final supportDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Support'),
+    );
+    await tester.tap(supportDestination);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bedroom AC'), findsOneWidget);
+    expect(find.text('Daikin Care'), findsOneWidget);
+    expect(find.text('Call'), findsOneWidget);
+    expect(find.text('Email'), findsWidgets);
+    expect(find.text('Website'), findsWidgets);
+    expect(find.text('Sunday to Thursday'), findsOneWidget);
   });
 }

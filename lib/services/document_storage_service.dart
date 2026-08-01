@@ -8,12 +8,7 @@ import '../models/stored_document.dart';
 
 class DocumentStorageService {
   static const int maximumFileSizeBytes = 15 * 1024 * 1024;
-  static const List<String> allowedExtensions = [
-    'pdf',
-    'jpg',
-    'jpeg',
-    'png',
-  ];
+  static const List<String> allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
 
   Future<StoredDocument?> pickAndStore({
     required String applianceId,
@@ -76,12 +71,7 @@ class DocumentStorageService {
   Future<void> deleteApplianceDocuments(String applianceId) async {
     final rootDirectory = await getApplicationDocumentsDirectory();
     final applianceDirectory = Directory(
-      path.join(
-        rootDirectory.path,
-        'homevault',
-        'appliances',
-        applianceId,
-      ),
+      path.join(rootDirectory.path, 'homevault', 'appliances', applianceId),
     );
 
     if (await applianceDirectory.exists()) {

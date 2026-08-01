@@ -8,7 +8,7 @@ import '../services/appliance_repository.dart';
 
 class ApplianceStore extends ChangeNotifier {
   ApplianceStore({ApplianceRepository? repository})
-      : _repository = repository ?? FileApplianceRepository();
+    : _repository = repository ?? FileApplianceRepository();
 
   final ApplianceRepository _repository;
   List<Appliance> _appliances = [];
@@ -67,7 +67,9 @@ class ApplianceStore extends ChangeNotifier {
   int warrantyCount(WarrantyStatus status, {DateTime? now}) {
     final referenceDate = now ?? DateTime.now();
     return _appliances
-        .where((appliance) => appliance.warrantyStatusAt(referenceDate) == status)
+        .where(
+          (appliance) => appliance.warrantyStatusAt(referenceDate) == status,
+        )
         .length;
   }
 
@@ -97,11 +99,7 @@ class ApplianceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-
-  Future<void> addDocument(
-    String applianceId,
-    StoredDocument document,
-  ) async {
+  Future<void> addDocument(String applianceId, StoredDocument document) async {
     final appliance = applianceById(applianceId);
     if (appliance == null) {
       throw StateError('The appliance could not be found.');
@@ -123,10 +121,7 @@ class ApplianceStore extends ChangeNotifier {
     await update(appliance.replaceDocument(documentId, replacement));
   }
 
-  Future<void> removeDocument(
-    String applianceId,
-    String documentId,
-  ) async {
+  Future<void> removeDocument(String applianceId, String documentId) async {
     final appliance = applianceById(applianceId);
     if (appliance == null) {
       throw StateError('The appliance could not be found.');

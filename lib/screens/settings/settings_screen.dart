@@ -19,11 +19,11 @@ class SettingsScreen extends StatelessWidget {
                   Text(
                     'HomeVault',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Sprint 1 development build'),
+                  const Text('Sprint 3 development build'),
                 ],
               ),
             ),
@@ -49,7 +49,7 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   leading: Icon(Icons.notifications_outlined),
                   title: Text('Warranty reminders'),
-                  subtitle: Text('Planned after persistent storage.'),
+                  subtitle: Text('Planned for Sprint 4.'),
                 ),
               ],
             ),
@@ -66,7 +66,7 @@ class SettingsScreen extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.0.0',
+                  applicationVersion: '1.3.0',
                   children: const [
                     Text(
                       'A personal appliance support and document organizer under active development.',

@@ -6,13 +6,11 @@ import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/support_action_service.dart';
 import '../../widgets/document_attachment_field.dart';
 
 class AddApplianceScreen extends StatefulWidget {
-  const AddApplianceScreen({
-    super.key,
-    this.appliance,
-  });
+  const AddApplianceScreen({super.key, this.appliance});
 
   final Appliance? appliance;
 
@@ -39,9 +37,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late final TextEditingController _brandController;
   late final TextEditingController _modelController;
   late final TextEditingController _serialController;
+  late final TextEditingController _supportProviderController;
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
   late final TextEditingController _websiteController;
+  late final TextEditingController _supportNotesController;
   late final TextEditingController _invoiceController;
   late final TextEditingController _warrantyProviderController;
   late final TextEditingController _warrantyReferenceController;
@@ -86,22 +86,36 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
     _nameController = TextEditingController(text: appliance?.name ?? '');
     _brandController = TextEditingController(text: appliance?.brand ?? '');
-    _modelController =
-        TextEditingController(text: appliance?.modelNumber ?? '');
-    _serialController =
-        TextEditingController(text: appliance?.serialNumber ?? '');
-    _phoneController =
-        TextEditingController(text: appliance?.supportPhone ?? '');
-    _emailController =
-        TextEditingController(text: appliance?.supportEmail ?? '');
-    _websiteController =
-        TextEditingController(text: appliance?.supportWebsite ?? '');
-    _invoiceController =
-        TextEditingController(text: appliance?.invoiceReference ?? '');
-    _warrantyProviderController =
-        TextEditingController(text: appliance?.warrantyProvider ?? '');
-    _warrantyReferenceController =
-        TextEditingController(text: appliance?.warrantyReference ?? '');
+    _modelController = TextEditingController(
+      text: appliance?.modelNumber ?? '',
+    );
+    _serialController = TextEditingController(
+      text: appliance?.serialNumber ?? '',
+    );
+    _supportProviderController = TextEditingController(
+      text: appliance?.supportProvider ?? '',
+    );
+    _phoneController = TextEditingController(
+      text: appliance?.supportPhone ?? '',
+    );
+    _emailController = TextEditingController(
+      text: appliance?.supportEmail ?? '',
+    );
+    _websiteController = TextEditingController(
+      text: appliance?.supportWebsite ?? '',
+    );
+    _supportNotesController = TextEditingController(
+      text: appliance?.supportNotes ?? '',
+    );
+    _invoiceController = TextEditingController(
+      text: appliance?.invoiceReference ?? '',
+    );
+    _warrantyProviderController = TextEditingController(
+      text: appliance?.warrantyProvider ?? '',
+    );
+    _warrantyReferenceController = TextEditingController(
+      text: appliance?.warrantyReference ?? '',
+    );
     _notesController = TextEditingController(text: appliance?.notes ?? '');
   }
 
@@ -117,9 +131,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _brandController.dispose();
     _modelController.dispose();
     _serialController.dispose();
+    _supportProviderController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _websiteController.dispose();
+    _supportNotesController.dispose();
     _invoiceController.dispose();
     _warrantyProviderController.dispose();
     _warrantyReferenceController.dispose();
@@ -173,8 +189,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         return;
       }
 
-      final previousDocument =
-          isInvoice ? _invoiceDocument : _warrantyDocument;
+      final previousDocument = isInvoice ? _invoiceDocument : _warrantyDocument;
 
       if (previousDocument != null) {
         await _queueOrDeletePreviousDocument(previousDocument);
@@ -190,14 +205,16 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       });
     } on DocumentStorageException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The document could not be attached. Please try again.'),
+          content: Text(
+            'The document could not be attached. Please try again.',
+          ),
         ),
       );
     } finally {
@@ -273,9 +290,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       serialNumber: _serialController.text.trim(),
       purchaseDate: _purchaseDate,
       warrantyExpiryDate: _warrantyExpiryDate,
+      supportProvider: _supportProviderController.text.trim(),
       supportPhone: _phoneController.text.trim(),
       supportEmail: _emailController.text.trim(),
       supportWebsite: _websiteController.text.trim(),
+      supportNotes: _supportNotesController.text.trim(),
       invoiceReference: _invoiceController.text.trim(),
       warrantyProvider: _warrantyProviderController.text.trim(),
       warrantyReference: _warrantyReferenceController.text.trim(),
@@ -289,8 +308,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         title: 'Warranty card',
         reference: _warrantyReferenceController.text.trim(),
       ),
-      additionalDocuments:
-          existingAppliance?.additionalDocuments ?? const [],
+      additionalDocuments: existingAppliance?.additionalDocuments ?? const [],
       notes: _notesController.text.trim(),
       createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );
@@ -300,8 +318,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       ApplianceFormResult(
         appliance: appliance,
         documentsAdded: _newDocuments.values.toList(growable: false),
-        documentsToDelete:
-            _documentsToDelete.values.toList(growable: false),
+        documentsToDelete: _documentsToDelete.values.toList(growable: false),
       ),
     );
   }
@@ -466,13 +483,25 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               const SizedBox(height: 24),
               const _SectionTitle(
                 title: 'Customer support',
-                subtitle: 'Keep the brand support details beside the appliance.',
+                subtitle:
+                    'Keep the brand support details beside the appliance.',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _supportProviderController,
+                decoration: const InputDecoration(
+                  labelText: 'Support provider',
+                  hintText: 'Brand, retailer, or authorized service center',
+                  prefixIcon: Icon(Icons.support_agent_outlined),
+                ),
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Support phone',
+                  hintText: 'Include the country code when possible',
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
                 keyboardType: TextInputType.phone,
@@ -500,17 +529,44 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 controller: _websiteController,
                 decoration: const InputDecoration(
                   labelText: 'Support website',
+                  hintText: 'support.example.com',
                   prefixIcon: Icon(Icons.language),
                 ),
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.next,
+                validator: (value) {
+                  final website = value?.trim() ?? '';
+                  if (!SupportActionService.isValidWebsite(website)) {
+                    return 'Enter a valid website address.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _supportNotesController,
+                decoration: const InputDecoration(
+                  labelText: 'Support notes',
+                  hintText: 'Working hours, service center, or account details',
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.contact_support_outlined),
+                ),
+                minLines: 2,
+                maxLines: 4,
+                textInputAction: TextInputAction.newline,
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle(
+                title: 'General notes',
+                subtitle: 'Save any other information about the appliance.',
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
                 decoration: const InputDecoration(
                   labelText: 'Notes',
-                  hintText: 'Service history, installation details, or reminders',
+                  hintText:
+                      'Service history, installation details, or reminders',
                   alignLabelWithHint: true,
                   prefixIcon: Icon(Icons.notes),
                 ),
@@ -548,8 +604,8 @@ class _SectionTitle extends StatelessWidget {
         Text(
           subtitle,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );

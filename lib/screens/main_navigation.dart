@@ -10,13 +10,7 @@ import 'documents/documents_screen.dart';
 import 'settings/settings_screen.dart';
 import 'support/support_screen.dart';
 
-enum AppSection {
-  home,
-  appliances,
-  documents,
-  support,
-  settings,
-}
+enum AppSection { home, appliances, documents, support, settings }
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -34,9 +28,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   Future<void> _openAddAppliance() async {
     final result = await Navigator.of(context).push<ApplianceFormResult>(
-      MaterialPageRoute(
-        builder: (context) => const AddApplianceScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const AddApplianceScreen()),
     );
 
     if (!mounted || result == null) {
@@ -53,8 +45,9 @@ class _MainNavigationState extends State<MainNavigation> {
       );
     } catch (_) {
       try {
-        await DocumentStorageService()
-            .deleteApplianceDocuments(result.appliance.id);
+        await DocumentStorageService().deleteApplianceDocuments(
+          result.appliance.id,
+        );
       } catch (_) {
         // A failed cleanup should not hide the original save error.
       }
@@ -84,10 +77,7 @@ class _MainNavigationState extends State<MainNavigation> {
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedSection.index,
-        children: screens,
-      ),
+      body: IndexedStack(index: _selectedSection.index, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedSection.index,
         onDestinationSelected: (index) {

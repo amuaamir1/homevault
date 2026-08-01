@@ -4,28 +4,33 @@ import '../models/appliance.dart';
 import '../theme/app_colors.dart';
 
 class WarrantyStatusChip extends StatelessWidget {
-  const WarrantyStatusChip({
-    super.key,
-    required this.status,
-  });
+  const WarrantyStatusChip({super.key, required this.status});
 
   final WarrantyStatus status;
 
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (status) {
-      WarrantyStatus.active => ('Active', AppColors.success, Icons.verified_outlined),
+      WarrantyStatus.active => (
+        'Active',
+        AppColors.success,
+        Icons.verified_outlined,
+      ),
       WarrantyStatus.expiringSoon => (
-          'Expiring soon',
-          AppColors.warning,
-          Icons.warning_amber_outlined,
-        ),
-      WarrantyStatus.expired => ('Expired', AppColors.danger, Icons.cancel_outlined),
+        'Expiring soon',
+        AppColors.warning,
+        Icons.warning_amber_outlined,
+      ),
+      WarrantyStatus.expired => (
+        'Expired',
+        AppColors.danger,
+        Icons.cancel_outlined,
+      ),
       WarrantyStatus.notProvided => (
-          'No warranty date',
-          AppColors.textSecondary,
-          Icons.help_outline,
-        ),
+        'No warranty date',
+        AppColors.textSecondary,
+        Icons.help_outline,
+      ),
     };
 
     return Container(

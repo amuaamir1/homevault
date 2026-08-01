@@ -58,7 +58,8 @@ class StoredDocument {
 
   factory StoredDocument.fromJson(Map<String, dynamic> json) {
     final localPath = json['localPath'] as String? ?? '';
-    final attachedAt = DateTime.tryParse(json['attachedAt'] as String? ?? '') ??
+    final attachedAt =
+        DateTime.tryParse(json['attachedAt'] as String? ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0);
 
     return StoredDocument(
@@ -144,11 +145,7 @@ class StoredDocument {
     return '${megabytes.toStringAsFixed(1)} MB';
   }
 
-  static String _resolveId(
-    String? id,
-    DateTime attachedAt,
-    String fileName,
-  ) {
+  static String _resolveId(String? id, DateTime attachedAt, String fileName) {
     if (id != null && id.trim().isNotEmpty) {
       return id;
     }

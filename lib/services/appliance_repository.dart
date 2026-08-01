@@ -50,9 +50,7 @@ class FileApplianceRepository implements ApplianceRepository {
 
       return applianceData
           .whereType<Map>()
-          .map(
-            (item) => Appliance.fromJson(Map<String, dynamic>.from(item)),
-          )
+          .map((item) => Appliance.fromJson(Map<String, dynamic>.from(item)))
           .where((appliance) => appliance.id.isNotEmpty)
           .toList(growable: false);
     } catch (error) {
@@ -90,7 +88,7 @@ class FileApplianceRepository implements ApplianceRepository {
 
 class MemoryApplianceRepository implements ApplianceRepository {
   MemoryApplianceRepository({List<Appliance> initialAppliances = const []})
-      : _appliances = List<Appliance>.from(initialAppliances);
+    : _appliances = List<Appliance>.from(initialAppliances);
 
   List<Appliance> _appliances;
 

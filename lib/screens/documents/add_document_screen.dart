@@ -65,9 +65,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
   @override
   void dispose() {
     if (!_submitted && _replacementDocument != null) {
-      unawaited(
-        _storageService.deleteStoredDocument(_replacementDocument!),
-      );
+      unawaited(_storageService.deleteStoredDocument(_replacementDocument!));
     }
     _titleController.dispose();
     _referenceController.dispose();
@@ -139,14 +137,16 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
       }
     } on DocumentStorageException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The document could not be attached. Please try again.'),
+          content: Text(
+            'The document could not be attached. Please try again.',
+          ),
         ),
       );
     } finally {
@@ -220,8 +220,8 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
               Text(
                 'Attach manuals, service receipts, installation reports, and other appliance records.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 18),
               DropdownButtonFormField<String>(

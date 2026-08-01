@@ -13,6 +13,11 @@ void main() {
       brand: 'Daikin',
       modelNumber: 'FTKM50',
       serialNumber: 'SN-100',
+      supportProvider: 'Daikin Care',
+      supportPhone: '+966 11 123 4567',
+      supportEmail: 'care@example.com',
+      supportWebsite: 'support.example.com',
+      supportNotes: 'Sunday to Thursday, 9 AM to 5 PM',
       purchaseDate: DateTime(2026, 1, 15),
       warrantyExpiryDate: DateTime(2028, 1, 15),
       invoiceDocument: StoredDocument(
@@ -45,6 +50,11 @@ void main() {
     expect(restored.name, appliance.name);
     expect(restored.purchaseDate, appliance.purchaseDate);
     expect(restored.warrantyExpiryDate, appliance.warrantyExpiryDate);
+    expect(restored.supportProvider, 'Daikin Care');
+    expect(restored.supportPhone, '+966 11 123 4567');
+    expect(restored.supportEmail, 'care@example.com');
+    expect(restored.supportWebsite, 'support.example.com');
+    expect(restored.supportNotes, 'Sunday to Thursday, 9 AM to 5 PM');
     expect(restored.invoiceDocument?.fileName, 'invoice.pdf');
     expect(restored.invoiceDocument?.type, DocumentType.invoice);
     expect(restored.invoiceDocument?.reference, 'INV-100');
@@ -105,9 +115,7 @@ void main() {
       brand: 'Samsung',
       createdAt: DateTime(2026, 8, 1),
     );
-    final repository = MemoryApplianceRepository(
-      initialAppliances: [original],
-    );
+    final repository = MemoryApplianceRepository(initialAppliances: [original]);
     final store = ApplianceStore(repository: repository);
     await store.initialize();
 
@@ -128,11 +136,7 @@ void main() {
       title: 'Updated fridge manual',
       reference: 'MAN-2026',
     );
-    await store.replaceDocument(
-      original.id,
-      document.id,
-      updatedDocument,
-    );
+    await store.replaceDocument(original.id, document.id, updatedDocument);
     expect(
       store.appliances.single.additionalDocuments.single.displayTitle,
       'Updated fridge manual',
@@ -166,9 +170,7 @@ void main() {
       brand: 'Samsung',
       createdAt: DateTime(2026, 8, 1),
     );
-    final repository = MemoryApplianceRepository(
-      initialAppliances: [original],
-    );
+    final repository = MemoryApplianceRepository(initialAppliances: [original]);
     final store = ApplianceStore(repository: repository);
     await store.initialize();
 
