@@ -38,7 +38,7 @@ class DashboardScreen extends StatelessWidget {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {},
+        onRefresh: () => store.initialize(force: true),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

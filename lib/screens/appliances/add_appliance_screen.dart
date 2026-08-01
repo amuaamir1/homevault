@@ -1,12 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/appliance.dart';
+import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
 import '../../widgets/document_attachment_field.dart';
 
 class AddApplianceScreen extends StatefulWidget {
-  const AddApplianceScreen({super.key});
+  const AddApplianceScreen({
+    super.key,
+    this.appliance,
+  });
+
+  final Appliance? appliance;
 
   @override
   State<AddApplianceScreen> createState() => _AddApplianceScreenState();
@@ -26,29 +34,85 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final _documentStorageService = DocumentStorageService();
-  final _nameController = TextEditingController();
-  final _brandController = TextEditingController();
-  final _modelController = TextEditingController();
-  final _serialController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _websiteController = TextEditingController();
-  final _invoiceController = TextEditingController();
-  final _warrantyProviderController = TextEditingController();
-  final _warrantyReferenceController = TextEditingController();
-  final _notesController = TextEditingController();
-  final String _draftId = DateTime.now().microsecondsSinceEpoch.toString();
 
-  String _category = _categories.first;
+  late final TextEditingController _nameController;
+  late final TextEditingController _brandController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _serialController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _websiteController;
+  late final TextEditingController _invoiceController;
+  late final TextEditingController _warrantyProviderController;
+  late final TextEditingController _warrantyReferenceController;
+  late final TextEditingController _notesController;
+  late final String _draftId;
+
+  final Map<String, StoredDocument> _newDocuments = {};
+  final Map<String, StoredDocument> _documentsToDelete = {};
+  late final Set<String> _originalDocumentPaths;
+
+  late String _category;
   DateTime? _purchaseDate;
   DateTime? _warrantyExpiryDate;
   StoredDocument? _invoiceDocument;
   StoredDocument? _warrantyDocument;
   bool _isPickingInvoice = false;
   bool _isPickingWarranty = false;
+  bool _submitted = false;
+
+  bool get _isEditing => widget.appliance != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final appliance = widget.appliance;
+
+    _draftId =
+        appliance?.id ?? DateTime.now().microsecondsSinceEpoch.toString();
+    _category = _categories.contains(appliance?.category)
+        ? appliance!.category
+        : _categories.first;
+    _purchaseDate = appliance?.purchaseDate;
+    _warrantyExpiryDate = appliance?.warrantyExpiryDate;
+    _invoiceDocument = appliance?.invoiceDocument;
+    _warrantyDocument = appliance?.warrantyDocument;
+    _originalDocumentPaths = {
+      if (appliance?.invoiceDocument != null)
+        appliance!.invoiceDocument!.localPath,
+      if (appliance?.warrantyDocument != null)
+        appliance!.warrantyDocument!.localPath,
+    };
+
+    _nameController = TextEditingController(text: appliance?.name ?? '');
+    _brandController = TextEditingController(text: appliance?.brand ?? '');
+    _modelController =
+        TextEditingController(text: appliance?.modelNumber ?? '');
+    _serialController =
+        TextEditingController(text: appliance?.serialNumber ?? '');
+    _phoneController =
+        TextEditingController(text: appliance?.supportPhone ?? '');
+    _emailController =
+        TextEditingController(text: appliance?.supportEmail ?? '');
+    _websiteController =
+        TextEditingController(text: appliance?.supportWebsite ?? '');
+    _invoiceController =
+        TextEditingController(text: appliance?.invoiceReference ?? '');
+    _warrantyProviderController =
+        TextEditingController(text: appliance?.warrantyProvider ?? '');
+    _warrantyReferenceController =
+        TextEditingController(text: appliance?.warrantyReference ?? '');
+    _notesController = TextEditingController(text: appliance?.notes ?? '');
+  }
 
   @override
   void dispose() {
+    if (!_submitted) {
+      for (final document in _newDocuments.values) {
+        unawaited(_documentStorageService.deleteStoredDocument(document));
+      }
+    }
+
     _nameController.dispose();
     _brandController.dispose();
     _modelController.dispose();
@@ -72,7 +136,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       context: context,
       initialDate: initialDate,
       firstDate: DateTime(1990),
-      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      lastDate: isWarrantyDate
+          ? DateTime.now().add(const Duration(days: 3650))
+          : DateTime.now(),
     );
 
     if (selectedDate == null) {
@@ -110,6 +176,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       final previousDocument =
           isInvoice ? _invoiceDocument : _warrantyDocument;
 
+      if (previousDocument != null) {
+        await _queueOrDeletePreviousDocument(previousDocument);
+      }
+
+      _newDocuments[selectedDocument.localPath] = selectedDocument;
       setState(() {
         if (isInvoice) {
           _invoiceDocument = selectedDocument;
@@ -117,10 +188,6 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
           _warrantyDocument = selectedDocument;
         }
       });
-
-      if (previousDocument != null) {
-        await _documentStorageService.deleteStoredDocument(previousDocument);
-      }
     } on DocumentStorageException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -146,10 +213,27 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     }
   }
 
+  Future<void> _queueOrDeletePreviousDocument(
+    StoredDocument previousDocument,
+  ) async {
+    final newlyAdded = _newDocuments.remove(previousDocument.localPath);
+    if (newlyAdded != null) {
+      await _documentStorageService.deleteStoredDocument(newlyAdded);
+      return;
+    }
+
+    if (_originalDocumentPaths.contains(previousDocument.localPath)) {
+      _documentsToDelete[previousDocument.localPath] = previousDocument;
+    }
+  }
+
   Future<void> _removeDocument({required bool isInvoice}) async {
     final document = isInvoice ? _invoiceDocument : _warrantyDocument;
     if (document == null) return;
 
+    await _queueOrDeletePreviousDocument(document);
+
+    if (!mounted) return;
     setState(() {
       if (isInvoice) {
         _invoiceDocument = null;
@@ -157,8 +241,6 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         _warrantyDocument = null;
       }
     });
-
-    await _documentStorageService.deleteStoredDocument(document);
   }
 
   void _save() {
@@ -181,7 +263,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       return;
     }
 
-    final now = DateTime.now();
+    final existingAppliance = widget.appliance;
     final appliance = Appliance(
       id: _draftId,
       name: _nameController.text.trim(),
@@ -200,16 +282,26 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       invoiceDocument: _invoiceDocument,
       warrantyDocument: _warrantyDocument,
       notes: _notesController.text.trim(),
-      createdAt: now,
+      createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );
 
-    Navigator.of(context).pop(appliance);
+    _submitted = true;
+    Navigator.of(context).pop(
+      ApplianceFormResult(
+        appliance: appliance,
+        documentsAdded: _newDocuments.values.toList(growable: false),
+        documentsToDelete:
+            _documentsToDelete.values.toList(growable: false),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add appliance')),
+      appBar: AppBar(
+        title: Text(_isEditing ? 'Edit appliance' : 'Add appliance'),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -217,9 +309,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
-              const _SectionTitle(
+              _SectionTitle(
                 title: 'Appliance details',
-                subtitle: 'Add the information used to identify this appliance.',
+                subtitle: _isEditing
+                    ? 'Update the information used to identify this appliance.'
+                    : 'Add the information used to identify this appliance.',
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -417,7 +511,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               FilledButton.icon(
                 onPressed: _save,
                 icon: const Icon(Icons.save_outlined),
-                label: const Text('Save appliance'),
+                label: Text(_isEditing ? 'Save changes' : 'Save appliance'),
               ),
               const SizedBox(height: 12),
             ],

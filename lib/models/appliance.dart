@@ -29,6 +29,41 @@ class Appliance {
     this.notes = '',
   });
 
+  factory Appliance.fromJson(Map<String, dynamic> json) {
+    final invoiceJson = json['invoiceDocument'];
+    final warrantyJson = json['warrantyDocument'];
+
+    return Appliance(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      category: json['category'] as String? ?? 'Other',
+      brand: json['brand'] as String? ?? '',
+      modelNumber: json['modelNumber'] as String? ?? '',
+      serialNumber: json['serialNumber'] as String? ?? '',
+      purchaseDate: _dateFromJson(json['purchaseDate']),
+      warrantyExpiryDate: _dateFromJson(json['warrantyExpiryDate']),
+      supportPhone: json['supportPhone'] as String? ?? '',
+      supportEmail: json['supportEmail'] as String? ?? '',
+      supportWebsite: json['supportWebsite'] as String? ?? '',
+      invoiceReference: json['invoiceReference'] as String? ?? '',
+      warrantyProvider: json['warrantyProvider'] as String? ?? '',
+      warrantyReference: json['warrantyReference'] as String? ?? '',
+      invoiceDocument: invoiceJson is Map<String, dynamic>
+          ? StoredDocument.fromJson(invoiceJson)
+          : invoiceJson is Map
+              ? StoredDocument.fromJson(Map<String, dynamic>.from(invoiceJson))
+              : null,
+      warrantyDocument: warrantyJson is Map<String, dynamic>
+          ? StoredDocument.fromJson(warrantyJson)
+          : warrantyJson is Map
+              ? StoredDocument.fromJson(Map<String, dynamic>.from(warrantyJson))
+              : null,
+      notes: json['notes'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
   final String id;
   final String name;
   final String category;
@@ -47,6 +82,36 @@ class Appliance {
   final StoredDocument? warrantyDocument;
   final String notes;
   final DateTime createdAt;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'brand': brand,
+      'modelNumber': modelNumber,
+      'serialNumber': serialNumber,
+      'purchaseDate': purchaseDate?.toIso8601String(),
+      'warrantyExpiryDate': warrantyExpiryDate?.toIso8601String(),
+      'supportPhone': supportPhone,
+      'supportEmail': supportEmail,
+      'supportWebsite': supportWebsite,
+      'invoiceReference': invoiceReference,
+      'warrantyProvider': warrantyProvider,
+      'warrantyReference': warrantyReference,
+      'invoiceDocument': invoiceDocument?.toJson(),
+      'warrantyDocument': warrantyDocument?.toJson(),
+      'notes': notes,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  static DateTime? _dateFromJson(Object? value) {
+    if (value is! String || value.isEmpty) {
+      return null;
+    }
+    return DateTime.tryParse(value);
+  }
 
   WarrantyStatus warrantyStatusAt(DateTime now) {
     final expiryDate = warrantyExpiryDate;
@@ -74,46 +139,4 @@ class Appliance {
 
   bool get hasDocuments =>
       invoiceDocument != null || warrantyDocument != null;
-
-  Appliance copyWith({
-    String? id,
-    String? name,
-    String? category,
-    String? brand,
-    String? modelNumber,
-    String? serialNumber,
-    DateTime? purchaseDate,
-    DateTime? warrantyExpiryDate,
-    String? supportPhone,
-    String? supportEmail,
-    String? supportWebsite,
-    String? invoiceReference,
-    String? warrantyProvider,
-    String? warrantyReference,
-    StoredDocument? invoiceDocument,
-    StoredDocument? warrantyDocument,
-    String? notes,
-    DateTime? createdAt,
-  }) {
-    return Appliance(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      category: category ?? this.category,
-      brand: brand ?? this.brand,
-      modelNumber: modelNumber ?? this.modelNumber,
-      serialNumber: serialNumber ?? this.serialNumber,
-      purchaseDate: purchaseDate ?? this.purchaseDate,
-      warrantyExpiryDate: warrantyExpiryDate ?? this.warrantyExpiryDate,
-      supportPhone: supportPhone ?? this.supportPhone,
-      supportEmail: supportEmail ?? this.supportEmail,
-      supportWebsite: supportWebsite ?? this.supportWebsite,
-      invoiceReference: invoiceReference ?? this.invoiceReference,
-      warrantyProvider: warrantyProvider ?? this.warrantyProvider,
-      warrantyReference: warrantyReference ?? this.warrantyReference,
-      invoiceDocument: invoiceDocument ?? this.invoiceDocument,
-      warrantyDocument: warrantyDocument ?? this.warrantyDocument,
-      notes: notes ?? this.notes,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
 }
