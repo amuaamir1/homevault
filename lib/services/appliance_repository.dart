@@ -13,7 +13,7 @@ abstract class ApplianceRepository {
 }
 
 class FileApplianceRepository implements ApplianceRepository {
-  static const int _schemaVersion = 1;
+  static const int _schemaVersion = 2;
 
   Future<File> _dataFile() async {
     final documentsDirectory = await getApplicationDocumentsDirectory();

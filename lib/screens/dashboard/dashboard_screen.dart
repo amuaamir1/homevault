@@ -123,7 +123,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   QuickActionTile(
                     icon: Icons.receipt_long_outlined,
-                    title: 'Invoices',
+                    title: 'Documents',
                     color: AppColors.warning,
                     onTap: () => onNavigate(AppSection.documents),
                   ),

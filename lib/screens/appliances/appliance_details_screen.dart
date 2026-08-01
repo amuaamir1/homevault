@@ -4,11 +4,13 @@ import 'package:open_filex/open_filex.dart';
 
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
+import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/stored_document_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
+import '../documents/add_document_screen.dart';
 import 'add_appliance_screen.dart';
 
 class ApplianceDetailsScreen extends StatelessWidget {
@@ -96,13 +98,51 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _addDocument(
+    BuildContext context,
+    Appliance appliance,
+  ) async {
+    final store = AppScope.read(context);
+    final result = await Navigator.of(context).push<DocumentFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddDocumentScreen(
+          appliances: store.appliances.toList(growable: false),
+          initialApplianceId: appliance.id,
+        ),
+      ),
+    );
+
+    if (result == null || !context.mounted) return;
+
+    try {
+      await AppScope.read(context).addDocument(
+        result.applianceId,
+        result.document,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.document.displayTitle} was saved.')),
+      );
+    } catch (_) {
+      try {
+        await DocumentStorageService().deleteStoredDocument(result.document);
+      } catch (_) {
+        // Preserve the original save error if cleanup also fails.
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The document could not be saved.')),
+      );
+    }
+  }
+
   Future<void> _delete(BuildContext context, Appliance appliance) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete appliance?'),
         content: Text(
-          'This will remove ${appliance.name} and its attached invoice and warranty files.',
+          'This will remove ${appliance.name} and all attached documents.',
         ),
         actions: [
           TextButton(
@@ -171,6 +211,11 @@ class ApplianceDetailsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Appliance details'),
         actions: [
+          IconButton(
+            tooltip: 'Add document',
+            onPressed: () => _addDocument(context, appliance),
+            icon: const Icon(Icons.note_add_outlined),
+          ),
           IconButton(
             tooltip: 'Edit appliance',
             onPressed: () => _edit(context, appliance),
@@ -293,6 +338,22 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ),
             ],
           ),
+          if (appliance.additionalDocuments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _DetailsSection(
+              title: 'Additional documents',
+              children: appliance.additionalDocuments
+                  .map(
+                    (document) => StoredDocumentTile(
+                      document: document,
+                      title: document.displayTitle,
+                      subtitle: document.type.label,
+                      onOpen: () => _openDocument(context, document),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
           const SizedBox(height: 16),
           _DetailsSection(
             title: 'Customer support',
