@@ -6,10 +6,29 @@ class StoredDocument {
     required this.attachedAt,
   });
 
+  factory StoredDocument.fromJson(Map<String, dynamic> json) {
+    return StoredDocument(
+      fileName: json['fileName'] as String? ?? '',
+      localPath: json['localPath'] as String? ?? '',
+      sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+      attachedAt: DateTime.tryParse(json['attachedAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
   final String fileName;
   final String localPath;
   final int sizeBytes;
   final DateTime attachedAt;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'fileName': fileName,
+      'localPath': localPath,
+      'sizeBytes': sizeBytes,
+      'attachedAt': attachedAt.toIso8601String(),
+    };
+  }
 
   String get extension {
     final dotIndex = fileName.lastIndexOf('.');

@@ -106,7 +106,9 @@ class _ApplianceCard extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => ApplianceDetailsScreen(appliance: appliance),
+              builder: (context) => ApplianceDetailsScreen(
+                applianceId: appliance.id,
+              ),
             ),
           );
         },

@@ -23,7 +23,7 @@ class SettingsScreen extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Development build 1.0.0'),
+                  const Text('Sprint 1 development build'),
                 ],
               ),
             ),
@@ -36,7 +36,7 @@ class SettingsScreen extends StatelessWidget {
                   leading: Icon(Icons.storage_outlined),
                   title: Text('Storage'),
                   subtitle: Text(
-                    'Temporary in-memory storage. Local database comes next.',
+                    'Appliance records and document references are saved locally on this device.',
                   ),
                 ),
                 Divider(height: 1),
@@ -60,7 +60,7 @@ class SettingsScreen extends StatelessWidget {
               leading: const Icon(Icons.info_outline),
               title: const Text('Privacy note'),
               subtitle: const Text(
-                'This milestone does not send appliance information to any server.',
+                'HomeVault stores appliance information locally and does not send it to a server.',
               ),
               onTap: () {
                 showAboutDialog(

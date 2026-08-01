@@ -19,7 +19,7 @@ class DocumentStorageService {
     required String applianceId,
     required String documentFolder,
   }) async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: allowedExtensions,
       allowMultiple: false,
