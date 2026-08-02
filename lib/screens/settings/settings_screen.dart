@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../backup/backup_restore_screen.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
 
@@ -26,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Sprint 5 development build'),
+                  const Text('Sprint 7 development build - version 1.7.0'),
                 ],
               ),
             ),
@@ -37,16 +38,26 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 const ListTile(
                   leading: Icon(Icons.storage_outlined),
-                  title: Text('Storage'),
+                  title: Text('Local storage'),
                   subtitle: Text(
-                    'Appliance records and document references are saved locally on this device.',
+                    'Appliances, support details, warranties, service history, and documents are stored locally on this device.',
                   ),
                 ),
                 const Divider(height: 1),
-                const ListTile(
-                  leading: Icon(Icons.cloud_outlined),
-                  title: Text('Cloud backup'),
-                  subtitle: Text('Planned for a later phase.'),
+                ListTile(
+                  leading: const Icon(Icons.backup_outlined),
+                  title: const Text('Backup, restore & export'),
+                  subtitle: const Text(
+                    'Create ZIP backups, restore data, and save CSV or PDF reports.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const BackupRestoreScreen(),
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -58,7 +69,7 @@ class SettingsScreen extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(
+                      MaterialPageRoute<void>(
                         builder: (context) => const WarrantyScreen(),
                       ),
                     );
@@ -89,16 +100,16 @@ class SettingsScreen extends StatelessWidget {
               leading: const Icon(Icons.info_outline),
               title: const Text('Privacy note'),
               subtitle: const Text(
-                'HomeVault stores appliance information locally and does not send it to a server.',
+                'HomeVault does not send your appliance data to a server. Exported backups and reports should be stored privately.',
               ),
               onTap: () {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.5.0',
+                  applicationVersion: '1.7.0',
                   children: const [
                     Text(
-                      'A personal appliance support, warranty, document, and maintenance organizer under active development.',
+                      'A personal appliance support, warranty, document, maintenance, backup, and reporting organizer under active development.',
                     ),
                   ],
                 );
