@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/appliance.dart';
+import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
 import '../services/warranty_notification_service.dart';
@@ -30,6 +31,26 @@ class ApplianceStore extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   String? get loadError => _loadError;
   int get totalCount => _appliances.length;
+
+  int get totalServiceRecordCount => _appliances.fold<int>(
+    0,
+    (total, appliance) => total + appliance.serviceRecordCount,
+  );
+
+  double get totalServiceCost => _appliances.fold<double>(
+    0,
+    (total, appliance) => total + appliance.totalServiceCost,
+  );
+
+  int upcomingServiceCount({int days = 30, DateTime? now}) {
+    final referenceDate = now ?? DateTime.now();
+    return _appliances.expand((appliance) => appliance.serviceRecords).where((
+      record,
+    ) {
+      final remaining = record.daysUntilNextService(referenceDate);
+      return remaining != null && remaining >= 0 && remaining <= days;
+    }).length;
+  }
 
   Appliance? applianceById(String applianceId) {
     for (final appliance in _appliances) {
@@ -110,6 +131,36 @@ class ApplianceStore extends ChangeNotifier {
 
   Future<void> rescheduleWarrantyReminders() async {
     await _syncRemindersSafely();
+  }
+
+  Future<void> addServiceRecord(
+    String applianceId,
+    ServiceRecord record,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.withServiceRecord(record));
+  }
+
+  Future<void> updateServiceRecord(
+    String applianceId,
+    ServiceRecord record,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.replaceServiceRecord(record));
+  }
+
+  Future<void> removeServiceRecord(String applianceId, String recordId) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.withoutServiceRecord(recordId));
   }
 
   Future<void> addDocument(String applianceId, StoredDocument document) async {

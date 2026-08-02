@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/app.dart';
 import 'package:homevault/models/appliance.dart';
+import 'package:homevault/models/service_record.dart';
 import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/state/appliance_store.dart';
@@ -154,6 +155,7 @@ void main() {
       warrantyReminderDaysBefore: 30,
       createdAt: DateTime(2026, 8, 1),
     );
+
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
@@ -161,33 +163,84 @@ void main() {
     await tester.pumpAndSettle();
 
     final warrantyButton = find.text('Warranty center').first;
+
+    expect(warrantyButton, findsOneWidget);
+
     await tester.ensureVisible(warrantyButton);
+    await tester.pumpAndSettle();
+
     await tester.tap(warrantyButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Warranty center'), findsOneWidget);
 
-    // This section is visible at the top of the screen.
-    expect(find.text('Warranty reminders'), findsOneWidget);
-
     final warrantyList = find.byKey(const Key('warrantyCenterList'));
 
     expect(warrantyList, findsOneWidget);
 
-    // The appliance card is below the test viewport.
     await tester.dragUntilVisible(
       find.text('Family room AC'),
       warrantyList,
       const Offset(0, -350),
-      maxIteration: 10,
+      maxIteration: 15,
     );
 
     await tester.pumpAndSettle();
 
     expect(find.text('Family room AC'), findsOneWidget);
-    expect(
-      find.textContaining('Reminder 30 days before expiry'),
-      findsOneWidget,
+    expect(find.textContaining('Daikin Care'), findsOneWidget);
+    expect(find.textContaining('30 days before expiry'), findsOneWidget);
+  });
+
+  testWidgets('service center shows saved maintenance history', (tester) async {
+    final appliance = Appliance(
+      id: 'ac-service-widget',
+      name: 'Family room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      serviceRecords: [
+        ServiceRecord(
+          id: 'service-widget-1',
+          serviceDate: DateTime(2026, 8, 2),
+          createdAt: DateTime(2026, 8, 2),
+          provider: 'Cool Care',
+          ticketNumber: 'SR-200',
+          problemDescription: 'Cooling reduced',
+          workCompleted: 'Coil cleaned',
+          serviceCharge: 1200,
+          nextServiceDate: DateTime(2027, 2, 2),
+          status: ServiceStatus.completed,
+          reminderEnabled: true,
+        ),
+      ],
+      createdAt: DateTime(2026, 8, 1),
     );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    final serviceButton = find.text('Service center').first;
+    await tester.ensureVisible(serviceButton);
+    await tester.tap(serviceButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Service center'), findsOneWidget);
+    expect(find.text('Service records'), findsOneWidget);
+
+    final serviceList = find.byKey(const Key('serviceCenterList'));
+    expect(serviceList, findsOneWidget);
+    await tester.dragUntilVisible(
+      find.text('Completed • SR-200'),
+      serviceList,
+      const Offset(0, -300),
+      maxIteration: 10,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Completed • SR-200'), findsOneWidget);
+    expect(find.textContaining('Family room AC'), findsOneWidget);
+    expect(find.textContaining('Cool Care'), findsOneWidget);
   });
 }

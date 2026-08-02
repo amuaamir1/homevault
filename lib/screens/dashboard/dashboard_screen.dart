@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../models/app_section.dart';
 import '../../models/appliance.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/dashboard_card.dart';
 import '../../widgets/quick_action_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
+import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
-import '../../models/app_section.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
@@ -15,12 +16,14 @@ class DashboardScreen extends StatelessWidget {
     required this.onNavigate,
     required this.onAddAppliance,
     required this.onOpenWarrantyCenter,
+    required this.onOpenServiceCenter,
   });
 
   final ValueChanged<AppSection> onNavigate;
   final Future<void> Function() onAddAppliance;
   final Future<void> Function(WarrantyFilter initialFilter)
   onOpenWarrantyCenter;
+  final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
 
   String _greeting() {
     final hour = DateTime.now().hour;
@@ -79,6 +82,13 @@ class DashboardScreen extends StatelessWidget {
                     onTap: () => onNavigate(AppSection.appliances),
                   ),
                   DashboardCard(
+                    icon: Icons.build_circle_outlined,
+                    title: 'Service records',
+                    value: '${store.totalServiceRecordCount}',
+                    color: AppColors.secondary,
+                    onTap: () => onOpenServiceCenter(ServiceFilter.all),
+                  ),
+                  DashboardCard(
                     icon: Icons.verified,
                     title: 'Active warranty',
                     value: '${store.warrantyCount(WarrantyStatus.active)}',
@@ -100,6 +110,13 @@ class DashboardScreen extends StatelessWidget {
                     value: '${store.warrantyCount(WarrantyStatus.expired)}',
                     color: AppColors.danger,
                     onTap: () => onOpenWarrantyCenter(WarrantyFilter.expired),
+                  ),
+                  DashboardCard(
+                    icon: Icons.event_available_outlined,
+                    title: 'Service due',
+                    value: '${store.upcomingServiceCount(days: 30)}',
+                    color: AppColors.warning,
+                    onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
                   ),
                 ],
               ),
@@ -138,6 +155,12 @@ class DashboardScreen extends StatelessWidget {
                     title: 'Support',
                     color: AppColors.success,
                     onTap: () => onNavigate(AppSection.support),
+                  ),
+                  QuickActionTile(
+                    icon: Icons.home_repair_service_outlined,
+                    title: 'Service center',
+                    color: AppColors.secondary,
+                    onTap: () => onOpenServiceCenter(ServiceFilter.all),
                   ),
                   QuickActionTile(
                     icon: Icons.verified_user_outlined,

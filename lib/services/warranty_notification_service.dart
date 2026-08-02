@@ -7,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/appliance.dart';
+import '../models/service_record.dart';
 
 abstract class WarrantyReminderScheduler {
   Future<void> syncAll(List<Appliance> appliances);
@@ -35,10 +36,17 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
   static final WarrantyNotificationService instance =
       WarrantyNotificationService._();
 
-  static const _channelId = 'warranty_reminders';
-  static const _channelName = 'Warranty reminders';
-  static const _channelDescription =
+  static const _warrantyChannelId = 'warranty_reminders';
+  static const _warrantyChannelName = 'Warranty reminders';
+  static const _warrantyChannelDescription =
       'Alerts before appliance warranties expire.';
+
+  static const _serviceChannelId = 'service_reminders';
+  static const _serviceChannelName = 'Maintenance reminders';
+  static const _serviceChannelDescription =
+      'Alerts before scheduled appliance maintenance.';
+
+  static const _servicePayloadPrefix = 'service|';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -47,14 +55,14 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
       StreamController<String>.broadcast();
 
   bool _initialized = false;
-  String? _pendingApplianceId;
+  String? _pendingPayload;
 
   Stream<String> get notificationTaps => _notificationTapController.stream;
 
   String? takePendingApplianceId() {
-    final applianceId = _pendingApplianceId;
-    _pendingApplianceId = null;
-    return applianceId;
+    final payload = _pendingPayload;
+    _pendingPayload = null;
+    return _applianceIdFromPayload(payload);
   }
 
   Future<void> initialize() async {
@@ -87,22 +95,20 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     if (launchDetails?.didNotificationLaunchApp == true &&
         launchPayload != null &&
         launchPayload.isNotEmpty) {
-      _pendingApplianceId = launchPayload;
+      _pendingPayload = launchPayload;
     }
 
     _initialized = true;
   }
 
   void _handleNotificationResponse(NotificationResponse response) {
-    final applianceId = response.payload?.trim();
-    if (applianceId == null || applianceId.isEmpty) {
-      return;
-    }
+    final applianceId = _applianceIdFromPayload(response.payload);
+    if (applianceId == null) return;
 
     if (_notificationTapController.hasListener) {
       _notificationTapController.add(applianceId);
     } else {
-      _pendingApplianceId = applianceId;
+      _pendingPayload = response.payload;
     }
   }
 
@@ -150,18 +156,20 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
   Future<int> pendingReminderCount() async {
     await initialize();
     final pending = await _plugin.pendingNotificationRequests();
-    return pending.length;
+    return pending
+        .where((request) => request.payload?.isNotEmpty == true)
+        .length;
   }
 
   Future<void> showTestNotification({Appliance? appliance}) async {
     await initialize();
     await _plugin.show(
       id: 2147483000,
-      title: 'HomeVault warranty reminder',
+      title: 'HomeVault reminder test',
       body: appliance == null
           ? 'Notifications are working on this device.'
           : 'Test reminder for ${appliance.name}.',
-      notificationDetails: _notificationDetails,
+      notificationDetails: _warrantyNotificationDetails,
       payload: appliance?.id,
     );
   }
@@ -172,7 +180,7 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     await _plugin.cancelAll();
 
     for (final appliance in appliances) {
-      await scheduleFor(appliance);
+      await _scheduleCurrentReminders(appliance);
     }
   }
 
@@ -180,27 +188,56 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
   Future<void> scheduleFor(Appliance appliance) async {
     await initialize();
     await cancelFor(appliance.id);
+    await _scheduleCurrentReminders(appliance);
+  }
 
+  Future<void> _scheduleCurrentReminders(Appliance appliance) async {
+    await _scheduleWarrantyReminder(appliance);
+    for (final record in appliance.serviceRecords) {
+      await _scheduleServiceReminder(appliance, record);
+    }
+  }
+
+  Future<void> _scheduleWarrantyReminder(Appliance appliance) async {
     final reminderDate = appliance.warrantyReminderDateAt();
     final expiryDate = appliance.effectiveWarrantyExpiryDate;
-    if (reminderDate == null || expiryDate == null) {
-      return;
-    }
+    if (reminderDate == null || expiryDate == null) return;
 
     final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
     final now = tz.TZDateTime.now(tz.local);
-    if (!scheduledDate.isAfter(now)) {
-      return;
-    }
+    if (!scheduledDate.isAfter(now)) return;
 
     await _plugin.zonedSchedule(
       id: notificationIdFor(appliance.id),
       title: '${appliance.name} warranty expires soon',
-      body: _notificationBody(appliance, expiryDate),
+      body: _warrantyNotificationBody(appliance, expiryDate),
       scheduledDate: scheduledDate,
-      notificationDetails: _notificationDetails,
+      notificationDetails: _warrantyNotificationDetails,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: appliance.id,
+    );
+  }
+
+  Future<void> _scheduleServiceReminder(
+    Appliance appliance,
+    ServiceRecord record,
+  ) async {
+    final reminderDate = record.reminderDateAt();
+    final nextServiceDate = record.nextServiceDate;
+    if (reminderDate == null || nextServiceDate == null) return;
+
+    final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
+    final now = tz.TZDateTime.now(tz.local);
+    if (!scheduledDate.isAfter(now)) return;
+
+    await _plugin.zonedSchedule(
+      id: serviceNotificationIdFor(appliance.id, record.id),
+      title: '${appliance.name} service is due soon',
+      body: _serviceNotificationBody(record, nextServiceDate),
+      scheduledDate: scheduledDate,
+      notificationDetails: _serviceNotificationDetails,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: '$_servicePayloadPrefix${appliance.id}|${record.id}',
     );
   }
 
@@ -208,33 +245,90 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
   Future<void> cancelFor(String applianceId) async {
     await initialize();
     await _plugin.cancel(id: notificationIdFor(applianceId));
+
+    final pending = await _plugin.pendingNotificationRequests();
+    for (final request in pending) {
+      if (_applianceIdFromPayload(request.payload) == applianceId) {
+        await _plugin.cancel(id: request.id);
+      }
+    }
   }
 
-  static const NotificationDetails _notificationDetails = NotificationDetails(
-    android: AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-    ),
-    iOS: DarwinNotificationDetails(),
-  );
+  static const NotificationDetails _warrantyNotificationDetails =
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _warrantyChannelId,
+          _warrantyChannelName,
+          channelDescription: _warrantyChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+
+  static const NotificationDetails _serviceNotificationDetails =
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _serviceChannelId,
+          _serviceChannelName,
+          channelDescription: _serviceChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
 
   static int notificationIdFor(String applianceId) {
+    return _stableNotificationId('warranty|$applianceId');
+  }
+
+  static int serviceNotificationIdFor(
+    String applianceId,
+    String serviceRecordId,
+  ) {
+    return _stableNotificationId('service|$applianceId|$serviceRecordId');
+  }
+
+  static int _stableNotificationId(String input) {
     var hash = 0x811C9DC5;
-    for (final codeUnit in applianceId.codeUnits) {
+    for (final codeUnit in input.codeUnits) {
       hash ^= codeUnit;
       hash = (hash * 0x01000193) & 0x7FFFFFFF;
     }
     return hash;
   }
 
-  static String _notificationBody(Appliance appliance, DateTime expiryDate) {
-    final day = expiryDate.day.toString().padLeft(2, '0');
-    final month = expiryDate.month.toString().padLeft(2, '0');
+  static String _warrantyNotificationBody(
+    Appliance appliance,
+    DateTime expiryDate,
+  ) {
     final provider = appliance.warrantyProvider.trim();
     final providerText = provider.isEmpty ? '' : ' with $provider';
-    return 'Warranty$providerText expires on $day/$month/${expiryDate.year}.';
+    return 'Warranty$providerText expires on ${_date(expiryDate)}.';
+  }
+
+  static String _serviceNotificationBody(
+    ServiceRecord record,
+    DateTime nextServiceDate,
+  ) {
+    final provider = record.provider.trim();
+    final providerText = provider.isEmpty ? '' : ' with $provider';
+    return 'Maintenance$providerText is scheduled for ${_date(nextServiceDate)}.';
+  }
+
+  static String _date(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  static String? _applianceIdFromPayload(String? payload) {
+    final value = payload?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (!value.startsWith(_servicePayloadPrefix)) return value;
+
+    final parts = value.split('|');
+    if (parts.length < 3 || parts[1].trim().isEmpty) return null;
+    return parts[1].trim();
   }
 }

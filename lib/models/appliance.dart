@@ -1,3 +1,4 @@
+import 'service_record.dart';
 import 'stored_document.dart';
 
 enum WarrantyStatus { active, expiringSoon, expired, notProvided }
@@ -54,8 +55,10 @@ class Appliance {
     this.invoiceDocument,
     this.warrantyDocument,
     List<StoredDocument> additionalDocuments = const [],
+    List<ServiceRecord> serviceRecords = const [],
     this.notes = '',
-  }) : additionalDocuments = List.unmodifiable(additionalDocuments);
+  }) : additionalDocuments = List.unmodifiable(additionalDocuments),
+       serviceRecords = List.unmodifiable(serviceRecords);
 
   factory Appliance.fromJson(Map<String, dynamic> json) {
     final invoiceDocument = _upgradeLegacyDocument(
@@ -69,6 +72,7 @@ class Appliance {
       fallbackTitle: 'Warranty card',
     );
     final additionalJson = json['additionalDocuments'];
+    final serviceJson = json['serviceRecords'];
 
     return Appliance(
       id: json['id'] as String? ?? '',
@@ -116,6 +120,16 @@ class Appliance {
                 .where((document) => document.localPath.isNotEmpty)
                 .toList(growable: false)
           : const [],
+      serviceRecords: serviceJson is List
+          ? serviceJson
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      ServiceRecord.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .where((record) => record.id.isNotEmpty)
+                .toList(growable: false)
+          : const [],
       notes: json['notes'] as String? ?? '',
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
@@ -152,6 +166,7 @@ class Appliance {
   final StoredDocument? invoiceDocument;
   final StoredDocument? warrantyDocument;
   final List<StoredDocument> additionalDocuments;
+  final List<ServiceRecord> serviceRecords;
   final String notes;
   final DateTime createdAt;
 
@@ -159,9 +174,34 @@ class Appliance {
     ?invoiceDocument,
     ?warrantyDocument,
     ...additionalDocuments,
+    ...serviceRecords.expand((record) => record.documents),
   ]);
 
   int get documentCount => allDocuments.length;
+
+  int get serviceRecordCount => serviceRecords.length;
+
+  double get totalServiceCost => serviceRecords.fold<double>(
+    0,
+    (total, record) => total + record.serviceCharge,
+  );
+
+  DateTime? get nextServiceDate {
+    final dates = serviceRecords
+        .map((record) => record.nextServiceDate)
+        .whereType<DateTime>()
+        .toList();
+    if (dates.isEmpty) return null;
+    dates.sort();
+    return dates.first;
+  }
+
+  ServiceRecord? serviceRecordById(String recordId) {
+    for (final record in serviceRecords) {
+      if (record.id == recordId) return record;
+    }
+    return null;
+  }
 
   DateTime? get effectiveWarrantyExpiryDate {
     final standard = warrantyExpiryDate;
@@ -201,6 +241,29 @@ class Appliance {
     ).subtract(Duration(days: warrantyReminderDaysBefore));
   }
 
+  Appliance withServiceRecord(ServiceRecord record) {
+    return _rebuild(serviceRecords: [...serviceRecords, record]);
+  }
+
+  Appliance replaceServiceRecord(ServiceRecord record) {
+    final index = serviceRecords.indexWhere((item) => item.id == record.id);
+    if (index == -1) {
+      throw StateError('The service record could not be found.');
+    }
+
+    final updated = [...serviceRecords];
+    updated[index] = record;
+    return _rebuild(serviceRecords: updated);
+  }
+
+  Appliance withoutServiceRecord(String recordId) {
+    return _rebuild(
+      serviceRecords: serviceRecords
+          .where((record) => record.id != recordId)
+          .toList(growable: false),
+    );
+  }
+
   Appliance withAdditionalDocument(StoredDocument document) {
     return _rebuild(additionalDocuments: [...additionalDocuments, document]);
   }
@@ -222,13 +285,25 @@ class Appliance {
     final index = additionalDocuments.indexWhere(
       (document) => document.id == documentId,
     );
-    if (index == -1) {
+    if (index != -1) {
+      final updatedDocuments = [...additionalDocuments];
+      updatedDocuments[index] = replacement;
+      return _rebuild(additionalDocuments: updatedDocuments);
+    }
+
+    final serviceIndex = serviceRecords.indexWhere(
+      (record) => record.documents.any((document) => document.id == documentId),
+    );
+    if (serviceIndex == -1) {
       throw StateError('The document could not be found.');
     }
 
-    final updatedDocuments = [...additionalDocuments];
-    updatedDocuments[index] = replacement;
-    return _rebuild(additionalDocuments: updatedDocuments);
+    final updatedRecords = [...serviceRecords];
+    updatedRecords[serviceIndex] = updatedRecords[serviceIndex].replaceDocument(
+      documentId,
+      replacement,
+    );
+    return _rebuild(serviceRecords: updatedRecords);
   }
 
   Appliance withoutDocument(String documentId) {
@@ -244,6 +319,9 @@ class Appliance {
       additionalDocuments: additionalDocuments
           .where((document) => document.id != documentId)
           .toList(growable: false),
+      serviceRecords: serviceRecords
+          .map((record) => record.withoutDocument(documentId))
+          .toList(growable: false),
     );
   }
 
@@ -253,6 +331,7 @@ class Appliance {
     StoredDocument? warrantyDocument,
     bool setWarrantyDocument = false,
     List<StoredDocument>? additionalDocuments,
+    List<ServiceRecord>? serviceRecords,
   }) {
     return Appliance(
       id: id,
@@ -288,6 +367,7 @@ class Appliance {
           ? warrantyDocument
           : this.warrantyDocument,
       additionalDocuments: additionalDocuments ?? this.additionalDocuments,
+      serviceRecords: serviceRecords ?? this.serviceRecords,
       notes: notes,
       createdAt: createdAt,
     );
@@ -326,6 +406,9 @@ class Appliance {
       'warrantyDocument': warrantyDocument?.toJson(),
       'additionalDocuments': additionalDocuments
           .map((document) => document.toJson())
+          .toList(),
+      'serviceRecords': serviceRecords
+          .map((record) => record.toJson())
           .toList(),
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),

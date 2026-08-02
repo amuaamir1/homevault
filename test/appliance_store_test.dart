@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/models/appliance.dart';
+import 'package:homevault/models/service_record.dart';
 import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/services/warranty_notification_service.dart';
@@ -340,5 +341,137 @@ void main() {
       WarrantyStatus.expired,
     );
     expect(appliance.warrantyReminderDateAt(), isNull);
+  });
+
+  test('service history is serialized and included in document totals', () {
+    final receipt = StoredDocument(
+      id: 'receipt-1',
+      type: DocumentType.serviceReceipt,
+      title: 'Service receipt',
+      fileName: 'receipt.pdf',
+      localPath: '/documents/receipt.pdf',
+      sizeBytes: 512,
+      attachedAt: DateTime(2026, 8, 2),
+    );
+    final record = ServiceRecord(
+      id: 'service-1',
+      serviceDate: DateTime(2026, 8, 2),
+      createdAt: DateTime(2026, 8, 2),
+      provider: 'Cool Care',
+      technicianName: 'Aamir',
+      ticketNumber: 'SR-100',
+      problemDescription: 'Cooling reduced',
+      workCompleted: 'Coil cleaned',
+      partsReplaced: 'Air filter',
+      serviceCharge: 1500,
+      paymentMethod: 'Card',
+      nextServiceDate: DateTime(2027, 2, 2),
+      status: ServiceStatus.completed,
+      reminderEnabled: true,
+      reminderDaysBefore: 7,
+      receiptDocument: receipt,
+    );
+    final appliance = Appliance(
+      id: 'ac-service-1',
+      name: 'Family room AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      serviceRecords: [record],
+      createdAt: DateTime(2026, 8, 1),
+    );
+
+    final restored = Appliance.fromJson(appliance.toJson());
+
+    expect(restored.serviceRecordCount, 1);
+    expect(restored.totalServiceCost, 1500);
+    expect(restored.nextServiceDate, DateTime(2027, 2, 2));
+    expect(restored.serviceRecords.single.provider, 'Cool Care');
+    expect(restored.serviceRecords.single.status, ServiceStatus.completed);
+    expect(restored.serviceRecords.single.receiptDocument?.id, 'receipt-1');
+    expect(restored.documentCount, 1);
+    expect(
+      restored.serviceRecords.single.reminderDateAt(),
+      DateTime(2027, 1, 26, 9),
+    );
+  });
+
+  test(
+    'service record add, update, and delete operations are persisted',
+    () async {
+      final appliance = Appliance(
+        id: 'geyser-1',
+        name: 'Bathroom geyser',
+        category: 'Geyser / Water Heater',
+        brand: 'Bajaj',
+        createdAt: DateTime(2026, 8, 2),
+      );
+      final repository = MemoryApplianceRepository(
+        initialAppliances: [appliance],
+      );
+      final store = ApplianceStore(repository: repository);
+      await store.initialize();
+
+      final record = ServiceRecord(
+        id: 'service-1',
+        serviceDate: DateTime(2026, 8, 2),
+        createdAt: DateTime(2026, 8, 2),
+        provider: 'Water Heat Services',
+        problemDescription: 'Water is not heating',
+        serviceCharge: 500,
+        status: ServiceStatus.open,
+      );
+      await store.addServiceRecord(appliance.id, record);
+      expect(store.totalServiceRecordCount, 1);
+      expect(store.totalServiceCost, 500);
+
+      final updated = record.copyWith(
+        status: ServiceStatus.completed,
+        workCompleted: 'Heating element replaced',
+        serviceCharge: 850,
+      );
+      await store.updateServiceRecord(appliance.id, updated);
+      expect(
+        store.appliances.single.serviceRecords.single.status,
+        ServiceStatus.completed,
+      );
+      expect(store.totalServiceCost, 850);
+
+      final reloaded = ApplianceStore(repository: repository);
+      await reloaded.initialize();
+      expect(
+        reloaded.appliances.single.serviceRecords.single.workCompleted,
+        'Heating element replaced',
+      );
+
+      await store.removeServiceRecord(appliance.id, record.id);
+      expect(store.totalServiceRecordCount, 0);
+
+      final reloadedAfterDelete = ApplianceStore(repository: repository);
+      await reloadedAfterDelete.initialize();
+      expect(reloadedAfterDelete.appliances.single.serviceRecords, isEmpty);
+
+      store.dispose();
+      reloaded.dispose();
+      reloadedAfterDelete.dispose();
+    },
+  );
+
+  test('service reminder notification ids are stable and record-specific', () {
+    final first = WarrantyNotificationService.serviceNotificationIdFor(
+      'appliance-1',
+      'service-1',
+    );
+    final again = WarrantyNotificationService.serviceNotificationIdFor(
+      'appliance-1',
+      'service-1',
+    );
+    final second = WarrantyNotificationService.serviceNotificationIdFor(
+      'appliance-1',
+      'service-2',
+    );
+
+    expect(first, again);
+    expect(first, isNot(second));
+    expect(first, greaterThanOrEqualTo(0));
   });
 }
