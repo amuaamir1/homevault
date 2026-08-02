@@ -9,11 +9,12 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     PinSecurityService? securityService,
     BiometricSecurityService? biometricService,
     AutoLockPreferenceService? autoLockPreferenceService,
-    this._lockAfter = const Duration(minutes: 2),
+    Duration lockAfter = const Duration(minutes: 2),
   }) : _securityService = securityService ?? PinSecurityService(),
        _biometricService = biometricService ?? BiometricSecurityService(),
        _autoLockPreferenceService =
-           autoLockPreferenceService ?? AutoLockPreferenceService();
+           autoLockPreferenceService ?? AutoLockPreferenceService(),
+       _lockAfter = lockAfter;
 
   AppLockController.unlockedForTesting({String uid = 'test-user'})
     : _securityService = PinSecurityService(),
@@ -251,6 +252,15 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _isUnlocked = true;
     _isBiometricEnabled = false;
     _backgroundedAt = null;
+    _notifySafely();
+  }
+
+  /// Locks the current in-memory session before Firebase sign-out without
+  /// deleting the account-scoped PIN or biometric preference.
+  void prepareForSignOut() {
+    _isUnlocked = false;
+    _backgroundedAt = null;
+    _biometricErrorMessage = null;
     _notifySafely();
   }
 

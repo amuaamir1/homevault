@@ -20,8 +20,8 @@ class SettingsScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Sign out of HomeVault?'),
         content: const Text(
-          'HomeVault will require mobile OTP again. Local appliance data is '
-          'kept separate for this account and will not be shown to another user.',
+          'HomeVault will require mobile OTP again. Your existing HomeVault '
+          'PIN and biometric preference will remain saved for this account.',
         ),
         actions: [
           TextButton(
@@ -38,12 +38,10 @@ class SettingsScreen extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     final lockController = AppLockScope.read(context);
+    final authController = AuthScope.read(context);
 
-    // Lock the local app, but retain this account's PIN and
-    // biometric preference in secure storage.
-    lockController.lock();
-
-    await AuthScope.read(context).signOut();
+    lockController.prepareForSignOut();
+    await authController.signOut();
   }
 
   @override

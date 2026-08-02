@@ -55,6 +55,19 @@ void main() {
     expect(await service.verifyPin('5678'), isFalse);
   });
 
+  test('keeps the PIN for the same user after sign out and relogin', () async {
+    final firstSession = PinSecurityService();
+
+    await firstSession.bindUser('firebase-user-a');
+    await firstSession.createPin('2468');
+
+    final reloginSession = PinSecurityService();
+    await reloginSession.bindUser('firebase-user-a');
+
+    expect(await reloginSession.hasPin(), isTrue);
+    expect(await reloginSession.verifyPin('2468'), isTrue);
+  });
+
   test('records when PIN setup is skipped', () async {
     final service = PinSecurityService();
 
@@ -63,22 +76,4 @@ void main() {
     expect(await service.hasPin(), isFalse);
     expect(await service.hasCompletedPinSetup(), isTrue);
   });
-
-  test(
-    'retains PIN for the same Firebase user after signing in again',
-    () async {
-      final firstSession = PinSecurityService();
-
-      await firstSession.bindUser('firebase-user-a');
-      await firstSession.createPin('1234');
-
-      // Simulate a new controller/session after Firebase sign-out.
-      final secondSession = PinSecurityService();
-
-      await secondSession.bindUser('firebase-user-a');
-
-      expect(await secondSession.hasPin(), isTrue);
-      expect(await secondSession.verifyPin('1234'), isTrue);
-    },
-  );
 }
