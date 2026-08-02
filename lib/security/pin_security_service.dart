@@ -77,9 +77,7 @@ class PinSecurityService {
     ];
 
     if (markSetupComplete) {
-      operations.add(
-        _storage.write(key: _pinSetupCompleteKey, value: 'true'),
-      );
+      operations.add(_storage.write(key: _pinSetupCompleteKey, value: 'true'));
     } else {
       operations.add(_storage.delete(key: _pinSetupCompleteKey));
     }

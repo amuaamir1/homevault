@@ -101,7 +101,9 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                         icon: auth.isSendingOtp
                             ? const SizedBox.square(
                                 dimension: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.sms_outlined),
                         label: Text(

@@ -9,8 +9,7 @@ class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
 
   @override
-  State<OtpVerificationScreen> createState() =>
-      _OtpVerificationScreenState();
+  State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
@@ -144,8 +143,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed:
-                          _resendSeconds == 0 && !auth.isSendingOtp
+                      onPressed: _resendSeconds == 0 && !auth.isSendingOtp
                           ? _resend
                           : null,
                       child: Text(

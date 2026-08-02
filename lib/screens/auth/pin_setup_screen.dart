@@ -91,7 +91,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Create an optional 4 to 8 digit PIN for quick local protection on this device.',
+                        'Create a 4 to 8 digit PIN for secure local access on this device.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
@@ -135,7 +135,9 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                         icon: _isSaving
                             ? const SizedBox.square(
                                 dimension: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.lock_outline),
                         label: Text(_isSaving ? 'Saving...' : 'Create PIN'),
@@ -148,7 +150,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                         ),
                       const SizedBox(height: 12),
                       const Text(
-                        'You can create, change, or remove the PIN later from Settings → Security.',
+                        'You can change the PIN and enable fingerprint or face unlock later from Settings â†’ Security.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12),
                       ),

@@ -4,8 +4,21 @@ import 'package:flutter/services.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
 
-class SecuritySettingsScreen extends StatelessWidget {
+class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
+
+  @override
+  State<SecuritySettingsScreen> createState() => _SecuritySettingsScreenState();
+}
+
+class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AppLockScope.read(context).refreshBiometricState();
+    });
+  }
 
   Future<void> _showCreatePin(BuildContext context) async {
     final created = await showDialog<bool>(
@@ -33,39 +46,44 @@ class SecuritySettingsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _removePin(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove app PIN?'),
-        content: const Text(
-          'HomeVault will continue to require mobile OTP when you sign in, but the local PIN lock will be disabled on this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove PIN'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
+  Future<void> _toggleBiometrics(BuildContext context, bool enabled) async {
+    final controller = AppLockScope.read(context);
+    final changed = await controller.setBiometricEnabled(enabled);
+    if (!context.mounted) return;
 
-    await AppLockScope.read(context).removePin();
-    if (context.mounted) {
+    if (changed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The local app PIN was removed.')),
+        SnackBar(
+          content: Text(
+            enabled
+                ? '${controller.biometricLabel} enabled for HomeVault.'
+                : 'Biometric unlock disabled.',
+          ),
+        ),
       );
+      return;
+    }
+
+    final message = controller.biometricErrorMessage;
+    if (message != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final lockController = AppLockScope.of(context);
+
+    final biometricSubtitle = !lockController.hasPin
+        ? 'Create a HomeVault PIN before enabling biometric unlock.'
+        : !lockController.isBiometricAvailable
+        ? lockController.biometricErrorMessage ??
+              'Set up fingerprint or face unlock in Android settings.'
+        : lockController.isBiometricEnabled
+        ? 'Use ${lockController.biometricLabel} instead of typing your PIN.'
+        : 'Enable ${lockController.biometricLabel} for faster unlocking.';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Security')),
@@ -80,7 +98,7 @@ class SecuritySettingsScreen extends StatelessWidget {
                     leading: const Icon(Icons.add_moderator_outlined),
                     title: const Text('Create app PIN'),
                     subtitle: const Text(
-                      'Add a 4 to 8 digit local PIN for quick protection.',
+                      'Create a required 4 to 8 digit HomeVault PIN.',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showCreatePin(context),
@@ -97,18 +115,11 @@ class SecuritySettingsScreen extends StatelessWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.no_encryption_outlined),
-                    title: const Text('Remove PIN'),
-                    subtitle: const Text(
-                      'Disable the local PIN lock on this device.',
-                    ),
-                    onTap: () => _removePin(context),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
                     leading: const Icon(Icons.lock_outline),
                     title: const Text('Lock HomeVault now'),
-                    subtitle: const Text('Return to the PIN unlock screen.'),
+                    subtitle: const Text(
+                      'Require your PIN or biometrics immediately.',
+                    ),
                     onTap: () {
                       final navigator = Navigator.of(context);
                       final controller = AppLockScope.read(context);
@@ -123,12 +134,27 @@ class SecuritySettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.fingerprint),
+              title: const Text('Biometric unlock'),
+              subtitle: Text(biometricSubtitle),
+              value: lockController.isBiometricEnabled,
+              onChanged:
+                  lockController.hasPin &&
+                      lockController.isBiometricAvailable &&
+                      !lockController.isAuthenticatingBiometric
+                  ? (value) => _toggleBiometrics(context, value)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 12),
           const Card(
             child: ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('Two layers of access'),
+              title: Text('How sign-in works'),
               subtitle: Text(
-                'Mobile OTP verifies your account. The optional PIN protects HomeVault locally on this device and can be reset by verifying the mobile number again.',
+                'Mobile OTP verifies the account once. Firebase keeps the account signed in on this device. HomeVault then uses the local PIN or enrolled device biometrics for later app unlocks. OTP is requested again only after sign-out, app-data removal, reinstall, or PIN recovery.',
               ),
             ),
           ),

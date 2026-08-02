@@ -34,7 +34,8 @@ class SettingsScreen extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    AppLockScope.read(context).lock();
+    await AppLockScope.read(context).resetPinForOtpRecovery();
+    if (!context.mounted) return;
     await AuthScope.read(context).signOut();
   }
 
@@ -77,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(profile?.phoneNumber ?? ''),
                         const SizedBox(height: 2),
-                        const Text('India beta build • version 1.9.0'),
+                        const Text('India beta build â€¢ version 1.9.0'),
                       ],
                     ),
                   ),
@@ -95,7 +96,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: Text(
                     profile == null
                         ? 'Add your name and service address.'
-                        : '${profile.city}, ${profile.state} • ${profile.pinCode}',
+                        : '${profile.city}, ${profile.state} â€¢ ${profile.pinCode}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {

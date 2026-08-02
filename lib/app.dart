@@ -166,8 +166,8 @@ class _AppGate extends StatelessWidget {
       return const _LoadingScreen(message: 'Securing HomeVault...');
     }
 
-    if (!lockController.pinSetupCompleted) {
-      return const PinSetupScreen(allowSkip: true);
+    if (!lockController.hasPin) {
+      return const PinSetupScreen(allowSkip: false);
     }
 
     if (lockController.hasPin && !lockController.isUnlocked) {
