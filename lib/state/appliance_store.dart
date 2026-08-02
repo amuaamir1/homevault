@@ -194,6 +194,55 @@ class ApplianceStore extends ChangeNotifier {
     await update(appliance.withoutDocument(documentId));
   }
 
+  Future<void> replaceAll(Iterable<Appliance> appliances) async {
+    final replacement = List<Appliance>.from(appliances);
+    await _repository.saveAppliances(replacement);
+    _appliances = replacement;
+    notifyListeners();
+    await _syncRemindersSafely();
+  }
+
+  Future<int> mergeAppliances(Iterable<Appliance> appliances) async {
+    final existingIds = _appliances.map((item) => item.id).toSet();
+    final existingSerials = _appliances
+        .map(_serialKey)
+        .whereType<String>()
+        .toSet();
+    final imported = <Appliance>[];
+
+    for (final appliance in appliances) {
+      final serialKey = _serialKey(appliance);
+      if (existingIds.contains(appliance.id) ||
+          (serialKey != null && existingSerials.contains(serialKey))) {
+        continue;
+      }
+      imported.add(appliance);
+      existingIds.add(appliance.id);
+      if (serialKey != null) {
+        existingSerials.add(serialKey);
+      }
+    }
+
+    if (imported.isEmpty) {
+      return 0;
+    }
+
+    final updated = [..._appliances, ...imported];
+    await _repository.saveAppliances(updated);
+    _appliances = updated;
+    notifyListeners();
+    await _syncRemindersSafely();
+    return imported.length;
+  }
+
+  String? _serialKey(Appliance appliance) {
+    final serial = appliance.serialNumber.trim().toLowerCase();
+    if (serial.isEmpty) {
+      return null;
+    }
+    return '${appliance.brand.trim().toLowerCase()}|$serial';
+  }
+
   Future<void> delete(String applianceId) async {
     final updated = _appliances
         .where((item) => item.id != applianceId)
