@@ -2,17 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/authenticated_user.dart';
 
-typedef OtpCodeSentCallback = void Function(
-  String verificationId,
-  int? resendToken,
-);
-typedef OtpVerificationCompletedCallback = void Function(
-  AuthenticatedUser user,
-);
+typedef OtpCodeSentCallback =
+    void Function(String verificationId, int? resendToken);
+typedef OtpVerificationCompletedCallback =
+    void Function(AuthenticatedUser user);
 typedef OtpVerificationFailedCallback = void Function(String message);
-typedef OtpAutoRetrievalTimeoutCallback = void Function(
-  String verificationId,
-);
+typedef OtpAutoRetrievalTimeoutCallback = void Function(String verificationId);
 
 abstract class PhoneAuthService {
   AuthenticatedUser? get currentUser;
@@ -124,12 +119,10 @@ class FirebasePhoneAuthService implements PhoneAuthService {
 
   static String _messageFor(FirebaseAuthException error) {
     return switch (error.code) {
-      'invalid-phone-number' =>
-        'Enter a valid Indian mobile number.',
+      'invalid-phone-number' => 'Enter a valid Indian mobile number.',
       'invalid-verification-code' =>
         'The OTP is incorrect. Check the SMS and try again.',
-      'session-expired' =>
-        'The OTP has expired. Request a new code.',
+      'session-expired' => 'The OTP has expired. Request a new code.',
       'too-many-requests' =>
         'Too many OTP requests were made. Please wait and try again.',
       'quota-exceeded' =>

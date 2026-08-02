@@ -42,10 +42,9 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
       updatedAt: now,
     );
 
-    await _profileDocument(profile.uid).set(
-      profileToSave.toMap(),
-      SetOptions(merge: true),
-    );
+    await _profileDocument(
+      profile.uid,
+    ).set(profileToSave.toMap(), SetOptions(merge: true));
   }
 
   DateTime? _dateFrom(Object? value) {

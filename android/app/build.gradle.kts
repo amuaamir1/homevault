@@ -1,4 +1,4 @@
-import java.io.FileInputStream
+﻿import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
@@ -61,6 +61,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.1")
     coreLibraryDesugaring(
         "com.android.tools:desugar_jdk_libs:2.1.4"
     )

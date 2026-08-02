@@ -138,9 +138,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               'Tell us about your home',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -184,9 +184,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 22),
           Text(
             'Service address',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
           TextFormField(

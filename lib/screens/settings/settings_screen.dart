@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../auth/auth_scope.dart';
 import '../../profile/profile_scope.dart';
@@ -34,7 +34,8 @@ class SettingsScreen extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    AppLockScope.read(context).lock();
+    await AppLockScope.read(context).resetPinForOtpRecovery();
+    if (!context.mounted) return;
     await AuthScope.read(context).signOut();
   }
 
@@ -77,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(profile?.phoneNumber ?? ''),
                         const SizedBox(height: 2),
-                        const Text('India beta build • version 1.9.0'),
+                        const Text('Beta build - version 1.10.0'),
                       ],
                     ),
                   ),
@@ -95,7 +96,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: Text(
                     profile == null
                         ? 'Add your name and service address.'
-                        : '${profile.city}, ${profile.state} • ${profile.pinCode}',
+                        : '${profile.city}, ${profile.state} â€¢ ${profile.pinCode}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
@@ -200,7 +201,7 @@ class SettingsScreen extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.9.0',
+                  applicationVersion: '1.10.0',
                   children: const [
                     Text(
                       'A personal appliance support, warranty, document, maintenance, backup, and reporting organizer for homes in India.',

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../auth/auth_scope.dart';
+import '../../profile/profile_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
 
@@ -18,10 +19,26 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   final _pinController = TextEditingController();
   bool _hidePin = true;
   bool _isChecking = false;
+  bool _autoBiometricRequested = false;
   String? _errorText;
   int _failedAttempts = 0;
   DateTime? _lockedUntil;
   Timer? _countdownTimer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final controller = AppLockScope.of(context);
+    if (!_autoBiometricRequested &&
+        controller.isBiometricEnabled &&
+        controller.isBiometricAvailable) {
+      _autoBiometricRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _unlockWithBiometrics(automatic: true);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -80,6 +97,26 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     });
   }
 
+  Future<void> _unlockWithBiometrics({bool automatic = false}) async {
+    if (_isTemporarilyLocked || _isChecking) return;
+
+    setState(() {
+      _isChecking = true;
+      if (!automatic) _errorText = null;
+    });
+
+    final controller = AppLockScope.read(context);
+    final authenticated = await controller.authenticateWithBiometrics();
+    if (!mounted || authenticated) return;
+
+    setState(() {
+      _isChecking = false;
+      if (controller.biometricErrorMessage != null) {
+        _errorText = controller.biometricErrorMessage;
+      }
+    });
+  }
+
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -105,7 +142,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Reset PIN with mobile OTP?'),
         content: const Text(
-          'You will be signed out and asked to verify your mobile number again. Your locally stored appliances and documents will remain on this device.',
+          'You will verify your mobile number again and then create a new HomeVault PIN. Your locally stored appliances and documents will remain on this device.',
         ),
         actions: [
           TextButton(
@@ -121,7 +158,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    await AppLockScope.read(context).removePin();
+    await AppLockScope.read(context).resetPinForOtpRecovery();
     if (!mounted) return;
     await AuthScope.read(context).signOut();
   }
@@ -129,6 +166,11 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final locked = _isTemporarilyLocked;
+    final lockController = AppLockScope.of(context);
+    final firstName = ProfileScope.of(context).profile?.firstName ?? '';
+    final welcomeText = firstName.isEmpty
+        ? 'Unlock HomeVault'
+        : 'Welcome $firstName';
 
     return PopScope(
       canPop: false,
@@ -149,14 +191,14 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'Unlock HomeVault',
+                      welcomeText,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Enter your 4 to 8 digit PIN to access your HomeVault.',
+                      'Enter your HomeVault PIN or use ${lockController.biometricLabel}.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
@@ -164,7 +206,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                     TextField(
                       key: const Key('homeVaultPinField'),
                       controller: _pinController,
-                      autofocus: true,
+                      autofocus: !lockController.isBiometricEnabled,
                       enabled: !locked && !_isChecking,
                       obscureText: _hidePin,
                       keyboardType: TextInputType.number,
@@ -205,9 +247,20 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                             ? 'Try again in $_lockSecondsRemaining seconds'
                             : _isChecking
                             ? 'Checking...'
-                            : 'Unlock',
+                            : 'Unlock with PIN',
                       ),
                     ),
+                    if (lockController.isBiometricEnabled &&
+                        lockController.isBiometricAvailable) ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: locked || _isChecking
+                            ? null
+                            : _unlockWithBiometrics,
+                        icon: const Icon(Icons.fingerprint),
+                        label: Text('Use ${lockController.biometricLabel}'),
+                      ),
+                    ],
                     TextButton(
                       onPressed: locked || _isChecking ? null : _resetWithOtp,
                       child: const Text('Forgot PIN? Verify with mobile OTP'),
