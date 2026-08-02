@@ -12,6 +12,8 @@ import 'appliances/appliance_details_screen.dart';
 import 'appliances/appliances_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'documents/documents_screen.dart';
+import 'reports/reports_screen.dart';
+import 'search/global_search_screen.dart';
 import 'service/service_center_screen.dart';
 import 'settings/settings_screen.dart';
 import 'support/support_screen.dart';
@@ -54,16 +56,31 @@ class _MainNavigationState extends State<MainNavigation> {
     if (!mounted || AppScope.read(context).applianceById(applianceId) == null) {
       return;
     }
+    _openApplianceDetails(applianceId);
+  }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
+  void _goToSection(AppSection section) {
+    setState(() => _selectedSection = section);
+  }
+
+  Future<void> _openApplianceDetails(String applianceId) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
         builder: (context) => ApplianceDetailsScreen(applianceId: applianceId),
       ),
     );
   }
 
-  void _goToSection(AppSection section) {
-    setState(() => _selectedSection = section);
+  Future<void> _openGlobalSearch() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (context) => const GlobalSearchScreen()),
+    );
+  }
+
+  Future<void> _openReports() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (context) => const ReportsScreen()),
+    );
   }
 
   Future<void> _openAddAppliance() async {
@@ -77,7 +94,9 @@ class _MainNavigationState extends State<MainNavigation> {
 
     try {
       await AppScope.read(context).add(result.appliance);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() => _selectedSection = AppSection.appliances);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,7 +111,9 @@ class _MainNavigationState extends State<MainNavigation> {
         // A failed cleanup should not hide the original save error.
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -113,7 +134,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   Future<void> _openWarrantyCenter(WarrantyFilter initialFilter) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (context) => WarrantyScreen(initialFilter: initialFilter),
       ),
     );
@@ -127,6 +148,9 @@ class _MainNavigationState extends State<MainNavigation> {
         onAddAppliance: _openAddAppliance,
         onOpenWarrantyCenter: _openWarrantyCenter,
         onOpenServiceCenter: _openServiceCenter,
+        onOpenGlobalSearch: _openGlobalSearch,
+        onOpenReports: _openReports,
+        onOpenAppliance: _openApplianceDetails,
       ),
       AppliancesScreen(onAddAppliance: _openAddAppliance),
       const DocumentsScreen(),

@@ -1,9 +1,13 @@
-import java.io.FileInputStream
+﻿import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
     id("com.android.application")
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services")
+    // END: FlutterFire Configuration
     id("dev.flutter.flutter-gradle-plugin")
+
 }
 
 val keystoreProperties = Properties()
@@ -57,11 +61,13 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.1")
     coreLibraryDesugaring(
         "com.android.tools:desugar_jdk_libs:2.1.4"
     )
     implementation("androidx.window:window:1.0.0")
     implementation("androidx.window:window-java:1.0.0")
+    
 }
 
 flutter {
