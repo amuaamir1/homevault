@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../auth/auth_scope.dart';
 import '../../models/appliance.dart';
 import '../../models/backup_models.dart';
 import '../../services/homevault_backup_service.dart';
@@ -28,7 +29,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
 
     await _runBusy('Creating your backup...', () async {
-      final result = await _backupService.createAndSaveBackup(store.appliances);
+      final result = await _backupService.createAndSaveBackup(
+        store.appliances,
+        ownerUid: AuthScope.read(context).user?.uid,
+      );
       if (!mounted || result == null) return;
 
       final omitted = result.missingDocuments == 0
@@ -62,14 +66,23 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
     await _runBusy('Restoring HomeVault data...', () async {
       final store = AppScope.read(context);
+      final uid = AuthScope.read(context).user?.uid;
       final prepared = await _backupService.prepareRestore(
         selection: selection!,
         existingAppliances: store.appliances,
         mode: mode,
+        currentOwnerUid: uid,
       );
 
+      String? safetyBackupPath;
       try {
         if (mode == RestoreMode.replace) {
+          if (uid != null) {
+            safetyBackupPath = await _backupService.createSafetyBackup(
+              store.appliances,
+              ownerUid: uid,
+            );
+          }
           await store.replaceAll(prepared.appliances);
         } else {
           await store.mergeAppliances(prepared.appliances);
@@ -79,7 +92,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         rethrow;
       }
 
-      await _backupService.cleanupUnreferencedDocuments(store.appliances);
+      await _backupService.cleanupUnreferencedDocuments(
+        store.appliances,
+        ownerUid: uid,
+      );
 
       if (!mounted) return;
       await showDialog<void>(
@@ -90,7 +106,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             '${prepared.importedAppliances} appliance(s) imported.\n'
             '${prepared.restoredDocuments} document(s) restored.\n'
             '${prepared.skippedDuplicates} duplicate appliance(s) skipped.\n'
-            '${prepared.missingDocuments} missing document file(s).',
+            '${prepared.missingDocuments} missing document file(s).'
+            '${safetyBackupPath == null ? '' : '\nA safety backup of the replaced data was created automatically.'}',
           ),
           actions: [
             FilledButton(
@@ -132,6 +149,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
               _PreviewRow(
                 label: 'Documents',
                 value: '${preview.documentCount}',
+              ),
+              _PreviewRow(
+                label: 'Ownership',
+                value: preview.ownerFingerprint == null
+                    ? 'Legacy backup'
+                    : 'Account protected',
               ),
               if (preview.missingDocumentCount > 0)
                 _PreviewRow(
@@ -455,7 +478,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                     leading: Icon(Icons.lock_open_outlined),
                     title: Text('Backup security'),
                     subtitle: Text(
-                      'Sprint 7 backups are not encrypted. Store them in a private, trusted location. Backup encryption will be added with Sprint 8 security.',
+                      'Backups are account-tagged but not encrypted. Store them in a private, trusted location.',
                     ),
                   ),
                 ),

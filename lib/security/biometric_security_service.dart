@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'security_scope_key.dart';
+
 class BiometricDeviceStatus {
   const BiometricDeviceStatus({
     required this.isAvailable,
@@ -32,10 +34,31 @@ class BiometricSecurityService {
   }) : _localAuthentication = localAuthentication ?? LocalAuthentication(),
        _storage = storage ?? const FlutterSecureStorage();
 
-  static const _enabledKey = 'homevault.biometric.enabled.v1';
+  static const _legacyEnabledKey = 'homevault.biometric.enabled.v1';
 
   final LocalAuthentication _localAuthentication;
   final FlutterSecureStorage _storage;
+  String? _scope;
+
+  String get _enabledKey {
+    final scope = _scope;
+    return scope == null
+        ? _legacyEnabledKey
+        : 'homevault.biometric.$scope.enabled.v2';
+  }
+
+  Future<void> bindUser(String uid) async {
+    _scope = securityScopeKey(uid);
+
+    final scoped = await _storage.read(key: _enabledKey);
+    if (scoped != null) return;
+
+    final legacy = await _storage.read(key: _legacyEnabledKey);
+    if (legacy == 'true') {
+      await _storage.write(key: _enabledKey, value: 'true');
+      await _storage.delete(key: _legacyEnabledKey);
+    }
+  }
 
   Future<bool> isEnabled() async {
     return await _storage.read(key: _enabledKey) == 'true';

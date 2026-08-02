@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/authenticated_user.dart';
+import '../services/crash_reporting_service.dart';
+import '../services/firebase_error_message.dart';
 import 'phone_auth_service.dart';
 
 class AuthController extends ChangeNotifier {
@@ -105,9 +107,14 @@ class AuthController extends ChangeNotifier {
         },
       );
       return true;
-    } catch (error) {
+    } catch (error, stack) {
       _isSendingOtp = false;
       _errorMessage = _friendlyError(error);
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Sending phone OTP',
+      );
       notifyListeners();
       return false;
     }
@@ -139,9 +146,14 @@ class AuthController extends ChangeNotifier {
       _clearOtpState();
       notifyListeners();
       return true;
-    } catch (error) {
+    } catch (error, stack) {
       _isVerifyingOtp = false;
       _errorMessage = _friendlyError(error);
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Verifying phone OTP',
+      );
       notifyListeners();
       return false;
     }
@@ -178,7 +190,10 @@ class AuthController extends ChangeNotifier {
 
   String _friendlyError(Object error) {
     if (error is PhoneAuthServiceException) return error.message;
-    return 'Phone verification failed. Please try again.';
+    return friendlyFirebaseError(
+      error,
+      fallback: 'Phone verification failed. Please try again.',
+    );
   }
 
   static String? normalizeIndianMobileNumber(String value) {

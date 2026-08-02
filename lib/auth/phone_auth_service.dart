@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/authenticated_user.dart';
+import '../services/firebase_error_message.dart';
 
 typedef OtpCodeSentCallback =
     void Function(String verificationId, int? resendToken);
@@ -68,7 +69,7 @@ class FirebasePhoneAuthService implements PhoneAuthService {
           }
           onVerificationCompleted(user);
         } on FirebaseAuthException catch (error) {
-          onVerificationFailed(_messageFor(error));
+          onVerificationFailed(friendlyFirebaseError(error));
         } catch (_) {
           onVerificationFailed(
             'Automatic OTP verification failed. Enter the code manually.',
@@ -76,7 +77,7 @@ class FirebasePhoneAuthService implements PhoneAuthService {
         }
       },
       verificationFailed: (error) {
-        onVerificationFailed(_messageFor(error));
+        onVerificationFailed(friendlyFirebaseError(error));
       },
       codeSent: onCodeSent,
       codeAutoRetrievalTimeout: onAutoRetrievalTimeout,
@@ -102,7 +103,7 @@ class FirebasePhoneAuthService implements PhoneAuthService {
       }
       return user;
     } on FirebaseAuthException catch (error) {
-      throw PhoneAuthServiceException(_messageFor(error));
+      throw PhoneAuthServiceException(friendlyFirebaseError(error));
     }
   }
 
@@ -115,24 +116,6 @@ class FirebasePhoneAuthService implements PhoneAuthService {
       uid: user.uid,
       phoneNumber: user.phoneNumber ?? '',
     );
-  }
-
-  static String _messageFor(FirebaseAuthException error) {
-    return switch (error.code) {
-      'invalid-phone-number' => 'Enter a valid Indian mobile number.',
-      'invalid-verification-code' =>
-        'The OTP is incorrect. Check the SMS and try again.',
-      'session-expired' => 'The OTP has expired. Request a new code.',
-      'too-many-requests' =>
-        'Too many OTP requests were made. Please wait and try again.',
-      'quota-exceeded' =>
-        'The SMS quota is currently unavailable. Please try again later.',
-      'network-request-failed' =>
-        'A network error occurred. Check your internet connection.',
-      'app-not-authorized' || 'operation-not-allowed' =>
-        'Phone authentication is not enabled for this Firebase app.',
-      _ => error.message ?? 'Phone verification failed. Please try again.',
-    };
   }
 }
 

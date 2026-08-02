@@ -7,7 +7,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/app_build_info.dart';
 import '../models/appliance.dart';
+import '../security/security_scope_key.dart';
 import '../models/backup_models.dart';
 import '../models/stored_document.dart';
 
@@ -18,16 +20,18 @@ class HomeVaultBackupService {
            documentsDirectoryProvider ?? getApplicationDocumentsDirectory;
 
   static const String backupFormat = 'homevault-backup';
-  static const int backupSchemaVersion = 1;
-  static const String appVersion = '1.7.0';
+  static const int backupSchemaVersion = 2;
+  static const String appVersion = AppBuildInfo.version;
   static const String _manifestName = 'manifest.json';
+  static const String _legacyOwnerMarkerName = '.homevault_owner';
 
   final Future<Directory> Function() _documentsDirectoryProvider;
 
   Future<BackupCreationResult?> createAndSaveBackup(
-    Iterable<Appliance> appliances,
-  ) async {
-    final archiveData = await buildBackup(appliances);
+    Iterable<Appliance> appliances, {
+    String? ownerUid,
+  }) async {
+    final archiveData = await buildBackup(appliances, ownerUid: ownerUid);
     final fileName = _backupFileName();
 
     final savedPath = await FilePicker.platform.saveFile(
@@ -48,6 +52,49 @@ class HomeVaultBackupService {
       documentCount: archiveData.documentCount,
       missingDocuments: archiveData.missingDocuments,
     );
+  }
+
+  Future<String?> createSafetyBackup(
+    Iterable<Appliance> appliances, {
+    required String ownerUid,
+  }) async {
+    final applianceList = appliances.toList(growable: false);
+    if (applianceList.isEmpty) return null;
+
+    final archiveData = await buildBackup(applianceList, ownerUid: ownerUid);
+    final documentsDirectory = await _documentsDirectoryProvider();
+    final directory = Directory(
+      path.join(
+        documentsDirectory.path,
+        'homevault',
+        'safety_backups',
+        securityScopeKey(ownerUid),
+      ),
+    );
+    await directory.create(recursive: true);
+
+    final file = File(
+      path.join(
+        directory.path,
+        'Safety_${DateTime.now().millisecondsSinceEpoch}.zip',
+      ),
+    );
+    await file.writeAsBytes(archiveData.bytes, flush: true);
+
+    final backups = directory.listSync().whereType<File>().toList()
+      ..sort(
+        (first, second) =>
+            second.lastModifiedSync().compareTo(first.lastModifiedSync()),
+      );
+    for (final oldBackup in backups.skip(3)) {
+      try {
+        await oldBackup.delete();
+      } catch (_) {
+        // Keeping an older safety backup is harmless.
+      }
+    }
+
+    return file.path;
   }
 
   Future<BackupSelection?> pickBackup() async {
@@ -80,7 +127,10 @@ class HomeVaultBackupService {
     return inspectBackupBytes(bytes, fileName: picked.name);
   }
 
-  Future<BackupArchiveData> buildBackup(Iterable<Appliance> appliances) async {
+  Future<BackupArchiveData> buildBackup(
+    Iterable<Appliance> appliances, {
+    String? ownerUid,
+  }) async {
     final applianceList = appliances.toList(growable: false);
     final archive = Archive();
     final state = _BackupBuildState(archive);
@@ -95,6 +145,8 @@ class HomeVaultBackupService {
       'schemaVersion': backupSchemaVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'appVersion': appVersion,
+      if (ownerUid?.trim().isNotEmpty == true)
+        'ownerFingerprint': securityScopeKey(ownerUid!),
       'applianceCount': applianceList.length,
       'documentCount': state.documentCount,
       'missingDocuments': state.missingDocuments,
@@ -159,6 +211,9 @@ class HomeVaultBackupService {
         applianceCount: applianceData.length,
         documentCount: declaredDocuments,
         missingDocumentCount: omittedDocuments + missingArchiveEntries,
+        ownerFingerprint: '${manifest['ownerFingerprint'] ?? ''}'.trim().isEmpty
+            ? null
+            : '${manifest['ownerFingerprint']}',
       ),
     );
   }
@@ -167,10 +222,20 @@ class HomeVaultBackupService {
     required BackupSelection selection,
     required Iterable<Appliance> existingAppliances,
     required RestoreMode mode,
+    String? currentOwnerUid,
   }) async {
     final decoded = _decodeArchive(selection.bytes);
     final manifest = decoded.manifest;
     final applianceData = _requiredApplianceData(manifest);
+    final backupOwner = '${manifest['ownerFingerprint'] ?? ''}'.trim();
+    if (backupOwner.isNotEmpty &&
+        currentOwnerUid?.trim().isNotEmpty == true &&
+        backupOwner != securityScopeKey(currentOwnerUid!)) {
+      throw const BackupFormatException(
+        'This backup belongs to a different HomeVault account.',
+      );
+    }
+
     final existing = existingAppliances.toList(growable: false);
     final duplicateIds = existing.map((item) => item.id).toSet();
     final duplicateSerials = existing
@@ -213,6 +278,10 @@ class HomeVaultBackupService {
     }
 
     final documentsDirectory = await _documentsDirectoryProvider();
+    final restoreApplianceRoot = _applianceDocumentRoot(
+      documentsDirectory,
+      currentOwnerUid,
+    );
     final createdFilePaths = <String>[];
     final restoredAppliances = <Appliance>[];
     final restoreStamp = DateTime.now().microsecondsSinceEpoch;
@@ -230,7 +299,7 @@ class HomeVaultBackupService {
           _mapOrNull(applianceJson['invoiceDocument']),
           applianceId: applianceId,
           decodedFiles: decoded.files,
-          documentsDirectory: documentsDirectory,
+          applianceRoot: restoreApplianceRoot,
           restoreStamp: restoreStamp,
           createdFilePaths: createdFilePaths,
         );
@@ -242,7 +311,7 @@ class HomeVaultBackupService {
           _mapOrNull(applianceJson['warrantyDocument']),
           applianceId: applianceId,
           decodedFiles: decoded.files,
-          documentsDirectory: documentsDirectory,
+          applianceRoot: restoreApplianceRoot,
           restoreStamp: restoreStamp,
           createdFilePaths: createdFilePaths,
         );
@@ -258,7 +327,7 @@ class HomeVaultBackupService {
               Map<String, dynamic>.from(item),
               applianceId: applianceId,
               decodedFiles: decoded.files,
-              documentsDirectory: documentsDirectory,
+              applianceRoot: restoreApplianceRoot,
               restoreStamp: restoreStamp,
               createdFilePaths: createdFilePaths,
             );
@@ -281,7 +350,7 @@ class HomeVaultBackupService {
               _mapOrNull(serviceJson['receiptDocument']),
               applianceId: applianceId,
               decodedFiles: decoded.files,
-              documentsDirectory: documentsDirectory,
+              applianceRoot: restoreApplianceRoot,
               restoreStamp: restoreStamp,
               createdFilePaths: createdFilePaths,
             );
@@ -293,7 +362,7 @@ class HomeVaultBackupService {
               _mapOrNull(serviceJson['reportDocument']),
               applianceId: applianceId,
               decodedFiles: decoded.files,
-              documentsDirectory: documentsDirectory,
+              applianceRoot: restoreApplianceRoot,
               restoreStamp: restoreStamp,
               createdFilePaths: createdFilePaths,
             );
@@ -349,14 +418,20 @@ class HomeVaultBackupService {
   }
 
   Future<void> cleanupUnreferencedDocuments(
-    Iterable<Appliance> appliances,
-  ) async {
+    Iterable<Appliance> appliances, {
+    String? ownerUid,
+  }) async {
     final documentsDirectory = await _documentsDirectoryProvider();
-    final applianceRoot = Directory(
-      path.join(documentsDirectory.path, 'homevault', 'appliances'),
-    );
-    if (!await applianceRoot.exists()) {
-      return;
+    final roots = <Directory>[
+      _applianceDocumentRoot(documentsDirectory, ownerUid),
+    ];
+
+    if (await _ownsLegacyDocumentRoot(documentsDirectory, ownerUid)) {
+      roots.add(
+        Directory(
+          path.join(documentsDirectory.path, 'homevault', 'appliances'),
+        ),
+      );
     }
 
     final referenced = appliances
@@ -366,34 +441,39 @@ class HomeVaultBackupService {
         )
         .toSet();
 
-    await for (final entity in applianceRoot.list(recursive: true)) {
-      if (entity is! File) {
-        continue;
-      }
-      final normalised = path.normalize(entity.absolute.path);
-      if (!referenced.contains(normalised)) {
-        try {
-          await entity.delete();
-        } catch (_) {
-          // Old orphaned files can be retried during a later restore.
-        }
-      }
-    }
+    for (final applianceRoot in roots) {
+      if (!await applianceRoot.exists()) continue;
 
-    final directories = <Directory>[];
-    await for (final entity in applianceRoot.list(recursive: true)) {
-      if (entity is Directory) {
-        directories.add(entity);
-      }
-    }
-    directories.sort((a, b) => b.path.length.compareTo(a.path.length));
-    for (final directory in directories) {
-      try {
-        if (await directory.list().isEmpty) {
-          await directory.delete();
+      await for (final entity in applianceRoot.list(recursive: true)) {
+        if (entity is! File ||
+            path.basename(entity.path) == _legacyOwnerMarkerName) {
+          continue;
         }
-      } catch (_) {
-        // Empty-directory cleanup is optional.
+        final normalised = path.normalize(entity.absolute.path);
+        if (!referenced.contains(normalised)) {
+          try {
+            await entity.delete();
+          } catch (_) {
+            // Old orphaned files can be retried during a later restore.
+          }
+        }
+      }
+
+      final directories = <Directory>[];
+      await for (final entity in applianceRoot.list(recursive: true)) {
+        if (entity is Directory) {
+          directories.add(entity);
+        }
+      }
+      directories.sort((a, b) => b.path.length.compareTo(a.path.length));
+      for (final directory in directories) {
+        try {
+          if (await directory.list().isEmpty) {
+            await directory.delete();
+          }
+        } catch (_) {
+          // Empty-directory cleanup is optional.
+        }
       }
     }
   }
@@ -607,7 +687,7 @@ class HomeVaultBackupService {
     Map<String, dynamic>? documentJson, {
     required String applianceId,
     required Map<String, ArchiveFile> decodedFiles,
-    required Directory documentsDirectory,
+    required Directory applianceRoot,
     required int restoreStamp,
     required List<String> createdFilePaths,
   }) async {
@@ -638,9 +718,7 @@ class HomeVaultBackupService {
     final documentId = _sanitiseFileName('${documentJson['id'] ?? 'document'}');
     final destinationDirectory = Directory(
       path.join(
-        documentsDirectory.path,
-        'homevault',
-        'appliances',
+        applianceRoot.path,
         _sanitisePathPart(applianceId),
         documentType.storageFolder,
       ),
@@ -720,6 +798,47 @@ class HomeVaultBackupService {
     }
     final brand = '${appliance['brand'] ?? ''}'.trim().toLowerCase();
     return '$brand|$serial';
+  }
+
+  Directory _applianceDocumentRoot(
+    Directory documentsDirectory,
+    String? ownerUid,
+  ) {
+    final normalized = ownerUid?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return Directory(
+        path.join(documentsDirectory.path, 'homevault', 'appliances'),
+      );
+    }
+
+    return Directory(
+      path.join(
+        documentsDirectory.path,
+        'homevault',
+        'accounts',
+        securityScopeKey(normalized),
+        'appliances',
+      ),
+    );
+  }
+
+  Future<bool> _ownsLegacyDocumentRoot(
+    Directory documentsDirectory,
+    String? ownerUid,
+  ) async {
+    final normalized = ownerUid?.trim();
+    if (normalized == null || normalized.isEmpty) return false;
+
+    final marker = File(
+      path.join(
+        documentsDirectory.path,
+        'homevault',
+        'appliances',
+        _legacyOwnerMarkerName,
+      ),
+    );
+    if (!await marker.exists()) return false;
+    return (await marker.readAsString()).trim() == securityScopeKey(normalized);
   }
 
   String _backupFileName() {

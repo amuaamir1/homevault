@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/authenticated_user.dart';
 import '../models/user_profile.dart';
+import '../services/crash_reporting_service.dart';
+import '../services/firebase_error_message.dart';
 import 'profile_repository.dart';
 
 class ProfileController extends ChangeNotifier {
@@ -53,10 +55,18 @@ class ProfileController extends ChangeNotifier {
               : loaded.phoneNumber,
         );
       }
-    } catch (_) {
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Loading the user profile',
+      );
       if (_loadedUid == user.uid) {
-        _errorMessage =
-            'Your profile could not be loaded. Check the internet connection and try again.';
+        _errorMessage = friendlyFirebaseError(
+          error,
+          fallback:
+              'Your profile could not be loaded. Check the internet connection and try again.',
+        );
       }
     } finally {
       if (_loadedUid == user.uid) {
@@ -83,9 +93,17 @@ class ProfileController extends ChangeNotifier {
       _profile = saved;
       _loadedUid = saved.uid;
       return true;
-    } catch (_) {
-      _errorMessage =
-          'Your profile could not be saved. Check the internet connection and try again.';
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Saving the user profile',
+      );
+      _errorMessage = friendlyFirebaseError(
+        error,
+        fallback:
+            'Your profile could not be saved. Check the internet connection and try again.',
+      );
       return false;
     } finally {
       _isSaving = false;

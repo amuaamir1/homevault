@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth/auth_controller.dart';
@@ -13,6 +15,8 @@ import 'screens/auth/profile_setup_screen.dart';
 import 'screens/main_navigation.dart';
 import 'security/app_lock_controller.dart';
 import 'security/app_lock_scope.dart';
+import 'services/crash_reporting_service.dart';
+import 'services/document_storage_service.dart';
 import 'state/app_scope.dart';
 import 'state/appliance_store.dart';
 import 'theme/app_theme.dart';
@@ -48,6 +52,7 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
   late final bool _ownsAuthController;
   late final bool _ownsProfileController;
   String? _profileUserId;
+  int _authenticationEpoch = 0;
 
   @override
   void initState() {
@@ -59,35 +64,58 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
 
     _applianceStore = widget.applianceStore ?? ApplianceStore();
     _appLockController = widget.appLockController ?? AppLockController();
+    unawaited(_appLockController.initialize());
 
     if (widget.firebaseInitializationError == null) {
       _authController = widget.authController ?? AuthController();
       _profileController = widget.profileController ?? ProfileController();
       _authController!.addListener(_handleAuthenticationChanged);
-      _authController!.initialize();
+      unawaited(_initializeAuthentication());
     }
+  }
 
-    _applianceStore.initialize();
-    _appLockController.initialize();
+  Future<void> _initializeAuthentication() async {
+    await _authController!.initialize();
+    await _applyAuthenticationState();
   }
 
   void _handleAuthenticationChanged() {
+    unawaited(_applyAuthenticationState());
+  }
+
+  Future<void> _applyAuthenticationState() async {
     final auth = _authController;
     final profile = _profileController;
     if (auth == null || profile == null || auth.isInitializing) return;
 
+    final epoch = ++_authenticationEpoch;
     final user = auth.user;
+
     if (user == null) {
-      if (_profileUserId != null) {
-        _profileUserId = null;
-        profile.clear();
-      }
+      _profileUserId = null;
+      profile.clear();
+      await Future.wait([
+        _appLockController.bindUser(null),
+        _applianceStore.bindOwner(null),
+        DocumentStorageService.bindOwner(null),
+        CrashReportingService.setAuthenticatedUser(null),
+      ]);
       return;
     }
 
-    if (_profileUserId == user.uid) return;
-    _profileUserId = user.uid;
-    profile.loadForUser(user);
+    await Future.wait([
+      _appLockController.bindUser(user.uid),
+      _applianceStore.bindOwner(user.uid),
+      DocumentStorageService.bindOwner(user.uid),
+      CrashReportingService.setAuthenticatedUser(user.uid),
+    ]);
+
+    if (epoch != _authenticationEpoch || auth.user?.uid != user.uid) return;
+
+    if (_profileUserId != user.uid) {
+      _profileUserId = user.uid;
+      await profile.loadForUser(user);
+    }
   }
 
   @override
@@ -162,7 +190,8 @@ class _AppGate extends StatelessWidget {
     }
 
     final lockController = AppLockScope.of(context);
-    if (lockController.isInitializing) {
+    if (lockController.isInitializing ||
+        lockController.boundUid != auth.user?.uid) {
       return const _LoadingScreen(message: 'Securing HomeVault...');
     }
 
@@ -170,7 +199,7 @@ class _AppGate extends StatelessWidget {
       return const PinSetupScreen(allowSkip: false);
     }
 
-    if (lockController.hasPin && !lockController.isUnlocked) {
+    if (!lockController.isUnlocked) {
       return const PinLoginScreen();
     }
 
@@ -238,8 +267,9 @@ class _StartupGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = AppScope.of(context);
+    final uid = AuthScope.of(context).user?.uid;
 
-    if (store.isLoading) {
+    if (store.ownerUid != uid || store.isLoading) {
       return const _LoadingScreen(message: 'Loading your HomeVault...');
     }
 

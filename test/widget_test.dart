@@ -22,11 +22,22 @@ Future<ApplianceStore> _createStore({
 }
 
 Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
-  final lockController = AppLockController.unlockedForTesting();
-  final authController = AuthController.authenticatedForTesting();
+  const testUid = 'test-user';
+
+  // Bind the test database before building the app so the startup gate
+  // does not remain on an animated loading screen.
+  await store.bindOwner(testUid);
+
+  final lockController = AppLockController.unlockedForTesting(uid: testUid);
+
+  final authController = AuthController.authenticatedForTesting(
+    uid: testUid,
+    phoneNumber: '+919876543210',
+  );
+
   final profileController = ProfileController.loadedForTesting(
     UserProfile(
-      uid: 'test-user',
+      uid: testUid,
       fullName: 'Aamir Test',
       phoneNumber: '+919876543210',
       addressLine1: '12 Test Street',
@@ -48,6 +59,7 @@ Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
       profileController: profileController,
     ),
   );
+
   await tester.pumpAndSettle();
 }
 
