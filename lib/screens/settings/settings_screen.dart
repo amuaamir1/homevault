@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../backup/backup_restore_screen.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
+import 'security_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -27,7 +28,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text('Sprint 7 development build - version 1.7.0'),
+                  const Text('Beta security build - version 1.8.0'),
                 ],
               ),
             ),
@@ -55,6 +56,22 @@ class SettingsScreen extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (context) => const BackupRestoreScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.security_outlined),
+                  title: const Text('Security'),
+                  subtitle: const Text(
+                    'Change your PIN or lock HomeVault now.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const SecuritySettingsScreen(),
                       ),
                     );
                   },
@@ -106,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.7.0',
+                  applicationVersion: '1.8.0',
                   children: const [
                     Text(
                       'A personal appliance support, warranty, document, maintenance, backup, and reporting organizer under active development.',

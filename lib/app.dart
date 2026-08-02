@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'screens/auth/pin_login_screen.dart';
+import 'screens/auth/pin_setup_screen.dart';
 import 'screens/main_navigation.dart';
+import 'security/app_lock_controller.dart';
+import 'security/app_lock_scope.dart';
 import 'state/app_scope.dart';
 import 'state/appliance_store.dart';
 import 'theme/app_theme.dart';
 
 class HomeVaultApp extends StatefulWidget {
-  const HomeVaultApp({super.key, this.applianceStore});
+  const HomeVaultApp({super.key, this.applianceStore, this.appLockController});
 
   final ApplianceStore? applianceStore;
+  final AppLockController? appLockController;
 
   @override
   State<HomeVaultApp> createState() => _HomeVaultAppState();
@@ -16,20 +21,29 @@ class HomeVaultApp extends StatefulWidget {
 
 class _HomeVaultAppState extends State<HomeVaultApp> {
   late final ApplianceStore _applianceStore;
+  late final AppLockController _appLockController;
   late final bool _ownsStore;
+  late final bool _ownsLockController;
 
   @override
   void initState() {
     super.initState();
     _ownsStore = widget.applianceStore == null;
+    _ownsLockController = widget.appLockController == null;
     _applianceStore = widget.applianceStore ?? ApplianceStore();
+    _appLockController = widget.appLockController ?? AppLockController();
+
     _applianceStore.initialize();
+    _appLockController.initialize();
   }
 
   @override
   void dispose() {
     if (_ownsStore) {
       _applianceStore.dispose();
+    }
+    if (_ownsLockController) {
+      _appLockController.dispose();
     }
     super.dispose();
   }
@@ -38,13 +52,39 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
   Widget build(BuildContext context) {
     return AppScope(
       applianceStore: _applianceStore,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'HomeVault',
-        theme: AppTheme.lightTheme,
-        home: const _StartupGate(),
+      child: AppLockScope(
+        controller: _appLockController,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'HomeVault',
+          theme: AppTheme.lightTheme,
+          home: const _AppGate(),
+        ),
       ),
     );
+  }
+}
+
+class _AppGate extends StatelessWidget {
+  const _AppGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final lockController = AppLockScope.of(context);
+
+    if (lockController.isInitializing) {
+      return const _LoadingScreen(message: 'Securing HomeVault...');
+    }
+
+    if (!lockController.hasPin) {
+      return const PinSetupScreen();
+    }
+
+    if (!lockController.isUnlocked) {
+      return const PinLoginScreen();
+    }
+
+    return const _StartupGate();
   }
 }
 
@@ -56,18 +96,7 @@ class _StartupGate extends StatelessWidget {
     final store = AppScope.of(context);
 
     if (store.isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Loading your HomeVault...'),
-            ],
-          ),
-        ),
-      );
+      return const _LoadingScreen(message: 'Loading your HomeVault...');
     }
 
     if (store.loadError != null) {
@@ -107,5 +136,27 @@ class _StartupGate extends StatelessWidget {
     }
 
     return const MainNavigation();
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(message),
+          ],
+        ),
+      ),
+    );
   }
 }

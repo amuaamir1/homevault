@@ -4,6 +4,7 @@ import 'package:homevault/app.dart';
 import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/service_record.dart';
 import 'package:homevault/models/stored_document.dart';
+import 'package:homevault/security/app_lock_controller.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/state/appliance_store.dart';
 
@@ -17,13 +18,22 @@ Future<ApplianceStore> _createStore({
   return store;
 }
 
+Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
+  final lockController = AppLockController.unlockedForTesting();
+  addTearDown(lockController.dispose);
+
+  await tester.pumpWidget(
+    HomeVaultApp(applianceStore: store, appLockController: lockController),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('HomeVault starts on the dashboard', (tester) async {
     final store = await _createStore();
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     expect(find.text('HomeVault'), findsOneWidget);
     expect(find.text('Quick actions'), findsOneWidget);
@@ -38,8 +48,7 @@ void main() {
     final store = await _createStore();
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     final addApplianceButton = find.text('Add appliance').first;
     expect(addApplianceButton, findsOneWidget);
@@ -92,8 +101,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     final documentsDestination = find.descendant(
       of: find.byType(NavigationBar),
@@ -123,8 +131,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     final supportDestination = find.descendant(
       of: find.byType(NavigationBar),
@@ -159,8 +166,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     final warrantyButton = find.text('Warranty center').first;
 
@@ -218,8 +224,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     final serviceButton = find.text('Service center').first;
     await tester.ensureVisible(serviceButton);
@@ -267,8 +272,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     await tester.tap(find.byTooltip('Search HomeVault'));
     await tester.pumpAndSettle();
@@ -321,8 +325,7 @@ void main() {
     final store = await _createStore(initialAppliances: [appliance]);
     addTearDown(store.dispose);
 
-    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
-    await tester.pumpAndSettle();
+    await _pumpHomeVault(tester, store);
 
     await tester.tap(find.byTooltip('Reports and insights'));
     await tester.pumpAndSettle();
