@@ -6,25 +6,44 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    // Must be a new mutable map for every test.
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
   });
 
-  test('creates and verifies a six-digit PIN', () async {
+  test('creates and verifies a PIN containing 4 to 8 digits', () async {
     final service = PinSecurityService();
 
     expect(await service.hasPin(), isFalse);
+    expect(await service.hasCompletedPinSetup(), isFalse);
 
-    await service.createPin('123456');
+    await service.createPin('1234');
 
     expect(await service.hasPin(), isTrue);
-    expect(await service.verifyPin('123456'), isTrue);
-    expect(await service.verifyPin('654321'), isFalse);
+    expect(await service.hasCompletedPinSetup(), isTrue);
+    expect(await service.verifyPin('1234'), isTrue);
+    expect(await service.verifyPin('4321'), isFalse);
   });
 
-  test('rejects a PIN that is not six digits', () async {
+  test('accepts an eight-digit PIN', () async {
     final service = PinSecurityService();
 
-    expect(service.createPin('12345'), throwsA(isA<FormatException>()));
+    await service.createPin('12345678');
+
+    expect(await service.verifyPin('12345678'), isTrue);
+  });
+
+  test('rejects PINs shorter than four or longer than eight digits', () async {
+    final service = PinSecurityService();
+
+    expect(service.createPin('123'), throwsA(isA<FormatException>()));
+    expect(service.createPin('123456789'), throwsA(isA<FormatException>()));
+  });
+
+  test('records when PIN setup is skipped', () async {
+    final service = PinSecurityService();
+
+    await service.markPinSetupSkipped();
+
+    expect(await service.hasPin(), isFalse);
+    expect(await service.hasCompletedPinSetup(), isTrue);
   });
 }

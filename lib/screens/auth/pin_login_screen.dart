@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../auth/auth_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
 
@@ -43,14 +44,11 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
 
   Future<void> _unlock() async {
     FocusManager.instance.primaryFocus?.unfocus();
-
-    if (_isTemporarilyLocked || _isChecking) {
-      return;
-    }
+    if (_isTemporarilyLocked || _isChecking) return;
 
     final pin = _pinController.text;
     if (!PinSecurityService.isValidPin(pin)) {
-      setState(() => _errorText = 'Enter your 6-digit PIN.');
+      setState(() => _errorText = 'Enter your 4 to 8 digit PIN.');
       return;
     }
 
@@ -60,9 +58,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     });
 
     final isValid = await AppLockScope.read(context).unlock(pin);
-    if (!mounted || isValid) {
-      return;
-    }
+    if (!mounted || isValid) return;
 
     _failedAttempts += 1;
     _pinController.clear();
@@ -91,7 +87,6 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
         timer.cancel();
         return;
       }
-
       if (!_isTemporarilyLocked) {
         timer.cancel();
         setState(() {
@@ -104,22 +99,31 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     });
   }
 
-  void _showRecoveryInformation() {
-    showDialog<void>(
+  Future<void> _resetWithOtp() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Forgot your PIN?'),
+        title: const Text('Reset PIN with mobile OTP?'),
         content: const Text(
-          'This beta does not use an online account, so HomeVault cannot recover your PIN. Clearing the app data resets the PIN but also deletes locally stored HomeVault records. Restore from a backup afterward if one is available.',
+          'You will be signed out and asked to verify your mobile number again. Your locally stored appliances and documents will remain on this device.',
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Understood'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continue'),
           ),
         ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+
+    await AppLockScope.read(context).removePin();
+    if (!mounted) return;
+    await AuthScope.read(context).signOut();
   }
 
   @override
@@ -135,84 +139,80 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 440),
-                child: AutofillGroup(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Icon(
-                        Icons.lock_person_outlined,
-                        size: 72,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Unlock HomeVault',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Enter your 6-digit PIN to access your appliance records and documents.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 28),
-                      TextField(
-                        key: const Key('homeVaultPinField'),
-                        controller: _pinController,
-                        autofocus: true,
-                        enabled: !locked && !_isChecking,
-                        obscureText: _hidePin,
-                        keyboardType: TextInputType.number,
-                        textInputAction: TextInputAction.done,
-                        maxLength: 6,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        autofillHints: const [AutofillHints.password],
-                        decoration: InputDecoration(
-                          labelText: 'PIN',
-                          errorText: _errorText,
-                          prefixIcon: const Icon(Icons.pin_outlined),
-                          suffixIcon: IconButton(
-                            tooltip: _hidePin ? 'Show PIN' : 'Hide PIN',
-                            onPressed: () =>
-                                setState(() => _hidePin = !_hidePin),
-                            icon: Icon(
-                              _hidePin
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      Icons.lock_person_outlined,
+                      size: 72,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Unlock HomeVault',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Enter your 4 to 8 digit PIN to access your HomeVault.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 28),
+                    TextField(
+                      key: const Key('homeVaultPinField'),
+                      controller: _pinController,
+                      autofocus: true,
+                      enabled: !locked && !_isChecking,
+                      obscureText: _hidePin,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      maxLength: 8,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(8),
+                      ],
+                      autofillHints: const [AutofillHints.password],
+                      decoration: InputDecoration(
+                        labelText: 'PIN',
+                        errorText: _errorText,
+                        prefixIcon: const Icon(Icons.pin_outlined),
+                        suffixIcon: IconButton(
+                          tooltip: _hidePin ? 'Show PIN' : 'Hide PIN',
+                          onPressed: () => setState(() => _hidePin = !_hidePin),
+                          icon: Icon(
+                            _hidePin
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
                           ),
                         ),
-                        onSubmitted: (_) => _unlock(),
                       ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: locked || _isChecking ? null : _unlock,
-                        icon: _isChecking
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.login),
-                        label: Text(
-                          locked
-                              ? 'Try again in $_lockSecondsRemaining seconds'
-                              : _isChecking
-                              ? 'Checking...'
-                              : 'Unlock',
-                        ),
+                      onSubmitted: (_) => _unlock(),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: locked || _isChecking ? null : _unlock,
+                      icon: _isChecking
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.login),
+                      label: Text(
+                        locked
+                            ? 'Try again in $_lockSecondsRemaining seconds'
+                            : _isChecking
+                            ? 'Checking...'
+                            : 'Unlock',
                       ),
-                      TextButton(
-                        onPressed: _showRecoveryInformation,
-                        child: const Text('Forgot PIN?'),
-                      ),
-                    ],
-                  ),
+                    ),
+                    TextButton(
+                      onPressed: locked || _isChecking ? null : _resetWithOtp,
+                      child: const Text('Forgot PIN? Verify with mobile OTP'),
+                    ),
+                  ],
                 ),
               ),
             ),

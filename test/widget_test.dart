@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/app.dart';
+import 'package:homevault/auth/auth_controller.dart';
 import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/service_record.dart';
 import 'package:homevault/models/stored_document.dart';
+import 'package:homevault/models/user_profile.dart';
+import 'package:homevault/profile/profile_controller.dart';
 import 'package:homevault/security/app_lock_controller.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/state/appliance_store.dart';
@@ -20,10 +23,30 @@ Future<ApplianceStore> _createStore({
 
 Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
   final lockController = AppLockController.unlockedForTesting();
+  final authController = AuthController.authenticatedForTesting();
+  final profileController = ProfileController.loadedForTesting(
+    UserProfile(
+      uid: 'test-user',
+      fullName: 'Aamir Test',
+      phoneNumber: '+919876543210',
+      addressLine1: '12 Test Street',
+      state: 'Delhi',
+      city: 'New Delhi',
+      pinCode: '110001',
+    ),
+  );
+
   addTearDown(lockController.dispose);
+  addTearDown(authController.dispose);
+  addTearDown(profileController.dispose);
 
   await tester.pumpWidget(
-    HomeVaultApp(applianceStore: store, appLockController: lockController),
+    HomeVaultApp(
+      applianceStore: store,
+      appLockController: lockController,
+      authController: authController,
+      profileController: profileController,
+    ),
   );
   await tester.pumpAndSettle();
 }
@@ -36,6 +59,7 @@ void main() {
     await _pumpHomeVault(tester, store);
 
     expect(find.text('HomeVault'), findsOneWidget);
+    expect(find.text('Welcome Aamir'), findsOneWidget);
     expect(find.text('Quick actions'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Appliances'), findsWidgets);

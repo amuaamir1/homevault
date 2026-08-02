@@ -12,6 +12,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     : _securityService = PinSecurityService(),
       lockAfter = Duration.zero,
       _isInitializing = false,
+      _pinSetupCompleted = true,
       _hasPin = true,
       _isUnlocked = true,
       _isTestBypass = true;
@@ -20,6 +21,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   final Duration lockAfter;
 
   bool _isInitializing = true;
+  bool _pinSetupCompleted = false;
   bool _hasPin = false;
   bool _isUnlocked = false;
   bool _isDisposed = false;
@@ -27,18 +29,19 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? _backgroundedAt;
 
   bool get isInitializing => _isInitializing;
+  bool get pinSetupCompleted => _pinSetupCompleted;
   bool get hasPin => _hasPin;
   bool get isUnlocked => _isUnlocked;
 
   Future<void> initialize() async {
-    if (_isTestBypass) {
-      return;
-    }
+    if (_isTestBypass) return;
 
     WidgetsBinding.instance.addObserver(this);
-
     try {
       _hasPin = await _securityService.hasPin();
+      _pinSetupCompleted =
+          _hasPin || await _securityService.hasCompletedPinSetup();
+      _isUnlocked = !_hasPin;
     } finally {
       _isInitializing = false;
       _notifySafely();
@@ -47,7 +50,16 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> createPin(String pin) async {
     await _securityService.createPin(pin);
+    _pinSetupCompleted = true;
     _hasPin = true;
+    _isUnlocked = true;
+    _notifySafely();
+  }
+
+  Future<void> skipPinSetup() async {
+    await _securityService.markPinSetupSkipped();
+    _pinSetupCompleted = true;
+    _hasPin = false;
     _isUnlocked = true;
     _notifySafely();
   }
@@ -72,17 +84,25 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     );
 
     if (changed) {
+      _pinSetupCompleted = true;
+      _hasPin = true;
       _isUnlocked = true;
       _notifySafely();
     }
     return changed;
   }
 
-  void lock() {
-    if (!_hasPin || !_isUnlocked) {
-      return;
-    }
+  Future<void> removePin() async {
+    await _securityService.clearPin();
+    _pinSetupCompleted = true;
+    _hasPin = false;
+    _isUnlocked = true;
+    _backgroundedAt = null;
+    _notifySafely();
+  }
 
+  void lock() {
+    if (!_hasPin || !_isUnlocked) return;
     _isUnlocked = false;
     _notifySafely();
   }
@@ -98,7 +118,6 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         final backgroundedAt = _backgroundedAt;
         _backgroundedAt = null;
-
         if (backgroundedAt != null &&
             DateTime.now().difference(backgroundedAt) >= lockAfter) {
           lock();
@@ -111,9 +130,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _notifySafely() {
-    if (!_isDisposed) {
-      notifyListeners();
-    }
+    if (!_isDisposed) notifyListeners();
   }
 
   @override
