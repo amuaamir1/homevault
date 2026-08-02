@@ -5,15 +5,67 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'security_scope_key.dart';
+
 class PinSecurityService {
   PinSecurityService({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
 
-  static const _pinSaltKey = 'homevault.pin.salt.v1';
-  static const _pinHashKey = 'homevault.pin.hash.v1';
-  static const _pinSetupCompleteKey = 'homevault.pin.setup.complete.v1';
+  static const _legacyPinSaltKey = 'homevault.pin.salt.v1';
+  static const _legacyPinHashKey = 'homevault.pin.hash.v1';
+  static const _legacyPinSetupCompleteKey = 'homevault.pin.setup.complete.v1';
 
   final FlutterSecureStorage _storage;
+  String? _scope;
+
+  String get _pinSaltKey => _scopedKey('salt');
+  String get _pinHashKey => _scopedKey('hash');
+  String get _pinSetupCompleteKey => _scopedKey('setup.complete');
+
+  String _scopedKey(String suffix) {
+    final scope = _scope;
+    if (scope == null) {
+      return switch (suffix) {
+        'salt' => _legacyPinSaltKey,
+        'hash' => _legacyPinHashKey,
+        _ => _legacyPinSetupCompleteKey,
+      };
+    }
+    return 'homevault.pin.$scope.$suffix.v2';
+  }
+
+  Future<void> bindUser(String uid) async {
+    _scope = securityScopeKey(uid);
+    await _migrateLegacyValues();
+  }
+
+  Future<void> _migrateLegacyValues() async {
+    if (_scope == null || await hasPin()) return;
+
+    final values = await Future.wait([
+      _storage.read(key: _legacyPinSaltKey),
+      _storage.read(key: _legacyPinHashKey),
+      _storage.read(key: _legacyPinSetupCompleteKey),
+    ]);
+
+    final legacySalt = values[0];
+    final legacyHash = values[1];
+    final legacySetup = values[2];
+
+    if (legacySalt?.isNotEmpty == true && legacyHash?.isNotEmpty == true) {
+      await Future.wait([
+        _storage.write(key: _pinSaltKey, value: legacySalt),
+        _storage.write(key: _pinHashKey, value: legacyHash),
+        _storage.write(key: _pinSetupCompleteKey, value: legacySetup ?? 'true'),
+      ]);
+
+      await Future.wait([
+        _storage.delete(key: _legacyPinSaltKey),
+        _storage.delete(key: _legacyPinHashKey),
+        _storage.delete(key: _legacyPinSetupCompleteKey),
+      ]);
+    }
+  }
 
   Future<bool> hasPin() async {
     final values = await Future.wait([

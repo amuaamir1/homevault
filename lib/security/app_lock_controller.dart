@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'auto_lock_preference_service.dart';
 import 'biometric_security_service.dart';
 import 'pin_security_service.dart';
 
@@ -7,23 +8,32 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   AppLockController({
     PinSecurityService? securityService,
     BiometricSecurityService? biometricService,
-    this.lockAfter = const Duration(minutes: 2),
+    AutoLockPreferenceService? autoLockPreferenceService,
+    this._lockAfter = const Duration(minutes: 2),
   }) : _securityService = securityService ?? PinSecurityService(),
-       _biometricService = biometricService ?? BiometricSecurityService();
+       _biometricService = biometricService ?? BiometricSecurityService(),
+       _autoLockPreferenceService =
+           autoLockPreferenceService ?? AutoLockPreferenceService();
 
-  AppLockController.unlockedForTesting()
+  AppLockController.unlockedForTesting({String uid = 'test-user'})
     : _securityService = PinSecurityService(),
       _biometricService = BiometricSecurityService(),
-      lockAfter = Duration.zero,
+      _autoLockPreferenceService = AutoLockPreferenceService(),
+      _lockAfter = Duration.zero,
       _isInitializing = false,
       _pinSetupCompleted = true,
       _hasPin = true,
       _isUnlocked = true,
+      _boundUid = uid,
       _isTestBypass = true;
 
   final PinSecurityService _securityService;
   final BiometricSecurityService _biometricService;
-  final Duration lockAfter;
+  final AutoLockPreferenceService _autoLockPreferenceService;
+
+  Duration _lockAfter;
+  AutoLockOption _autoLockOption = AutoLockOption.twoMinutes;
+  String? _boundUid;
 
   bool _isInitializing = true;
   bool _pinSetupCompleted = false;
@@ -31,6 +41,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool _isUnlocked = false;
   bool _isDisposed = false;
   bool _isTestBypass = false;
+  bool _observerRegistered = false;
   bool _isBiometricAvailable = false;
   bool _isBiometricEnabled = false;
   bool _isAuthenticatingBiometric = false;
@@ -47,12 +58,52 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool get isAuthenticatingBiometric => _isAuthenticatingBiometric;
   String get biometricLabel => _biometricLabel;
   String? get biometricErrorMessage => _biometricErrorMessage;
+  Duration get lockAfter => _lockAfter;
+  AutoLockOption get autoLockOption => _autoLockOption;
+  String? get boundUid => _boundUid;
 
   Future<void> initialize() async {
     if (_isTestBypass) return;
 
-    WidgetsBinding.instance.addObserver(this);
+    if (!_observerRegistered) {
+      WidgetsBinding.instance.addObserver(this);
+      _observerRegistered = true;
+    }
+
+    _isInitializing = false;
+    _notifySafely();
+  }
+
+  Future<void> bindUser(String? uid) async {
+    if (_isTestBypass) return;
+    if (uid == _boundUid && !_isInitializing) return;
+
+    if (uid == null || uid.trim().isEmpty) {
+      _boundUid = null;
+      _pinSetupCompleted = false;
+      _hasPin = false;
+      _isUnlocked = false;
+      _isBiometricEnabled = false;
+      _isBiometricAvailable = false;
+      _biometricErrorMessage = null;
+      _backgroundedAt = null;
+      _isInitializing = false;
+      _notifySafely();
+      return;
+    }
+
+    _isInitializing = true;
+    _isUnlocked = false;
+    _notifySafely();
+
     try {
+      _boundUid = uid;
+      await _securityService.bindUser(uid);
+      await _biometricService.bindUser(uid);
+      _autoLockPreferenceService.bindUser(uid);
+
+      _autoLockOption = await _autoLockPreferenceService.load();
+      _lockAfter = _autoLockOption.duration;
       _hasPin = await _securityService.hasPin();
       _pinSetupCompleted =
           _hasPin || await _securityService.hasCompletedPinSetup();
@@ -62,6 +113,14 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _isInitializing = false;
       _notifySafely();
     }
+  }
+
+  Future<void> setAutoLockOption(AutoLockOption option) async {
+    if (_boundUid == null) return;
+    await _autoLockPreferenceService.save(option);
+    _autoLockOption = option;
+    _lockAfter = option.duration;
+    _notifySafely();
   }
 
   Future<void> createPin(String pin) async {
@@ -161,6 +220,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> refreshBiometricState() async {
+    if (_boundUid == null) return;
     await _loadBiometricState();
     _notifySafely();
   }
@@ -224,7 +284,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
         final backgroundedAt = _backgroundedAt;
         _backgroundedAt = null;
         if (backgroundedAt != null &&
-            DateTime.now().difference(backgroundedAt) >= lockAfter) {
+            DateTime.now().difference(backgroundedAt) >= _lockAfter) {
           lock();
         }
         break;
@@ -256,7 +316,9 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _isDisposed = true;
-    WidgetsBinding.instance.removeObserver(this);
+    if (_observerRegistered) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     super.dispose();
   }
 }

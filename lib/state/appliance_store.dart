@@ -6,6 +6,7 @@ import '../models/appliance.dart';
 import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
+import '../services/crash_reporting_service.dart';
 import '../services/warranty_notification_service.dart';
 
 class ApplianceStore extends ChangeNotifier {
@@ -19,9 +20,11 @@ class ApplianceStore extends ChangeNotifier {
   final ApplianceRepository _repository;
   final WarrantyReminderScheduler _reminderScheduler;
   List<Appliance> _appliances = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool _isInitialized = false;
   String? _loadError;
+  String? _loadWarning;
+  String? _ownerUid;
   Future<void>? _initialization;
 
   UnmodifiableListView<Appliance> get appliances =>
@@ -30,6 +33,8 @@ class ApplianceStore extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   String? get loadError => _loadError;
+  String? get loadWarning => _loadWarning;
+  String? get ownerUid => _ownerUid;
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -61,7 +66,56 @@ class ApplianceStore extends ChangeNotifier {
     return null;
   }
 
+  Future<void> bindOwner(String? uid) async {
+    final normalized = uid?.trim();
+    final nextOwner = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
+
+    if (_repository is! OwnerScopedApplianceRepository) {
+      final ownerChanged = _ownerUid != nextOwner;
+
+      _ownerUid = nextOwner;
+
+      if (!_isInitialized) {
+        await initialize();
+      } else if (ownerChanged) {
+        notifyListeners();
+      }
+
+      return;
+    }
+
+    if (_ownerUid == nextOwner && _isInitialized) return;
+
+    _ownerUid = nextOwner;
+    _appliances = [];
+    _loadError = null;
+    _loadWarning = null;
+    _isInitialized = false;
+    _initialization = null;
+
+    final ownedRepository = _repository as OwnerScopedApplianceRepository;
+    await ownedRepository.bindOwner(nextOwner);
+
+    if (nextOwner == null) {
+      _isLoading = false;
+      notifyListeners();
+      await _syncRemindersSafely();
+      return;
+    }
+
+    await initialize(force: true);
+  }
+
   Future<void> initialize({bool force = false}) {
+    if (_repository is OwnerScopedApplianceRepository && _ownerUid == null) {
+      _isLoading = false;
+      _isInitialized = false;
+      notifyListeners();
+      return Future.value();
+    }
+
     if (_initialization != null) {
       return _initialization!;
     }
@@ -76,20 +130,36 @@ class ApplianceStore extends ChangeNotifier {
   Future<void> _load() async {
     _isLoading = true;
     _loadError = null;
+    _loadWarning = null;
     notifyListeners();
 
     try {
       _appliances = await _repository.loadAppliances();
+      if (_repository is ApplianceRepositoryDiagnostics) {
+        _loadWarning =
+            (_repository as ApplianceRepositoryDiagnostics).lastLoadWarning;
+      }
       _isInitialized = true;
       await _syncRemindersSafely();
-    } catch (error) {
+    } catch (error, stack) {
       _loadError = error.toString();
       _isInitialized = false;
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Loading local appliance data',
+      );
     } finally {
       _isLoading = false;
       _initialization = null;
       notifyListeners();
     }
+  }
+
+  void clearLoadWarning() {
+    if (_loadWarning == null) return;
+    _loadWarning = null;
+    notifyListeners();
   }
 
   int warrantyCount(WarrantyStatus status, {DateTime? now}) {
@@ -261,24 +331,36 @@ class ApplianceStore extends ChangeNotifier {
   Future<void> _syncRemindersSafely() async {
     try {
       await _reminderScheduler.syncAll(_appliances);
-    } catch (_) {
-      // Reminder failures must never block local appliance storage.
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Synchronizing local reminders',
+      );
     }
   }
 
   Future<void> _scheduleReminderSafely(Appliance appliance) async {
     try {
       await _reminderScheduler.scheduleFor(appliance);
-    } catch (_) {
-      // Reminder failures must never block local appliance storage.
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Scheduling an appliance reminder',
+      );
     }
   }
 
   Future<void> _cancelReminderSafely(String applianceId) async {
     try {
       await _reminderScheduler.cancelFor(applianceId);
-    } catch (_) {
-      // Reminder failures must never block local appliance storage.
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Canceling an appliance reminder',
+      );
     }
   }
 }

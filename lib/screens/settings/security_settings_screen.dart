@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../security/app_lock_scope.dart';
+import '../../security/auto_lock_preference_service.dart';
 import '../../security/pin_security_service.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
@@ -146,6 +147,31 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       !lockController.isAuthenticatingBiometric
                   ? (value) => _toggleBiometrics(context, value)
                   : null,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('Automatic lock'),
+              subtitle: Text(lockController.autoLockOption.label),
+              trailing: DropdownButton<AutoLockOption>(
+                value: lockController.autoLockOption,
+                underline: const SizedBox.shrink(),
+                items: AutoLockOption.values
+                    .map(
+                      (option) => DropdownMenuItem(
+                        value: option,
+                        child: Text(option.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (option) {
+                  if (option != null) {
+                    AppLockScope.read(context).setAutoLockOption(option);
+                  }
+                },
+              ),
             ),
           ),
           const SizedBox(height: 12),
