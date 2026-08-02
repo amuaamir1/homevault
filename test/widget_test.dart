@@ -243,4 +243,93 @@ void main() {
     expect(find.textContaining('Family room AC'), findsOneWidget);
     expect(find.textContaining('Cool Care'), findsOneWidget);
   });
+
+  testWidgets('global search finds service and appliance data', (tester) async {
+    final appliance = Appliance(
+      id: 'search-ac-1',
+      name: 'Searchable family AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      modelNumber: 'FTKM50',
+      serviceRecords: [
+        ServiceRecord(
+          id: 'search-service-1',
+          serviceDate: DateTime(2026, 8, 2),
+          createdAt: DateTime(2026, 8, 2),
+          provider: 'Cool Care',
+          ticketNumber: 'SR-SEARCH-200',
+          problemDescription: 'Cooling reduced',
+          status: ServiceStatus.completed,
+        ),
+      ],
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Search HomeVault'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Global search'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('globalSearchField')),
+      'SR-SEARCH-200',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Completed • SR-SEARCH-200'), findsOneWidget);
+    expect(find.textContaining('Searchable family AC'), findsOneWidget);
+    expect(find.text('Service'), findsOneWidget);
+  });
+
+  testWidgets('reports screen shows current portfolio insights', (
+    tester,
+  ) async {
+    final appliance = Appliance(
+      id: 'report-ac-1',
+      name: 'Report AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      warrantyExpiryDate: DateTime(2026, 8, 20),
+      supportProvider: 'Daikin Care',
+      additionalDocuments: [
+        StoredDocument(
+          id: 'report-document-1',
+          type: DocumentType.invoice,
+          title: 'Report invoice',
+          fileName: 'invoice.pdf',
+          localPath: '/documents/invoice.pdf',
+          sizeBytes: 1000,
+          attachedAt: DateTime(2026, 8, 1),
+        ),
+      ],
+      serviceRecords: [
+        ServiceRecord(
+          id: 'report-service-1',
+          serviceDate: DateTime(2026, 8, 2),
+          createdAt: DateTime(2026, 8, 2),
+          serviceCharge: 1200,
+          status: ServiceStatus.completed,
+        ),
+      ],
+      createdAt: DateTime(2026, 8, 1),
+    );
+    final store = await _createStore(initialAppliances: [appliance]);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(HomeVaultApp(applianceStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reports and insights'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reports & insights'), findsOneWidget);
+    expect(find.text('Portfolio overview'), findsOneWidget);
+    expect(find.text('Service cost'), findsOneWidget);
+    expect(find.text('1,200'), findsOneWidget);
+  });
 }
