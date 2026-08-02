@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/app_section.dart';
 import '../../models/appliance.dart';
+import '../../services/homevault_report_service.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/dashboard_card.dart';
@@ -17,6 +18,9 @@ class DashboardScreen extends StatelessWidget {
     required this.onAddAppliance,
     required this.onOpenWarrantyCenter,
     required this.onOpenServiceCenter,
+    required this.onOpenGlobalSearch,
+    required this.onOpenReports,
+    required this.onOpenAppliance,
   });
 
   final ValueChanged<AppSection> onNavigate;
@@ -24,11 +28,18 @@ class DashboardScreen extends StatelessWidget {
   final Future<void> Function(WarrantyFilter initialFilter)
   onOpenWarrantyCenter;
   final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
+  final Future<void> Function() onOpenGlobalSearch;
+  final Future<void> Function() onOpenReports;
+  final Future<void> Function(String applianceId) onOpenAppliance;
 
   String _greeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
+    if (hour < 12) {
+      return 'Good morning';
+    }
+    if (hour < 17) {
+      return 'Good afternoon';
+    }
     return 'Good evening';
   }
 
@@ -36,6 +47,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = AppScope.of(context);
     final recentAppliances = store.recentAppliances;
+    final report = const HomeVaultReportService().build(store.appliances);
 
     return Scaffold(
       appBar: AppBar(
@@ -43,10 +55,23 @@ class DashboardScreen extends StatelessWidget {
           'HomeVault',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Search HomeVault',
+            onPressed: onOpenGlobalSearch,
+            icon: const Icon(Icons.search),
+          ),
+          IconButton(
+            tooltip: 'Reports and insights',
+            onPressed: onOpenReports,
+            icon: const Icon(Icons.insights_outlined),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () => store.initialize(force: true),
         child: SingleChildScrollView(
+          key: const Key('dashboardScrollView'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: Column(
@@ -60,7 +85,7 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Manage appliance details, warranties, invoices, and support contacts in one place.',
+                'Manage appliance details, warranties, invoices, support, and maintenance in one place.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
@@ -77,21 +102,35 @@ class DashboardScreen extends StatelessWidget {
                   DashboardCard(
                     icon: Icons.home_repair_service,
                     title: 'Appliances',
-                    value: '${store.totalCount}',
+                    value: '${report.totalAppliances}',
                     color: AppColors.primary,
                     onTap: () => onNavigate(AppSection.appliances),
                   ),
                   DashboardCard(
+                    icon: Icons.description_outlined,
+                    title: 'Documents',
+                    value: '${report.totalDocuments}',
+                    color: AppColors.warning,
+                    onTap: () => onNavigate(AppSection.documents),
+                  ),
+                  DashboardCard(
                     icon: Icons.build_circle_outlined,
                     title: 'Service records',
-                    value: '${store.totalServiceRecordCount}',
+                    value: '${report.totalServiceRecords}',
                     color: AppColors.secondary,
                     onTap: () => onOpenServiceCenter(ServiceFilter.all),
                   ),
                   DashboardCard(
+                    icon: Icons.payments_outlined,
+                    title: 'Service cost',
+                    value: _formatAmount(report.totalServiceCost),
+                    color: AppColors.success,
+                    onTap: onOpenReports,
+                  ),
+                  DashboardCard(
                     icon: Icons.verified,
                     title: 'Active warranty',
-                    value: '${store.warrantyCount(WarrantyStatus.active)}',
+                    value: '${report.warrantyCount(WarrantyStatus.active)}',
                     color: AppColors.success,
                     onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
                   ),
@@ -99,7 +138,7 @@ class DashboardScreen extends StatelessWidget {
                     icon: Icons.warning_amber,
                     title: 'Expiring soon',
                     value:
-                        '${store.warrantyCount(WarrantyStatus.expiringSoon)}',
+                        '${report.warrantyCount(WarrantyStatus.expiringSoon)}',
                     color: AppColors.warning,
                     onTap: () =>
                         onOpenWarrantyCenter(WarrantyFilter.expiringSoon),
@@ -107,18 +146,26 @@ class DashboardScreen extends StatelessWidget {
                   DashboardCard(
                     icon: Icons.cancel,
                     title: 'Expired',
-                    value: '${store.warrantyCount(WarrantyStatus.expired)}',
+                    value: '${report.warrantyCount(WarrantyStatus.expired)}',
                     color: AppColors.danger,
                     onTap: () => onOpenWarrantyCenter(WarrantyFilter.expired),
                   ),
                   DashboardCard(
                     icon: Icons.event_available_outlined,
                     title: 'Service due',
-                    value: '${store.upcomingServiceCount(days: 30)}',
+                    value: '${report.upcomingServices.length}',
                     color: AppColors.warning,
                     onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
                   ),
                 ],
+              ),
+              const SizedBox(height: 28),
+              _AttentionSummary(
+                missingWarrantyDates: report.appliancesWithoutWarrantyDate,
+                missingDocuments: report.appliancesWithoutDocuments,
+                missingSupport: report.appliancesWithoutSupport,
+                activeServiceRecords: report.activeServiceRecords,
+                onOpenReports: onOpenReports,
               ),
               const SizedBox(height: 30),
               Text(
@@ -140,9 +187,19 @@ class DashboardScreen extends StatelessWidget {
                     icon: Icons.add_circle_outline,
                     title: 'Add appliance',
                     color: AppColors.primary,
-                    onTap: () {
-                      onAddAppliance();
-                    },
+                    onTap: onAddAppliance,
+                  ),
+                  QuickActionTile(
+                    icon: Icons.manage_search_outlined,
+                    title: 'Global search',
+                    color: AppColors.primary,
+                    onTap: onOpenGlobalSearch,
+                  ),
+                  QuickActionTile(
+                    icon: Icons.insights_outlined,
+                    title: 'Reports',
+                    color: AppColors.secondary,
+                    onTap: onOpenReports,
                   ),
                   QuickActionTile(
                     icon: Icons.receipt_long_outlined,
@@ -204,9 +261,7 @@ class DashboardScreen extends StatelessWidget {
                         ),
                         IconButton(
                           tooltip: 'Add appliance',
-                          onPressed: () {
-                            onAddAppliance();
-                          },
+                          onPressed: onAddAppliance,
                           icon: const Icon(Icons.add_circle_outline),
                         ),
                       ],
@@ -231,7 +286,7 @@ class DashboardScreen extends StatelessWidget {
                         trailing: WarrantyStatusChip(
                           status: appliance.warrantyStatusAt(DateTime.now()),
                         ),
-                        onTap: () => onNavigate(AppSection.appliances),
+                        onTap: () => onOpenAppliance(appliance.id),
                       ),
                     ),
                   ),
@@ -241,5 +296,110 @@ class DashboardScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatAmount(double value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}K';
+    }
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(1);
+  }
+}
+
+class _AttentionSummary extends StatelessWidget {
+  const _AttentionSummary({
+    required this.missingWarrantyDates,
+    required this.missingDocuments,
+    required this.missingSupport,
+    required this.activeServiceRecords,
+    required this.onOpenReports,
+  });
+
+  final int missingWarrantyDates;
+  final int missingDocuments;
+  final int missingSupport;
+  final int activeServiceRecords;
+  final Future<void> Function() onOpenReports;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount =
+        missingWarrantyDates +
+        missingDocuments +
+        missingSupport +
+        activeServiceRecords;
+    final hasAttentionItems = itemCount > 0;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenReports,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                hasAttentionItems
+                    ? Icons.tips_and_updates_outlined
+                    : Icons.task_alt_outlined,
+                size: 32,
+                color: hasAttentionItems
+                    ? AppColors.warning
+                    : AppColors.success,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      hasAttentionItems
+                          ? 'Records need attention'
+                          : 'Records look complete',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      hasAttentionItems
+                          ? _summaryText()
+                          : 'No obvious warranty, document, support, or service gaps were found.',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Open reports',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _summaryText() {
+    final items = <String>[
+      if (missingWarrantyDates > 0)
+        '$missingWarrantyDates missing warranty date',
+      if (missingDocuments > 0) '$missingDocuments without documents',
+      if (missingSupport > 0) '$missingSupport without support details',
+      if (activeServiceRecords > 0)
+        '$activeServiceRecords active service record${activeServiceRecords == 1 ? '' : 's'}',
+    ];
+    return items.join(' • ');
   }
 }
