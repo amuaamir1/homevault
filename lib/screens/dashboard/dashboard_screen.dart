@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/app_section.dart';
 import '../../models/appliance.dart';
+import '../../profile/profile_scope.dart';
 import '../../services/homevault_report_service.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
@@ -32,20 +33,11 @@ class DashboardScreen extends StatelessWidget {
   final Future<void> Function() onOpenReports;
   final Future<void> Function(String applianceId) onOpenAppliance;
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good morning';
-    }
-    if (hour < 17) {
-      return 'Good afternoon';
-    }
-    return 'Good evening';
-  }
-
   @override
   Widget build(BuildContext context) {
     final store = AppScope.of(context);
+    final profile = ProfileScope.of(context).profile;
+    final firstName = profile?.firstName ?? '';
     final recentAppliances = store.recentAppliances;
     final report = const HomeVaultReportService().build(store.appliances);
 
@@ -78,7 +70,7 @@ class DashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '👋 ${_greeting()}',
+                firstName.isEmpty ? 'Welcome' : 'Welcome $firstName',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
