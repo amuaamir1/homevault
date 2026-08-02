@@ -38,6 +38,23 @@ void main() {
     expect(service.createPin('123456789'), throwsA(isA<FormatException>()));
   });
 
+  test('stores a different PIN for each Firebase user', () async {
+    final service = PinSecurityService();
+
+    await service.bindUser('firebase-user-a');
+    await service.createPin('1234');
+
+    await service.bindUser('firebase-user-b');
+    expect(await service.hasPin(), isFalse);
+    await service.createPin('5678');
+    expect(await service.verifyPin('5678'), isTrue);
+    expect(await service.verifyPin('1234'), isFalse);
+
+    await service.bindUser('firebase-user-a');
+    expect(await service.verifyPin('1234'), isTrue);
+    expect(await service.verifyPin('5678'), isFalse);
+  });
+
   test('records when PIN setup is skipped', () async {
     final service = PinSecurityService();
 
@@ -46,4 +63,22 @@ void main() {
     expect(await service.hasPin(), isFalse);
     expect(await service.hasCompletedPinSetup(), isTrue);
   });
+
+  test(
+    'retains PIN for the same Firebase user after signing in again',
+    () async {
+      final firstSession = PinSecurityService();
+
+      await firstSession.bindUser('firebase-user-a');
+      await firstSession.createPin('1234');
+
+      // Simulate a new controller/session after Firebase sign-out.
+      final secondSession = PinSecurityService();
+
+      await secondSession.bindUser('firebase-user-a');
+
+      expect(await secondSession.hasPin(), isTrue);
+      expect(await secondSession.verifyPin('1234'), isTrue);
+    },
+  );
 }

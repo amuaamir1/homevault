@@ -5,6 +5,7 @@ import 'app.dart';
 import 'auth/auth_controller.dart';
 import 'firebase_options.dart';
 import 'profile/profile_controller.dart';
+import 'services/crash_reporting_service.dart';
 import 'services/warranty_notification_service.dart';
 import 'state/appliance_store.dart';
 
@@ -20,19 +21,30 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
+    await CrashReportingService.initialize();
+    CrashReportingService.installGlobalHandlers();
+
     authController = AuthController();
     profileController = ProfileController();
-  } catch (error) {
+  } catch (error, stack) {
     firebaseInitializationError = error;
+    await CrashReportingService.recordNonFatal(
+      error,
+      stack,
+      reason: 'Initializing Firebase',
+    );
   }
 
   final notificationService = WarrantyNotificationService.instance;
 
   try {
     await notificationService.initialize();
-  } catch (_) {
-    // HomeVault can still open if local notification initialization
-    // is unavailable on a particular device.
+  } catch (error, stack) {
+    await CrashReportingService.recordNonFatal(
+      error,
+      stack,
+      reason: 'Initializing local notifications',
+    );
   }
 
   runApp(

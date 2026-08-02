@@ -27,6 +27,7 @@ class BackupPreview {
     required this.applianceCount,
     required this.documentCount,
     required this.missingDocumentCount,
+    this.ownerFingerprint,
   });
 
   final String fileName;
@@ -36,6 +37,7 @@ class BackupPreview {
   final int applianceCount;
   final int documentCount;
   final int missingDocumentCount;
+  final String? ownerFingerprint;
 }
 
 class BackupSelection {

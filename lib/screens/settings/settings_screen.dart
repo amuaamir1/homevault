@@ -1,9 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../auth/auth_scope.dart';
+import '../../core/app_build_info.dart';
 import '../../profile/profile_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../backup/backup_restore_screen.dart';
+import '../feedback/beta_feedback_screen.dart';
 import '../profile/profile_screen.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
@@ -18,7 +20,8 @@ class SettingsScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Sign out of HomeVault?'),
         content: const Text(
-          'Your appliance records and documents will remain stored locally on this device. Sign in with the same mobile number to continue using this local vault.',
+          'HomeVault will require mobile OTP again. Local appliance data is '
+          'kept separate for this account and will not be shown to another user.',
         ),
         actions: [
           TextButton(
@@ -34,8 +37,12 @@ class SettingsScreen extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    await AppLockScope.read(context).resetPinForOtpRecovery();
-    if (!context.mounted) return;
+    final lockController = AppLockScope.read(context);
+
+    // Lock the local app, but retain this account's PIN and
+    // biometric preference in secure storage.
+    lockController.lock();
+
     await AuthScope.read(context).signOut();
   }
 
@@ -78,7 +85,7 @@ class SettingsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(profile?.phoneNumber ?? ''),
                         const SizedBox(height: 2),
-                        const Text('Beta build - version 1.10.0'),
+                        const Text('Beta ${AppBuildInfo.versionAndRelease}'),
                       ],
                     ),
                   ),
@@ -96,7 +103,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: Text(
                     profile == null
                         ? 'Add your name and service address.'
-                        : '${profile.city}, ${profile.state} â€¢ ${profile.pinCode}',
+                        : '${profile.city}, ${profile.state} • ${profile.pinCode}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
@@ -109,10 +116,10 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 const ListTile(
-                  leading: Icon(Icons.storage_outlined),
-                  title: Text('Local appliance storage'),
+                  leading: Icon(Icons.verified_user_outlined),
+                  title: Text('Account-separated local storage'),
                   subtitle: Text(
-                    'Appliances, warranties, service history, and document files remain on this device.',
+                    'Local appliances and documents are visible only when the same Firebase account is signed in.',
                   ),
                 ),
                 const Divider(height: 1),
@@ -136,13 +143,29 @@ class SettingsScreen extends StatelessWidget {
                   leading: const Icon(Icons.security_outlined),
                   title: const Text('Security'),
                   subtitle: const Text(
-                    'Create, change, or remove the local app PIN.',
+                    'PIN, biometrics, and automatic locking.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (context) => const SecuritySettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.feedback_outlined),
+                  title: const Text('Send beta feedback'),
+                  subtitle: const Text(
+                    'Report a bug or suggest an improvement.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const BetaFeedbackScreen(),
                       ),
                     );
                   },
@@ -195,16 +218,18 @@ class SettingsScreen extends StatelessWidget {
               leading: const Icon(Icons.info_outline),
               title: const Text('Privacy note'),
               subtitle: const Text(
-                'Your account and profile are stored in Firebase. Appliance records and attached files remain local unless you export or restore a backup.',
+                'Your account and profile are stored in Firebase. Appliance '
+                'records and attached files remain local unless you export a backup.',
               ),
               onTap: () {
                 showAboutDialog(
                   context: context,
                   applicationName: 'HomeVault',
-                  applicationVersion: '1.10.0',
+                  applicationVersion: AppBuildInfo.versionAndRelease,
                   children: const [
                     Text(
-                      'A personal appliance support, warranty, document, maintenance, backup, and reporting organizer for homes in India.',
+                      'A personal appliance support, warranty, document, '
+                      'maintenance, backup, and reporting organizer for homes in India.',
                     ),
                   ],
                 );

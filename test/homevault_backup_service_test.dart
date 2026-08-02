@@ -154,6 +154,45 @@ void main() {
     }
   });
 
+  test('account-tagged backup rejects a different signed-in user', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'homevault_backup_owner_',
+    );
+
+    try {
+      final appliance = Appliance(
+        id: 'owned-appliance',
+        name: 'Owned refrigerator',
+        category: 'Kitchen Appliance',
+        brand: 'Samsung',
+        createdAt: DateTime(2026, 8, 2),
+      );
+      final service = HomeVaultBackupService(
+        documentsDirectoryProvider: () async => directory,
+      );
+      final archive = await service.buildBackup([
+        appliance,
+      ], ownerUid: 'firebase-user-a');
+      final selection = service.inspectBackupBytes(
+        archive.bytes,
+        fileName: 'owned-backup.zip',
+      );
+
+      expect(selection.preview.ownerFingerprint, isNotNull);
+      await expectLater(
+        service.prepareRestore(
+          selection: selection,
+          existingAppliances: const [],
+          mode: RestoreMode.replace,
+          currentOwnerUid: 'firebase-user-b',
+        ),
+        throwsA(isA<BackupFormatException>()),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('damaged data is rejected as an invalid backup', () {
     final service = HomeVaultBackupService();
 

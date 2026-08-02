@@ -82,6 +82,19 @@ class DashboardScreen extends StatelessWidget {
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
               ),
+              if (store.loadWarning != null) ...[
+                const SizedBox(height: 16),
+                MaterialBanner(
+                  content: Text(store.loadWarning!),
+                  leading: const Icon(Icons.warning_amber_outlined),
+                  actions: [
+                    TextButton(
+                      onPressed: store.clearLoadWarning,
+                      child: const Text('Dismiss'),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
               GridView.count(
                 shrinkWrap: true,
