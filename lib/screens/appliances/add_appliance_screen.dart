@@ -542,18 +542,69 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 controller: _modelController,
                 decoration: const InputDecoration(
                   labelText: 'Model number',
+                  hintText: 'Example: AC-X123/2026',
                   prefixIcon: Icon(Icons.numbers),
                 ),
                 textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 30,
+                maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                    RegExp(r'[A-Za-z0-9._/\- ]'),
+                  ),
+                  LengthLimitingTextInputFormatter(30),
+                ],
+                validator: (value) {
+                  final modelNumber = value?.trim() ?? '';
+
+                  if (modelNumber.isEmpty) {
+                    return null;
+                  }
+
+                  // Handles old saved records that may already exceed the limit.
+                  if (modelNumber.length > 30) {
+                    return 'Model number cannot exceed 30 characters.';
+                  }
+
+                  if (!RegExp(r'[A-Za-z0-9]').hasMatch(modelNumber)) {
+                    return 'Model number must contain a letter or number.';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _serialController,
                 decoration: const InputDecoration(
                   labelText: 'Serial number',
+                  hintText: 'Example: SN-AB12345678',
                   prefixIcon: Icon(Icons.qr_code_2),
+                  counterText: '',
                 ),
                 textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 64,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                    RegExp(r'[A-Za-z0-9._/\-]'),
+                  ),
+                  LengthLimitingTextInputFormatter(64),
+                ],
+                validator: (value) {
+                  final serialNumber = value?.trim() ?? '';
+
+                  if (serialNumber.isEmpty) {
+                    return null;
+                  }
+
+                  if (!RegExp(r'[A-Za-z0-9]').hasMatch(serialNumber)) {
+                    return 'Serial number must contain a letter or number.';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
               const _SectionTitle(
