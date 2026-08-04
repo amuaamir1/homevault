@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../auth/auth_scope.dart';
 import '../../profile/profile_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
+import 'reset_pin_with_password_screen.dart';
 
 class PinLoginScreen extends StatefulWidget {
   const PinLoginScreen({super.key});
@@ -136,31 +136,12 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     });
   }
 
-  Future<void> _resetWithOtp() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset PIN with mobile OTP?'),
-        content: const Text(
-          'You will verify your mobile number again and then create a new HomeVault PIN. Your locally stored appliances and documents will remain on this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continue'),
-          ),
-        ],
+  void _resetWithPassword() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const ResetPinWithPasswordScreen(),
       ),
     );
-    if (confirmed != true || !mounted) return;
-
-    await AppLockScope.read(context).resetPinForOtpRecovery();
-    if (!mounted) return;
-    await AuthScope.read(context).signOut();
   }
 
   @override
@@ -262,8 +243,10 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                       ),
                     ],
                     TextButton(
-                      onPressed: locked || _isChecking ? null : _resetWithOtp,
-                      child: const Text('Forgot PIN? Verify with mobile OTP'),
+                      onPressed: locked || _isChecking
+                          ? null
+                          : _resetWithPassword,
+                      child: const Text('Forgot PIN? Verify account password'),
                     ),
                   ],
                 ),

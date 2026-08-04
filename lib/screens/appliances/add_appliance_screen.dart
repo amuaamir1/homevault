@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
@@ -76,6 +77,46 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
   bool get _isEditing => widget.appliance != null;
 
+  String _supportNumberForEditing(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+
+    if (digits.isEmpty) {
+      return '';
+    }
+
+    // Preserve 1800 and 1860 support numbers.
+    if (digits.startsWith('1800') || digits.startsWith('1860')) {
+      return digits;
+    }
+
+    // Convert a stored +91 mobile number back to 10 digits for editing.
+    if (digits.length == 12 && digits.startsWith('91')) {
+      return digits.substring(2);
+    }
+
+    return digits;
+  }
+
+  String _normalizeSupportNumber(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+
+    if (digits.isEmpty) {
+      return '';
+    }
+
+    // Do not add +91 to toll-free or service numbers.
+    if (digits.startsWith('1800') || digits.startsWith('1860')) {
+      return digits;
+    }
+
+    // Store normal Indian mobile numbers with the country code.
+    if (RegExp(r'^[6-9]\d{9}$').hasMatch(digits)) {
+      return '+91$digits';
+    }
+
+    return digits;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -118,8 +159,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       text: appliance?.supportProvider ?? '',
     );
     _phoneController = TextEditingController(
-      text: appliance?.supportPhone ?? '',
+      text: _supportNumberForEditing(appliance?.supportPhone),
     );
+
     _emailController = TextEditingController(
       text: appliance?.supportEmail ?? '',
     );
@@ -384,7 +426,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       purchaseDate: _purchaseDate,
       warrantyExpiryDate: _warrantyExpiryDate,
       supportProvider: _supportProviderController.text.trim(),
-      supportPhone: _phoneController.text.trim(),
+      supportPhone: _normalizeSupportNumber(_phoneController.text),
       supportEmail: _emailController.text.trim(),
       supportWebsite: _websiteController.text.trim(),
       supportNotes: _supportNotesController.text.trim(),
@@ -750,12 +792,38 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(
-                  labelText: 'Support phone',
-                  hintText: 'Include the country code when possible',
+                  labelText: 'Support contact number',
+                  hintText: '9876543210 or 18001234567',
                   prefixIcon: Icon(Icons.phone_outlined),
+                  counterText: '',
                 ),
                 keyboardType: TextInputType.phone,
                 textInputAction: TextInputAction.next,
+                maxLength: 11,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(11),
+                ],
+                validator: (value) {
+                  final number = value?.trim() ?? '';
+
+                  // Support contact is optional.
+                  if (number.isEmpty) {
+                    return null;
+                  }
+
+                  final isMobile = RegExp(r'^[6-9]\d{9}$').hasMatch(number);
+
+                  final isServiceNumber = RegExp(
+                    r'^(1800|1860)\d{6,7}$',
+                  ).hasMatch(number);
+
+                  if (!isMobile && !isServiceNumber) {
+                    return 'Enter a support number for the provider.';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(

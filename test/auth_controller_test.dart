@@ -1,10 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/auth/auth_controller.dart';
-import 'package:homevault/auth/phone_auth_service.dart';
+import 'package:homevault/auth/email_auth_service.dart';
 import 'package:homevault/models/authenticated_user.dart';
 
 void main() {
-  test('normalizes Indian mobile numbers to E.164 format', () {
+  test('normalizes email and Indian profile mobile numbers', () {
+    expect(
+      AuthController.normalizeEmail(' User@Example.COM '),
+      'user@example.com',
+    );
+    expect(AuthController.normalizeEmail('not-an-email'), isNull);
+
     expect(
       AuthController.normalizeIndianMobileNumber('9876543210'),
       '+919876543210',
@@ -13,13 +19,23 @@ void main() {
       AuthController.normalizeIndianMobileNumber('+91 98765 43210'),
       '+919876543210',
     );
+    expect(AuthController.normalizeIndianMobileNumber('1234567890'), isNull);
   });
 
-  test('reuses an existing Firebase session without requesting OTP', () async {
-    final service = _SessionPhoneAuthService(
-      const AuthenticatedUser(
+  test('validates a production account password', () {
+    expect(AuthController.validatePassword('Short1'), isNotNull);
+    expect(AuthController.validatePassword('alllowercase1'), isNotNull);
+    expect(AuthController.validatePassword('ALLUPPERCASE1'), isNotNull);
+    expect(AuthController.validatePassword('NoNumbersHere'), isNotNull);
+    expect(AuthController.validatePassword('SecurePass1'), isNull);
+  });
+
+  test('reuses an existing Firebase email session', () async {
+    final service = _FakeEmailAuthService(
+      currentUser: const AuthenticatedUser(
         uid: 'existing-user',
-        phoneNumber: '+919876543210',
+        email: 'user@example.com',
+        isEmailVerified: true,
       ),
     );
     final controller = AuthController(service: service);
@@ -28,22 +44,55 @@ void main() {
     await controller.initialize();
 
     expect(controller.isAuthenticated, isTrue);
+    expect(controller.isEmailVerified, isTrue);
     expect(controller.user?.uid, 'existing-user');
-    expect(controller.isAwaitingOtp, isFalse);
-    expect(service.sendOtpCalls, 0);
+    expect(service.signInCalls, 0);
   });
 
-  test('rejects invalid Indian mobile numbers', () {
-    expect(AuthController.normalizeIndianMobileNumber('1234567890'), isNull);
-    expect(AuthController.normalizeIndianMobileNumber('98765'), isNull);
+  test(
+    'registers with email and password and waits for verification',
+    () async {
+      final service = _FakeEmailAuthService();
+      final controller = AuthController(service: service);
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final registered = await controller.registerWithEmailAndPassword(
+        email: 'new@example.com',
+        password: 'SecurePass1',
+      );
+
+      expect(registered, isTrue);
+      expect(service.registerCalls, 1);
+      expect(controller.isAuthenticated, isTrue);
+      expect(controller.isEmailVerified, isFalse);
+      expect(controller.statusMessage, contains('Verification email sent'));
+    },
+  );
+
+  test('email password sign-in unlocks the local session once', () async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final signedIn = await controller.signInWithEmailAndPassword(
+      email: 'user@example.com',
+      password: 'SecurePass1',
+    );
+
+    expect(signedIn, isTrue);
+    expect(controller.consumeAccountSignInUnlock(), isTrue);
+    expect(controller.consumeAccountSignInUnlock(), isFalse);
   });
 }
 
-class _SessionPhoneAuthService implements PhoneAuthService {
-  _SessionPhoneAuthService(this._currentUser);
+class _FakeEmailAuthService implements EmailAuthService {
+  _FakeEmailAuthService({this._currentUser});
 
-  final AuthenticatedUser _currentUser;
-  int sendOtpCalls = 0;
+  AuthenticatedUser? _currentUser;
+  int registerCalls = 0;
+  int signInCalls = 0;
 
   @override
   AuthenticatedUser? get currentUser => _currentUser;
@@ -52,25 +101,67 @@ class _SessionPhoneAuthService implements PhoneAuthService {
   Stream<AuthenticatedUser?> authStateChanges() => const Stream.empty();
 
   @override
-  Future<void> sendOtp({
-    required String phoneNumber,
-    required OtpCodeSentCallback onCodeSent,
-    required OtpVerificationCompletedCallback onVerificationCompleted,
-    required OtpVerificationFailedCallback onVerificationFailed,
-    required OtpAutoRetrievalTimeoutCallback onAutoRetrievalTimeout,
-    int? forceResendingToken,
+  Future<AuthenticatedUser> registerWithEmailAndPassword({
+    required String email,
+    required String password,
   }) async {
-    sendOtpCalls++;
+    registerCalls++;
+    return _currentUser = AuthenticatedUser(
+      uid: 'registered-user',
+      email: email,
+    );
   }
 
   @override
-  Future<AuthenticatedUser> verifyOtp({
-    required String verificationId,
-    required String smsCode,
-  }) {
-    throw UnimplementedError();
+  Future<AuthenticatedUser> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    signInCalls++;
+    return _currentUser = AuthenticatedUser(
+      uid: 'signed-in-user',
+      email: email,
+      isEmailVerified: true,
+    );
   }
 
   @override
-  Future<void> signOut() async {}
+  Future<AuthenticatedUser> reloadCurrentUser() async {
+    final user = _currentUser!;
+    return _currentUser = AuthenticatedUser(
+      uid: user.uid,
+      email: user.email,
+      isEmailVerified: true,
+      phoneNumber: user.phoneNumber,
+    );
+  }
+
+  @override
+  Future<void> resendVerificationEmail() async {}
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+
+  @override
+  Future<void> reauthenticateWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<AuthenticatedUser> linkEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    final user = _currentUser!;
+    return _currentUser = AuthenticatedUser(
+      uid: user.uid,
+      email: email,
+      isEmailVerified: false,
+      phoneNumber: user.phoneNumber,
+    );
+  }
+
+  @override
+  Future<void> signOut() async => _currentUser = null;
 }

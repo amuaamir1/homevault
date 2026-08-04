@@ -9,12 +9,11 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     PinSecurityService? securityService,
     BiometricSecurityService? biometricService,
     AutoLockPreferenceService? autoLockPreferenceService,
-    Duration lockAfter = const Duration(minutes: 2),
+    this._lockAfter = const Duration(minutes: 2),
   }) : _securityService = securityService ?? PinSecurityService(),
        _biometricService = biometricService ?? BiometricSecurityService(),
        _autoLockPreferenceService =
-           autoLockPreferenceService ?? AutoLockPreferenceService(),
-       _lockAfter = lockAfter;
+           autoLockPreferenceService ?? AutoLockPreferenceService();
 
   AppLockController.unlockedForTesting({String uid = 'test-user'})
     : _securityService = PinSecurityService(),
@@ -264,7 +263,18 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _notifySafely();
   }
 
-  Future<void> resetPinForOtpRecovery() async {
+  /// Email/password authentication is a strong account-level verification.
+  /// After an explicit sign-in, allow entry once without asking for the local
+  /// PIN again. Future app launches still require the PIN or biometrics.
+  void unlockAfterAccountAuthentication() {
+    if (_boundUid == null || !_hasPin) return;
+    _isUnlocked = true;
+    _backgroundedAt = null;
+    _biometricErrorMessage = null;
+    _notifySafely();
+  }
+
+  Future<void> resetPinForAccountRecovery() async {
     await _securityService.clearPin(markSetupComplete: false);
     await _biometricService.setEnabled(false);
     _pinSetupCompleted = false;
@@ -275,6 +285,9 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _backgroundedAt = null;
     _notifySafely();
   }
+
+  @Deprecated('Use resetPinForAccountRecovery instead.')
+  Future<void> resetPinForOtpRecovery() => resetPinForAccountRecovery();
 
   void lock() {
     if (!_hasPin || !_isUnlocked) return;

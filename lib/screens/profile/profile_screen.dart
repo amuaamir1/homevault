@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../auth/auth_controller.dart';
 import '../../auth/auth_scope.dart';
 import '../../models/user_profile.dart';
 import '../../profile/india_states.dart';
@@ -18,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _addressLine1Controller = TextEditingController();
   final _addressLine2Controller = TextEditingController();
@@ -34,10 +36,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _didLoadInitialValues = true;
 
     final profile = ProfileScope.read(context).profile;
-    if (profile == null) return;
+    final authUser = AuthScope.read(context).user;
 
+    _emailController.text = authUser?.email ?? profile?.email ?? '';
+    final savedPhone = profile?.phoneNumber.isNotEmpty == true
+        ? profile!.phoneNumber
+        : authUser?.phoneNumber ?? '';
+    _phoneController.text = _localIndianMobile(savedPhone);
+
+    if (profile == null) return;
     _nameController.text = profile.fullName;
-    _emailController.text = profile.email;
     _addressLine1Controller.text = profile.addressLine1;
     _addressLine2Controller.text = profile.addressLine2;
     _landmarkController.text = profile.landmark;
@@ -51,6 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _addressLine1Controller.dispose();
     _addressLine2Controller.dispose();
@@ -72,8 +81,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = UserProfile(
       uid: authUser.uid,
       fullName: _nameController.text.trim(),
-      phoneNumber: authUser.phoneNumber,
-      email: _emailController.text.trim(),
+      phoneNumber: AuthController.normalizeIndianMobileNumber(
+        _phoneController.text,
+      )!,
+      email: authUser.email.trim(),
       addressLine1: _addressLine1Controller.text.trim(),
       addressLine2: _addressLine2Controller.text.trim(),
       landmark: _landmarkController.text.trim(),
@@ -101,13 +112,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return null;
   }
 
-  String? _validateEmail(String? value) {
-    final email = (value ?? '').trim();
-    if (email.isEmpty) return null;
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      return 'Enter a valid email address.';
+  String? _validateMobile(String? value) {
+    if (AuthController.normalizeIndianMobileNumber(value ?? '') == null) {
+      return 'Enter a valid 10-digit Indian mobile number.';
     }
     return null;
+  }
+
+  String _localIndianMobile(String value) {
+    final normalized = AuthController.normalizeIndianMobileNumber(value);
+    return normalized == null ? '' : normalized.substring(3);
   }
 
   String? _validatePinCode(String? value) {
@@ -119,7 +133,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthScope.of(context);
     final profileController = ProfileScope.of(context);
     final title = widget.isInitialSetup ? 'Create your profile' : 'My profile';
 
@@ -162,24 +175,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 14),
           TextFormField(
-            initialValue: auth.user?.phoneNumber ?? '',
+            controller: _emailController,
             readOnly: true,
             decoration: const InputDecoration(
-              labelText: 'Verified mobile number',
+              labelText: 'Verified email address',
               prefixIcon: Icon(Icons.verified_outlined),
             ),
           ),
           const SizedBox(height: 14),
           TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
+            key: const Key('profileMobileNumberField'),
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.email],
+            maxLength: 10,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            autofillHints: const [AutofillHints.telephoneNumber],
             decoration: const InputDecoration(
-              labelText: 'Email address',
-              prefixIcon: Icon(Icons.email_outlined),
+              labelText: 'Mobile number *',
+              hintText: '9876543210',
+              prefixIcon: Icon(Icons.phone_android_outlined),
+              prefixText: '+91 ',
             ),
-            validator: _validateEmail,
+            validator: _validateMobile,
           ),
           const SizedBox(height: 22),
           Text(

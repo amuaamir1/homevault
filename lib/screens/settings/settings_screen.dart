@@ -20,8 +20,8 @@ class SettingsScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Sign out of HomeVault?'),
         content: const Text(
-          'HomeVault will require mobile OTP again. Your existing HomeVault '
-          'PIN and biometric preference will remain saved for this account.',
+          'HomeVault will require your email and password again. Your existing '
+          'HomeVault PIN and biometric preference will remain saved for this account.',
         ),
         actions: [
           TextButton(
@@ -81,7 +81,11 @@ class SettingsScreen extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
-                        Text(profile?.phoneNumber ?? ''),
+                        Text(profile?.email ?? ''),
+                        if (profile?.phoneNumber.isNotEmpty == true) ...[
+                          const SizedBox(height: 2),
+                          Text(profile!.phoneNumber),
+                        ],
                         const SizedBox(height: 2),
                         const Text('Beta ${AppBuildInfo.versionAndRelease}'),
                       ],
@@ -204,7 +208,9 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.logout),
                   title: const Text('Sign out'),
-                  subtitle: const Text('Sign in again using mobile OTP.'),
+                  subtitle: const Text(
+                    'Sign in again using email and password.',
+                  ),
                   onTap: () => _signOut(context),
                 ),
               ],

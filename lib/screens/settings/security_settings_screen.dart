@@ -175,15 +175,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('How sign-in works'),
-              subtitle: Text(
-                'Mobile OTP verifies the account once. Firebase keeps the account signed in on this device. HomeVault then uses the local PIN or enrolled device biometrics for later app unlocks. OTP is requested again only after sign-out, app-data removal, reinstall, or PIN recovery.',
-              ),
-            ),
-          ),
         ],
       ),
     );

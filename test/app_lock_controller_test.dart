@@ -15,4 +15,17 @@ void main() {
     expect(controller.pinSetupCompleted, isTrue);
     expect(controller.isUnlocked, isFalse);
   });
+
+  test('email password authentication unlocks the bound PIN session once', () {
+    final controller = AppLockController.unlockedForTesting(
+      uid: 'firebase-user-b',
+    );
+    addTearDown(controller.dispose);
+
+    controller.prepareForSignOut();
+    expect(controller.isUnlocked, isFalse);
+
+    controller.unlockAfterAccountAuthentication();
+    expect(controller.isUnlocked, isTrue);
+  });
 }

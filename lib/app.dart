@@ -7,11 +7,12 @@ import 'auth/auth_scope.dart';
 import 'profile/profile_controller.dart';
 import 'profile/profile_scope.dart';
 import 'screens/auth/firebase_setup_required_screen.dart';
-import 'screens/auth/mobile_login_screen.dart';
-import 'screens/auth/otp_verification_screen.dart';
+import 'screens/auth/email_verification_screen.dart';
+import 'screens/auth/legacy_email_upgrade_screen.dart';
 import 'screens/auth/pin_login_screen.dart';
 import 'screens/auth/pin_setup_screen.dart';
 import 'screens/auth/profile_setup_screen.dart';
+import 'screens/auth/welcome_screen.dart';
 import 'screens/main_navigation.dart';
 import 'security/app_lock_controller.dart';
 import 'security/app_lock_scope.dart';
@@ -110,6 +111,10 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
       CrashReportingService.setAuthenticatedUser(user.uid),
     ]);
 
+    if (auth.consumeAccountSignInUnlock()) {
+      _appLockController.unlockAfterAccountAuthentication();
+    }
+
     if (epoch != _authenticationEpoch || auth.user?.uid != user.uid) return;
 
     if (_profileUserId != user.uid) {
@@ -171,9 +176,25 @@ class _AppGate extends StatelessWidget {
     }
 
     if (!auth.isAuthenticated) {
-      return auth.isAwaitingOtp
-          ? const OtpVerificationScreen()
-          : const MobileLoginScreen();
+      return const WelcomeScreen();
+    }
+
+    if (auth.needsLegacyEmailUpgrade) {
+      return const LegacyEmailUpgradeScreen();
+    }
+
+    if (!auth.isEmailVerified) {
+      return const EmailVerificationScreen();
+    }
+
+    final lockController = AppLockScope.of(context);
+    if (lockController.isInitializing ||
+        lockController.boundUid != auth.user?.uid) {
+      return const _LoadingScreen(message: 'Securing HomeVault...');
+    }
+
+    if (!lockController.hasPin) {
+      return const PinSetupScreen(allowSkip: false);
     }
 
     final profile = ProfileScope.of(context);
@@ -187,16 +208,6 @@ class _AppGate extends StatelessWidget {
 
     if (!profile.hasCompleteProfile) {
       return const ProfileSetupScreen();
-    }
-
-    final lockController = AppLockScope.of(context);
-    if (lockController.isInitializing ||
-        lockController.boundUid != auth.user?.uid) {
-      return const _LoadingScreen(message: 'Securing HomeVault...');
-    }
-
-    if (!lockController.hasPin) {
-      return const PinSetupScreen(allowSkip: false);
     }
 
     if (!lockController.isUnlocked) {
