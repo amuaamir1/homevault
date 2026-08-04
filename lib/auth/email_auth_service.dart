@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/authenticated_user.dart';
 
@@ -64,7 +65,22 @@ class FirebaseEmailAuthService implements EmailAuthService {
       throw StateError('Firebase did not return the newly created user.');
     }
 
-    await user.sendEmailVerification();
+    try {
+      await user.sendEmailVerification();
+
+      debugPrint(
+        'HOMEVAULT_AUTH: Initial verification email request completed '
+        'for ${user.email}',
+      );
+    } on FirebaseAuthException catch (error, stackTrace) {
+      debugPrint(
+        'HOMEVAULT_AUTH: Initial verification email failed. '
+        'code=${error.code}, message=${error.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    }
+
     return _mapRequiredUser(user);
   }
 
@@ -97,9 +113,53 @@ class FirebaseEmailAuthService implements EmailAuthService {
 
   @override
   Future<void> resendVerificationEmail() async {
+    final existingUser = _firebaseAuth.currentUser;
+
+    if (existingUser == null) {
+      throw StateError('No Firebase user is signed in.');
+    }
+
+    // Refresh the user so emailVerified is read from Firebase,
+    // not from an older locally cached authentication state.
+    await existingUser.reload();
+
     final user = _firebaseAuth.currentUser;
-    if (user == null) throw StateError('No Firebase user is signed in.');
-    await user.sendEmailVerification();
+
+    if (user == null) {
+      throw StateError('The Firebase user could not be refreshed.');
+    }
+
+    debugPrint(
+      'HOMEVAULT_AUTH: '
+      'email=${user.email}, '
+      'emailVerified=${user.emailVerified}, '
+      'providers=${user.providerData.map((provider) => provider.providerId).join(',')}',
+    );
+
+    if (user.emailVerified) {
+      debugPrint('HOMEVAULT_AUTH: The email address is already verified.');
+      return;
+    }
+
+    try {
+      await user.sendEmailVerification();
+
+      debugPrint(
+        'HOMEVAULT_AUTH: Verification email resend request completed '
+        'for ${user.email}',
+      );
+    } on FirebaseAuthException catch (error, stackTrace) {
+      debugPrint(
+        'HOMEVAULT_AUTH: Verification email resend failed. '
+        'code=${error.code}, message=${error.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('HOMEVAULT_AUTH: Unexpected verification email error: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   @override
