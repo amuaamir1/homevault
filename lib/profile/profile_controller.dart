@@ -50,9 +50,10 @@ class ProfileController extends ChangeNotifier {
       } else {
         _profile = loaded.copyWith(
           uid: user.uid,
-          phoneNumber: user.phoneNumber.isNotEmpty
-              ? user.phoneNumber
-              : loaded.phoneNumber,
+          email: user.email.isNotEmpty ? user.email : loaded.email,
+          phoneNumber: loaded.phoneNumber.isNotEmpty
+              ? loaded.phoneNumber
+              : user.phoneNumber,
         );
       }
     } catch (error, stack) {

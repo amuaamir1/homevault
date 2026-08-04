@@ -32,7 +32,7 @@ class FirebaseSetupRequiredScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'HomeVault mobile OTP and user profiles require Firebase Authentication and Cloud Firestore. Configure the Android app for com.amuaamir.homevault, then rebuild.',
+                    'HomeVault email authentication and user profiles require Firebase Authentication and Cloud Firestore. Enable the Email/Password provider, configure the Android app for com.amuaamir.homevault, then rebuild.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 18),
