@@ -216,30 +216,6 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Privacy note'),
-              subtitle: const Text(
-                'Your account and profile are stored in Firebase. Appliance '
-                'records and attached files remain local unless you export a backup.',
-              ),
-              onTap: () {
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'HomeVault',
-                  applicationVersion: AppBuildInfo.versionAndRelease,
-                  children: const [
-                    Text(
-                      'A personal appliance support, warranty, document, '
-                      'maintenance, backup, and reporting organizer for homes in India.',
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
