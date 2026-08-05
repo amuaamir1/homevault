@@ -85,6 +85,36 @@ void main() {
     expect(controller.consumeAccountSignInUnlock(), isTrue);
     expect(controller.consumeAccountSignInUnlock(), isFalse);
   });
+
+  test('Google sign-in authenticates and unlocks the local session', () async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final signedIn = await controller.signInWithGoogle();
+
+    expect(signedIn, isTrue);
+    expect(service.googleSignInCalls, 1);
+    expect(controller.user?.email, 'google@example.com');
+    expect(controller.isEmailVerified, isTrue);
+    expect(controller.consumeAccountSignInUnlock(), isTrue);
+  });
+
+  test('Apple sign-in authenticates and unlocks the local session', () async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final signedIn = await controller.signInWithApple();
+
+    expect(signedIn, isTrue);
+    expect(service.appleSignInCalls, 1);
+    expect(controller.user?.email, 'apple@example.com');
+    expect(controller.isEmailVerified, isTrue);
+    expect(controller.consumeAccountSignInUnlock(), isTrue);
+  });
 }
 
 class _FakeEmailAuthService implements EmailAuthService {
@@ -93,6 +123,8 @@ class _FakeEmailAuthService implements EmailAuthService {
   AuthenticatedUser? _currentUser;
   int registerCalls = 0;
   int signInCalls = 0;
+  int googleSignInCalls = 0;
+  int appleSignInCalls = 0;
 
   @override
   AuthenticatedUser? get currentUser => _currentUser;
@@ -121,6 +153,26 @@ class _FakeEmailAuthService implements EmailAuthService {
     return _currentUser = AuthenticatedUser(
       uid: 'signed-in-user',
       email: email,
+      isEmailVerified: true,
+    );
+  }
+
+  @override
+  Future<AuthenticatedUser> signInWithGoogle() async {
+    googleSignInCalls++;
+    return _currentUser = const AuthenticatedUser(
+      uid: 'google-user',
+      email: 'google@example.com',
+      isEmailVerified: true,
+    );
+  }
+
+  @override
+  Future<AuthenticatedUser> signInWithApple() async {
+    appleSignInCalls++;
+    return _currentUser = const AuthenticatedUser(
+      uid: 'apple-user',
+      email: 'apple@example.com',
       isEmailVerified: true,
     );
   }

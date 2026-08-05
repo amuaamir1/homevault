@@ -1,9 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 String friendlyFirebaseError(
   Object error, {
   String fallback = 'The operation could not be completed. Please try again.',
 }) {
+  if (error is GoogleSignInException) {
+    return _googleSignInMessage(error.code, fallback);
+  }
+
   if (error is FirebaseAuthException) {
     return _authMessage(error.code, error.message, fallback);
   }
@@ -20,11 +25,25 @@ String friendlyFirebaseError(
   return fallback;
 }
 
+String _googleSignInMessage(GoogleSignInExceptionCode code, String fallback) {
+  return switch (code) {
+    GoogleSignInExceptionCode.canceled => 'Google sign-in was cancelled.',
+    GoogleSignInExceptionCode.interrupted =>
+      'Google sign-in was interrupted. Please try again.',
+    GoogleSignInExceptionCode.clientConfigurationError ||
+    GoogleSignInExceptionCode.providerConfigurationError =>
+      'Google sign-in is not fully configured for this app.',
+    GoogleSignInExceptionCode.uiUnavailable =>
+      'Google sign-in could not open on this device.',
+    _ => fallback,
+  };
+}
+
 String _authMessage(String code, String? details, String fallback) {
   return switch (code) {
     'invalid-email' => 'Enter a valid email address.',
     'email-already-in-use' =>
-      'An account already exists for this email. Try logging in instead.',
+      'An account already exists for this email. Try signing in instead.',
     'weak-password' => 'Choose a stronger password with at least 8 characters.',
     'wrong-password' ||
     'invalid-credential' => 'The email or password is incorrect.',
@@ -35,13 +54,20 @@ String _authMessage(String code, String? details, String fallback) {
     'network-request-failed' =>
       'A network error occurred. Check your internet connection.',
     'operation-not-allowed' =>
-      'Email/password authentication is not enabled for this Firebase app.',
+      'This sign-in method is not enabled in Firebase Authentication.',
     'requires-recent-login' =>
       'For security, sign in again before completing this action.',
     'provider-already-linked' =>
-      'This account is already connected to email sign-in.',
+      'This sign-in method is already connected to the account.',
     'credential-already-in-use' =>
-      'That email is already connected to another Firebase account.',
+      'This sign-in credential is already connected to another account.',
+    'account-exists-with-different-credential' =>
+      'An account already exists for this email. Sign in using the original method first.',
+    'missing-google-id-token' =>
+      'Google sign-in did not return a valid authentication token.',
+    'popup-closed-by-user' ||
+    'web-context-cancelled' ||
+    'canceled' => 'Sign-in was cancelled.',
     _ => _messageFallback(details, fallback),
   };
 }
