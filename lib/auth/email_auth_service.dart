@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/authenticated_user.dart';
 
@@ -17,6 +18,10 @@ abstract class EmailAuthService {
     required String email,
     required String password,
   });
+
+  Future<AuthenticatedUser> signInWithGoogle();
+
+  Future<AuthenticatedUser> signInWithApple();
 
   Future<AuthenticatedUser> reloadCurrentUser();
 
@@ -38,10 +43,15 @@ abstract class EmailAuthService {
 }
 
 class FirebaseEmailAuthService implements EmailAuthService {
-  FirebaseEmailAuthService({FirebaseAuth? firebaseAuth})
-    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  FirebaseEmailAuthService({
+    FirebaseAuth? firebaseAuth,
+    GoogleSignIn? googleSignIn,
+  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
 
   final FirebaseAuth _firebaseAuth;
+  final GoogleSignIn _googleSignIn;
+  Future<void>? _googleInitialization;
 
   @override
   AuthenticatedUser? get currentUser => _mapUser(_firebaseAuth.currentUser);
@@ -93,11 +103,45 @@ class FirebaseEmailAuthService implements EmailAuthService {
       email: email,
       password: password,
     );
-    final user = credential.user;
-    if (user == null) {
-      throw StateError('Firebase did not return the signed-in user.');
+    return _mapCredentialUser(
+      credential,
+      missingUserMessage: 'Firebase did not return the signed-in user.',
+    );
+  }
+
+  @override
+  Future<AuthenticatedUser> signInWithGoogle() async {
+    await _ensureGoogleInitialized();
+
+    final googleAccount = await _googleSignIn.authenticate();
+    final googleAuthentication = googleAccount.authentication;
+    final idToken = googleAuthentication.idToken;
+
+    if (idToken == null || idToken.trim().isEmpty) {
+      throw FirebaseAuthException(
+        code: 'missing-google-id-token',
+        message: 'Google did not return an ID token.',
+      );
     }
-    return _mapRequiredUser(user);
+
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
+    final result = await _firebaseAuth.signInWithCredential(credential);
+
+    return _mapCredentialUser(
+      result,
+      missingUserMessage: 'Firebase did not return the Google user.',
+    );
+  }
+
+  @override
+  Future<AuthenticatedUser> signInWithApple() async {
+    final provider = AppleAuthProvider();
+    final result = await _firebaseAuth.signInWithProvider(provider);
+
+    return _mapCredentialUser(
+      result,
+      missingUserMessage: 'Firebase did not return the Apple user.',
+    );
   }
 
   @override
@@ -119,8 +163,6 @@ class FirebaseEmailAuthService implements EmailAuthService {
       throw StateError('No Firebase user is signed in.');
     }
 
-    // Refresh the user so emailVerified is read from Firebase,
-    // not from an older locally cached authentication state.
     await existingUser.reload();
 
     final user = _firebaseAuth.currentUser;
@@ -205,7 +247,32 @@ class FirebaseEmailAuthService implements EmailAuthService {
   }
 
   @override
-  Future<void> signOut() => _firebaseAuth.signOut();
+  Future<void> signOut() async {
+    await _firebaseAuth.signOut();
+
+    final initialization = _googleInitialization;
+    if (initialization == null) return;
+
+    try {
+      await initialization;
+      await _googleSignIn.signOut();
+    } catch (error) {
+      debugPrint('HOMEVAULT_AUTH: Google sign-out cleanup failed: $error');
+    }
+  }
+
+  Future<void> _ensureGoogleInitialized() {
+    return _googleInitialization ??= _googleSignIn.initialize();
+  }
+
+  AuthenticatedUser _mapCredentialUser(
+    UserCredential credential, {
+    required String missingUserMessage,
+  }) {
+    final user = credential.user;
+    if (user == null) throw StateError(missingUserMessage);
+    return _mapRequiredUser(user);
+  }
 
   AuthenticatedUser _mapRequiredUser(User user) => _mapUser(user)!;
 

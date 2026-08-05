@@ -118,6 +118,28 @@ class AuthController extends ChangeNotifier {
     );
   }
 
+  Future<bool> signInWithGoogle() async {
+    return _run(
+      reason: 'Signing in with Google',
+      fallback: 'Google sign-in failed. Please try again.',
+      operation: () async {
+        _user = await _service!.signInWithGoogle();
+        _unlockAfterAccountSignIn = true;
+      },
+    );
+  }
+
+  Future<bool> signInWithApple() async {
+    return _run(
+      reason: 'Signing in with Apple',
+      fallback: 'Apple sign-in failed. Please try again.',
+      operation: () async {
+        _user = await _service!.signInWithApple();
+        _unlockAfterAccountSignIn = true;
+      },
+    );
+  }
+
   Future<bool> refreshEmailVerification() async {
     return _run(
       reason: 'Checking email verification',
