@@ -151,7 +151,9 @@ void main() {
     expect(find.text('Add document'), findsOneWidget);
   });
 
-  testWidgets('support directory shows direct contact actions', (tester) async {
+  testWidgets('support directory groups and expands support details', (
+    tester,
+  ) async {
     final appliance = Appliance(
       id: 'ac-support-1',
       name: 'Bedroom AC',
@@ -176,8 +178,23 @@ void main() {
     await tester.tap(supportDestination);
     await tester.pumpAndSettle();
 
+    expect(find.text('Air Conditioner'), findsOneWidget);
+    expect(find.text('1 appliance'), findsOneWidget);
+    expect(find.text('Bedroom AC'), findsNothing);
+    expect(find.text('Call'), findsNothing);
+    expect(find.text('Sunday to Thursday'), findsNothing);
+
+    await tester.tap(find.text('Air Conditioner'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Bedroom AC'), findsOneWidget);
     expect(find.text('Daikin Care'), findsOneWidget);
+    expect(find.text('Call'), findsNothing);
+    expect(find.text('Sunday to Thursday'), findsNothing);
+
+    await tester.tap(find.text('Bedroom AC'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Call'), findsOneWidget);
     expect(find.text('Email'), findsWidgets);
     expect(find.text('Website'), findsWidgets);

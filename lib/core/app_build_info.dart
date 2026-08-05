@@ -1,10 +1,10 @@
 class AppBuildInfo {
   const AppBuildInfo._();
 
-  static const String version = '1.12.0';
-  static const String buildNumber = '15';
-  static const String releaseNumber = 'R04';
+  static const String version = '1.12.1';
+  static const String buildNumber = '16';
+  static const String releaseNumber = 'R05';
 
   static const String versionAndRelease =
-      'v$version+$buildNumber • $releaseNumber';
+      'v$version+$buildNumber - $releaseNumber';
 }
