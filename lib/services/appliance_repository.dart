@@ -23,6 +23,10 @@ abstract class ApplianceRepositoryDiagnostics {
   String? get lastLoadWarning;
 }
 
+abstract class WatchableApplianceRepository {
+  Stream<List<Appliance>> watchAppliances();
+}
+
 class FileApplianceRepository
     implements
         ApplianceRepository,

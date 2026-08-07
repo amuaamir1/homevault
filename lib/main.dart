@@ -5,7 +5,9 @@ import 'app.dart';
 import 'auth/auth_controller.dart';
 import 'firebase_options.dart';
 import 'profile/profile_controller.dart';
+import 'services/appliance_repository.dart';
 import 'services/crash_reporting_service.dart';
+import 'services/firestore_appliance_repository.dart';
 import 'services/warranty_notification_service.dart';
 import 'state/appliance_store.dart';
 
@@ -47,9 +49,18 @@ Future<void> main() async {
     );
   }
 
+  final applianceStore = firebaseInitializationError == null
+      ? ApplianceStore(
+          repository: FirestoreApplianceRepository(
+            localRepository: FileApplianceRepository(),
+          ),
+          reminderScheduler: notificationService,
+        )
+      : ApplianceStore(reminderScheduler: notificationService);
+
   runApp(
     HomeVaultApp(
-      applianceStore: ApplianceStore(reminderScheduler: notificationService),
+      applianceStore: applianceStore,
       authController: authController,
       profileController: profileController,
       firebaseInitializationError: firebaseInitializationError,

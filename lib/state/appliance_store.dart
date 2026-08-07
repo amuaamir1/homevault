@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -26,6 +27,7 @@ class ApplianceStore extends ChangeNotifier {
   String? _loadWarning;
   String? _ownerUid;
   Future<void>? _initialization;
+  StreamSubscription<List<Appliance>>? _repositorySubscription;
 
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
@@ -88,6 +90,9 @@ class ApplianceStore extends ChangeNotifier {
 
     if (_ownerUid == nextOwner && _isInitialized) return;
 
+    await _repositorySubscription?.cancel();
+    _repositorySubscription = null;
+
     _ownerUid = nextOwner;
     _appliances = [];
     _loadError = null;
@@ -141,19 +146,59 @@ class ApplianceStore extends ChangeNotifier {
       }
       _isInitialized = true;
       await _syncRemindersSafely();
+      await _startRepositoryWatch();
     } catch (error, stack) {
       _loadError = error.toString();
       _isInitialized = false;
       await CrashReportingService.recordNonFatal(
         error,
         stack,
-        reason: 'Loading local appliance data',
+        reason: 'Loading appliance data',
       );
     } finally {
       _isLoading = false;
       _initialization = null;
       notifyListeners();
     }
+  }
+
+  Future<void> _startRepositoryWatch() async {
+    if (_repository is! WatchableApplianceRepository || _ownerUid == null) {
+      return;
+    }
+
+    await _repositorySubscription?.cancel();
+
+    final watchableRepository = _repository as WatchableApplianceRepository;
+    _repositorySubscription = watchableRepository.watchAppliances().listen(
+      (appliances) {
+        _appliances = appliances;
+        _isInitialized = true;
+        _loadError = null;
+
+        if (_repository is ApplianceRepositoryDiagnostics) {
+          _loadWarning =
+              (_repository as ApplianceRepositoryDiagnostics).lastLoadWarning;
+        }
+
+        notifyListeners();
+        unawaited(_syncRemindersSafely());
+      },
+      onError: (Object error, StackTrace stack) {
+        _loadWarning =
+            'Cloud sync is temporarily unavailable. '
+            'Your last loaded data remains available.';
+        notifyListeners();
+
+        unawaited(
+          CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Listening for cloud appliance changes',
+          ),
+        );
+      },
+    );
   }
 
   void clearLoadWarning() {
@@ -326,6 +371,12 @@ class ApplianceStore extends ChangeNotifier {
     _appliances = updated;
     notifyListeners();
     await _cancelReminderSafely(applianceId);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_repositorySubscription?.cancel());
+    super.dispose();
   }
 
   Future<void> _syncRemindersSafely() async {
