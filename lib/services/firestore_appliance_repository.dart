@@ -4,20 +4,21 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appliance.dart';
+import '../models/cloud_sync_status.dart';
 import 'appliance_repository.dart';
 
-/// Cloud-backed appliance repository used by HomeVault Phase 1 sync.
+/// Cloud-backed appliance repository used by HomeVault structured-data sync.
 ///
-/// Firestore stores the structured appliance, warranty, support, and service
-/// data. Device-specific attachment paths remain in the existing local
-/// repository so a path from one phone is never treated as a valid path on a
-/// different phone.
+/// Firestore stores appliance, warranty, support, service, and notes data.
+/// Device-specific attachment paths remain in the local repository so a path
+/// from one phone is never treated as a valid path on another phone.
 class FirestoreApplianceRepository
     implements
         ApplianceRepository,
         OwnerScopedApplianceRepository,
         ApplianceRepositoryDiagnostics,
-        WatchableApplianceRepository {
+        WatchableApplianceRepository,
+        CloudSyncAwareApplianceRepository {
   FirestoreApplianceRepository({
     FirebaseFirestore? firestore,
     FileApplianceRepository? localRepository,
@@ -26,20 +27,28 @@ class FirestoreApplianceRepository
 
   static const int _cloudSchemaVersion = 1;
   static const Duration _writeWait = Duration(seconds: 5);
+  static const Duration _retryWait = Duration(seconds: 8);
 
   final FirebaseFirestore _firestore;
   final FileApplianceRepository _localRepository;
+  final StreamController<CloudSyncStatus> _syncStatusController =
+      StreamController<CloudSyncStatus>.broadcast();
 
   String? _ownerUid;
   String? _lastLoadWarning;
   Map<String, String> _lastCloudFingerprints = {};
   bool _hasCloudBaseline = false;
+  DateTime? _lastSyncedAt;
+  CloudSyncStatus _syncStatus = const CloudSyncStatus.unavailable();
 
   @override
   String? get ownerUid => _ownerUid;
 
   @override
   String? get lastLoadWarning => _lastLoadWarning;
+
+  @override
+  CloudSyncStatus get syncStatus => _syncStatus;
 
   String get _requiredOwnerUid {
     final uid = _ownerUid;
@@ -64,23 +73,43 @@ class FirestoreApplianceRepository
       .doc('appliancesV1');
 
   @override
+  Stream<CloudSyncStatus> watchSyncStatus() => _syncStatusController.stream;
+
+  @override
   Future<void> bindOwner(String? uid) async {
     final normalized = uid?.trim();
     _ownerUid = normalized == null || normalized.isEmpty ? null : normalized;
     _lastLoadWarning = null;
     _lastCloudFingerprints = {};
     _hasCloudBaseline = false;
+    _lastSyncedAt = null;
 
     await _localRepository.bindOwner(_ownerUid);
+
+    if (_ownerUid == null) {
+      _emitSyncStatus(const CloudSyncStatus.unavailable());
+    } else {
+      _emitSyncStatus(const CloudSyncStatus(state: CloudSyncState.connecting));
+    }
   }
 
   @override
   Future<List<Appliance>> loadAppliances() async {
-    try {
-      final localAppliances = await _localRepository.loadAppliances();
-      final localWarning = _localRepository.lastLoadWarning;
+    final ownerAtStart = _requiredOwnerUid;
+    final localAppliances = await _localRepository.loadAppliances();
+    final localWarning = _localRepository.lastLoadWarning;
 
+    _emitForOwner(
+      ownerAtStart,
+      CloudSyncStatus(
+        state: CloudSyncState.connecting,
+        lastSyncedAt: _lastSyncedAt,
+      ),
+    );
+
+    try {
       var cloudSnapshot = await _appliancesCollection.get();
+      _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
       var cloudAppliances = _decodeSnapshot(cloudSnapshot);
 
       final migrationSnapshot = await _migrationDocument.get();
@@ -107,16 +136,48 @@ class FirestoreApplianceRepository
           'completedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-        await batch.commit();
-
-        cloudSnapshot = await _appliancesCollection.get();
-        cloudAppliances = _decodeSnapshot(cloudSnapshot);
-
         if (missingFromCloud.isNotEmpty) {
-          _lastLoadWarning =
-              '${missingFromCloud.length} existing local appliance'
-              '${missingFromCloud.length == 1 ? '' : 's'} '
-              'were moved to your HomeVault cloud account.';
+          _emitForOwner(
+            ownerAtStart,
+            CloudSyncStatus(
+              state: CloudSyncState.syncing,
+              lastSyncedAt: _lastSyncedAt,
+              hasPendingWrites: true,
+            ),
+          );
+        }
+
+        final commit = batch.commit();
+        try {
+          await commit.timeout(_writeWait);
+
+          cloudSnapshot = await _appliancesCollection.get();
+          _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
+          cloudAppliances = _decodeSnapshot(cloudSnapshot);
+
+          if (missingFromCloud.isNotEmpty) {
+            _lastLoadWarning =
+                '${missingFromCloud.length} existing local appliance'
+                '${missingFromCloud.length == 1 ? '' : 's'} '
+                'were moved to your HomeVault cloud account.';
+          }
+        } on TimeoutException {
+          // Firestore keeps the write queued locally. Keep local records
+          // visible while the SDK waits for connectivity to return.
+          _emitForOwner(
+            ownerAtStart,
+            CloudSyncStatus(
+              state: CloudSyncState.offline,
+              lastSyncedAt: _lastSyncedAt,
+              hasPendingWrites: true,
+              message: 'Changes are waiting for cloud sync.',
+            ),
+          );
+
+          cloudAppliances = _mergeUniqueAppliances(
+            cloudAppliances,
+            missingFromCloud,
+          );
         }
       }
 
@@ -131,10 +192,39 @@ class FirestoreApplianceRepository
 
       return merged;
     } on FirebaseException catch (error) {
+      if (_isOfflineError(error)) {
+        _rememberCloudBaseline(localAppliances);
+        _emitForOwner(
+          ownerAtStart,
+          CloudSyncStatus(
+            state: CloudSyncState.offline,
+            lastSyncedAt: _lastSyncedAt,
+            message: 'Using the last data saved on this device.',
+          ),
+        );
+        return localAppliances;
+      }
+
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _lastSyncedAt,
+          message: _firebaseMessage(error),
+        ),
+      );
       throw ApplianceStorageException(_firebaseMessage(error), error);
     } on ApplianceStorageException {
       rethrow;
     } catch (error) {
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _lastSyncedAt,
+          message: 'HomeVault could not load cloud appliance data.',
+        ),
+      );
       throw ApplianceStorageException(
         'HomeVault could not load your cloud appliance data.',
         error,
@@ -143,28 +233,93 @@ class FirestoreApplianceRepository
   }
 
   @override
-  Stream<List<Appliance>> watchAppliances() {
-    return _appliancesCollection.snapshots().asyncMap((snapshot) async {
-      final localAppliances = await _localRepository.loadAppliances();
-      final cloudAppliances = _decodeSnapshot(snapshot);
+  Stream<List<Appliance>> watchAppliances() async* {
+    final ownerAtStart = _requiredOwnerUid;
+    final collection = _appliancesCollection;
 
-      final merged = _mergeCloudWithLocal(cloudAppliances, localAppliances);
+    try {
+      await for (final snapshot in collection.snapshots(
+        includeMetadataChanges: true,
+      )) {
+        if (_ownerUid != ownerAtStart) {
+          return;
+        }
 
-      await _localRepository.saveAppliances(merged);
-      _rememberCloudBaseline(cloudAppliances);
-      return merged;
-    });
+        _updateStatusFromSnapshot(ownerAtStart, snapshot);
+
+        final localAppliances = await _localRepository.loadAppliances();
+        final cloudAppliances = _decodeSnapshot(snapshot);
+
+        final merged = _mergeCloudWithLocal(cloudAppliances, localAppliances);
+
+        await _localRepository.saveAppliances(merged);
+        _rememberCloudBaseline(cloudAppliances);
+        yield merged;
+      }
+    } on FirebaseException catch (error) {
+      if (_ownerUid == ownerAtStart) {
+        _emitSyncStatus(
+          CloudSyncStatus(
+            state: _isOfflineError(error)
+                ? CloudSyncState.offline
+                : CloudSyncState.error,
+            lastSyncedAt: _lastSyncedAt,
+            message: _firebaseMessage(error),
+          ),
+        );
+      }
+      rethrow;
+    } catch (error) {
+      if (_ownerUid == ownerAtStart) {
+        _emitSyncStatus(
+          CloudSyncStatus(
+            state: CloudSyncState.error,
+            lastSyncedAt: _lastSyncedAt,
+            message: 'Cloud sync listener stopped unexpectedly.',
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
   Future<void> saveAppliances(List<Appliance> appliances) async {
+    final ownerAtStart = _requiredOwnerUid;
+
     // Always preserve the complete on-device record first. This includes
     // invoice/warranty/service attachment paths that must stay device-local.
     await _localRepository.saveAppliances(appliances);
 
     if (!_hasCloudBaseline) {
-      final snapshot = await _appliancesCollection.get();
-      _rememberCloudBaseline(_decodeSnapshot(snapshot));
+      try {
+        final snapshot = await _appliancesCollection.get();
+        _updateStatusFromSnapshot(ownerAtStart, snapshot);
+        _rememberCloudBaseline(_decodeSnapshot(snapshot));
+      } on FirebaseException catch (error) {
+        if (!_isOfflineError(error)) {
+          _emitForOwner(
+            ownerAtStart,
+            CloudSyncStatus(
+              state: CloudSyncState.error,
+              lastSyncedAt: _lastSyncedAt,
+              message: _firebaseMessage(error),
+            ),
+          );
+          rethrow;
+        }
+
+        // The local file is our best-known baseline when starting offline.
+        _rememberCloudBaseline(appliances);
+        _emitForOwner(
+          ownerAtStart,
+          CloudSyncStatus(
+            state: CloudSyncState.offline,
+            lastSyncedAt: _lastSyncedAt,
+            message: 'Changes will sync when a connection is available.',
+          ),
+        );
+      }
     }
 
     final desiredFingerprints = <String, String>{
@@ -175,16 +330,13 @@ class FirestoreApplianceRepository
       for (final appliance in appliances) appliance.id: appliance,
     };
 
-    final changedIds = desiredFingerprints.keys.where(
-      (id) => _lastCloudFingerprints[id] != desiredFingerprints[id],
-    );
+    final changedList = desiredFingerprints.keys
+        .where((id) => _lastCloudFingerprints[id] != desiredFingerprints[id])
+        .toList(growable: false);
 
-    final deletedIds = _lastCloudFingerprints.keys.where(
-      (id) => !desiredFingerprints.containsKey(id),
-    );
-
-    final changedList = changedIds.toList(growable: false);
-    final deletedList = deletedIds.toList(growable: false);
+    final deletedList = _lastCloudFingerprints.keys
+        .where((id) => !desiredFingerprints.containsKey(id))
+        .toList(growable: false);
 
     if (changedList.isEmpty && deletedList.isEmpty) {
       return;
@@ -200,20 +352,184 @@ class FirestoreApplianceRepository
       batch.delete(_appliancesCollection.doc(id));
     }
 
-    // Firestore queues writes locally when connectivity is temporarily lost.
-    // Wait briefly for the server, but do not freeze HomeVault indefinitely
-    // when the phone is offline.
+    _emitForOwner(
+      ownerAtStart,
+      CloudSyncStatus(
+        state: CloudSyncState.syncing,
+        lastSyncedAt: _lastSyncedAt,
+        hasPendingWrites: true,
+      ),
+    );
+
     final commit = batch.commit();
     try {
       await commit.timeout(_writeWait);
       _lastLoadWarning = null;
+      _lastCloudFingerprints = desiredFingerprints;
+      _hasCloudBaseline = true;
+      _markSynced(ownerAtStart);
     } on TimeoutException {
+      // The Firestore SDK retains this write locally. A metadata snapshot will
+      // switch the status back to Synced once the server acknowledges it.
+      _lastCloudFingerprints = desiredFingerprints;
+      _hasCloudBaseline = true;
       _lastLoadWarning =
           'Changes are saved on this device and are waiting for cloud sync.';
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.offline,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: true,
+          message: 'Changes are waiting for cloud sync.',
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (_isOfflineError(error)) {
+        // Do not advance the cloud baseline: retrySync() will re-send the
+        // local difference when connectivity returns.
+        _lastLoadWarning =
+            'Changes are saved locally and still need cloud sync.';
+        _emitForOwner(
+          ownerAtStart,
+          CloudSyncStatus(
+            state: CloudSyncState.offline,
+            lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: true,
+            message: 'Changes are waiting for cloud sync.',
+          ),
+        );
+        return;
+      }
+
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: true,
+          message: _firebaseMessage(error),
+        ),
+      );
+      rethrow;
+    } catch (error) {
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: true,
+          message: 'HomeVault could not save cloud appliance data.',
+        ),
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> retrySync() async {
+    final ownerAtStart = _requiredOwnerUid;
+
+    _emitForOwner(
+      ownerAtStart,
+      CloudSyncStatus(
+        state: CloudSyncState.connecting,
+        lastSyncedAt: _lastSyncedAt,
+        hasPendingWrites: _syncStatus.hasPendingWrites,
+      ),
+    );
+
+    try {
+      // Re-send any local structured-data difference that was not known to be
+      // queued in Firestore, then require a server read as proof of connectivity.
+      final localAppliances = await _localRepository.loadAppliances();
+      await saveAppliances(localAppliances);
+
+      final snapshot = await _appliancesCollection
+          .get(const GetOptions(source: Source.server))
+          .timeout(_retryWait);
+
+      _updateStatusFromSnapshot(ownerAtStart, snapshot);
+    } on TimeoutException {
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.offline,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: _syncStatus.hasPendingWrites,
+          message: 'Cloud connection could not be confirmed.',
+        ),
+      );
+      rethrow;
+    } on FirebaseException catch (error) {
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: _isOfflineError(error)
+              ? CloudSyncState.offline
+              : CloudSyncState.error,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: _syncStatus.hasPendingWrites,
+          message: _firebaseMessage(error),
+        ),
+      );
+      rethrow;
+    }
+  }
+
+  void _updateStatusFromSnapshot(
+    String ownerAtStart,
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    if (_ownerUid != ownerAtStart) return;
+
+    if (snapshot.metadata.hasPendingWrites) {
+      _emitSyncStatus(
+        CloudSyncStatus(
+          state: CloudSyncState.syncing,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: true,
+        ),
+      );
+      return;
     }
 
-    _lastCloudFingerprints = desiredFingerprints;
-    _hasCloudBaseline = true;
+    if (snapshot.metadata.isFromCache) {
+      _emitSyncStatus(
+        CloudSyncStatus(
+          state: CloudSyncState.offline,
+          lastSyncedAt: _lastSyncedAt,
+          message: 'Showing cached HomeVault data.',
+        ),
+      );
+      return;
+    }
+
+    _markSynced(ownerAtStart);
+  }
+
+  void _markSynced(String ownerAtStart) {
+    if (_ownerUid != ownerAtStart) return;
+
+    _lastSyncedAt = DateTime.now();
+    _emitSyncStatus(
+      CloudSyncStatus(
+        state: CloudSyncState.synced,
+        lastSyncedAt: _lastSyncedAt,
+      ),
+    );
+  }
+
+  void _emitForOwner(String ownerAtStart, CloudSyncStatus status) {
+    if (_ownerUid != ownerAtStart) return;
+    _emitSyncStatus(status);
+  }
+
+  void _emitSyncStatus(CloudSyncStatus status) {
+    _syncStatus = status;
+    if (!_syncStatusController.isClosed) {
+      _syncStatusController.add(status);
+    }
   }
 
   void _rememberCloudBaseline(List<Appliance> appliances) {
@@ -256,6 +572,23 @@ class FirestoreApplianceRepository
     }
 
     return appliances;
+  }
+
+  List<Appliance> _mergeUniqueAppliances(
+    List<Appliance> first,
+    List<Appliance> second,
+  ) {
+    final byId = <String, Appliance>{
+      for (final appliance in first) appliance.id: appliance,
+    };
+
+    for (final appliance in second) {
+      byId.putIfAbsent(appliance.id, () => appliance);
+    }
+
+    final result = byId.values.toList(growable: false);
+    result.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return result;
   }
 
   List<Appliance> _mergeCloudWithLocal(
@@ -349,12 +682,20 @@ class FirestoreApplianceRepository
     return jsonEncode(_structuredData(appliance));
   }
 
+  bool _isOfflineError(FirebaseException error) {
+    return error.code == 'unavailable' ||
+        error.code == 'network-request-failed' ||
+        error.code == 'deadline-exceeded';
+  }
+
   String _firebaseMessage(FirebaseException error) {
     switch (error.code) {
       case 'permission-denied':
         return 'HomeVault does not have permission to access your cloud '
             'appliance data. Publish the latest Firestore rules and try again.';
       case 'unavailable':
+      case 'network-request-failed':
+      case 'deadline-exceeded':
         return 'HomeVault cloud sync is temporarily unavailable. '
             'Check your internet connection and try again.';
       default:

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/appliance.dart';
+import '../models/cloud_sync_status.dart';
 
 abstract class ApplianceRepository {
   Future<List<Appliance>> loadAppliances();
@@ -25,6 +26,14 @@ abstract class ApplianceRepositoryDiagnostics {
 
 abstract class WatchableApplianceRepository {
   Stream<List<Appliance>> watchAppliances();
+}
+
+abstract class CloudSyncAwareApplianceRepository {
+  CloudSyncStatus get syncStatus;
+
+  Stream<CloudSyncStatus> watchSyncStatus();
+
+  Future<void> retrySync();
 }
 
 class FileApplianceRepository

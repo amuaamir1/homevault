@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/appliance.dart';
+import '../models/cloud_sync_status.dart';
 import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
@@ -28,6 +29,8 @@ class ApplianceStore extends ChangeNotifier {
   String? _ownerUid;
   Future<void>? _initialization;
   StreamSubscription<List<Appliance>>? _repositorySubscription;
+  StreamSubscription<CloudSyncStatus>? _syncStatusSubscription;
+  CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
 
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
@@ -37,6 +40,9 @@ class ApplianceStore extends ChangeNotifier {
   String? get loadError => _loadError;
   String? get loadWarning => _loadWarning;
   String? get ownerUid => _ownerUid;
+  CloudSyncStatus get cloudSyncStatus => _cloudSyncStatus;
+  bool get cloudSyncAvailable =>
+      _repository is CloudSyncAwareApplianceRepository;
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -92,6 +98,9 @@ class ApplianceStore extends ChangeNotifier {
 
     await _repositorySubscription?.cancel();
     _repositorySubscription = null;
+    await _syncStatusSubscription?.cancel();
+    _syncStatusSubscription = null;
+    _cloudSyncStatus = const CloudSyncStatus.unavailable();
 
     _ownerUid = nextOwner;
     _appliances = [];
@@ -102,6 +111,7 @@ class ApplianceStore extends ChangeNotifier {
 
     final ownedRepository = _repository as OwnerScopedApplianceRepository;
     await ownedRepository.bindOwner(nextOwner);
+    await _startSyncStatusWatch();
 
     if (nextOwner == null) {
       _isLoading = false;
@@ -159,6 +169,66 @@ class ApplianceStore extends ChangeNotifier {
       _isLoading = false;
       _initialization = null;
       notifyListeners();
+    }
+  }
+
+  Future<void> _startSyncStatusWatch() async {
+    if (_repository is! CloudSyncAwareApplianceRepository) {
+      _cloudSyncStatus = const CloudSyncStatus.unavailable();
+      return;
+    }
+
+    await _syncStatusSubscription?.cancel();
+
+    final syncRepository = _repository as CloudSyncAwareApplianceRepository;
+    _cloudSyncStatus = syncRepository.syncStatus;
+    _syncStatusSubscription = syncRepository.watchSyncStatus().listen(
+      (status) {
+        _cloudSyncStatus = status;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stack) {
+        _cloudSyncStatus = CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _cloudSyncStatus.lastSyncedAt,
+          hasPendingWrites: _cloudSyncStatus.hasPendingWrites,
+          message: 'Cloud sync status could not be updated.',
+        );
+        notifyListeners();
+
+        unawaited(
+          CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Listening for cloud sync status',
+          ),
+        );
+      },
+    );
+
+    notifyListeners();
+  }
+
+  Future<bool> retryCloudSync() async {
+    if (_repository is! CloudSyncAwareApplianceRepository ||
+        _ownerUid == null) {
+      return false;
+    }
+
+    final syncRepository = _repository as CloudSyncAwareApplianceRepository;
+
+    try {
+      await syncRepository.retrySync();
+      await _startRepositoryWatch();
+      return syncRepository.syncStatus.state == CloudSyncState.synced ||
+          syncRepository.syncStatus.state == CloudSyncState.syncing;
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Retrying cloud appliance sync',
+      );
+      return false;
     }
   }
 
@@ -376,6 +446,7 @@ class ApplianceStore extends ChangeNotifier {
   @override
   void dispose() {
     unawaited(_repositorySubscription?.cancel());
+    unawaited(_syncStatusSubscription?.cancel());
     super.dispose();
   }
 
