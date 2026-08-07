@@ -106,6 +106,10 @@ class DocumentStorageService {
   }
 
   Future<void> deleteStoredDocument(StoredDocument document) async {
+    if (!document.isAvailableOnDevice) {
+      return;
+    }
+
     final file = File(document.localPath);
     if (await file.exists()) {
       await file.delete();

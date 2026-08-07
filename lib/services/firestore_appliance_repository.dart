@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/appliance.dart';
 import '../models/cloud_sync_status.dart';
+import '../models/stored_document.dart';
 import 'appliance_repository.dart';
 
 /// Cloud-backed appliance repository used by HomeVault structured-data sync.
@@ -25,7 +26,7 @@ class FirestoreApplianceRepository
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _localRepository = localRepository ?? FileApplianceRepository();
 
-  static const int _cloudSchemaVersion = 1;
+  static const int _cloudSchemaVersion = 2;
   static const Duration _writeWait = Duration(seconds: 5);
   static const Duration _retryWait = Duration(seconds: 8);
 
@@ -605,42 +606,46 @@ class FirestoreApplianceRepository
   }
 
   Appliance _mergeLocalAttachments(Appliance cloud, Appliance? local) {
-    if (local == null) {
-      return cloud;
-    }
-
     final mergedJson = Map<String, dynamic>.from(cloud.toJson());
 
-    mergedJson['invoiceDocument'] = local.invoiceDocument?.toJson();
-    mergedJson['warrantyDocument'] = local.warrantyDocument?.toJson();
-    mergedJson['additionalDocuments'] = local.additionalDocuments
-        .map((document) => document.toJson())
+    mergedJson['invoiceDocument'] = cloud.invoiceDocument
+        ?.withLocalAvailabilityFrom(local?.invoiceDocument)
+        .toJson();
+    mergedJson['warrantyDocument'] = cloud.warrantyDocument
+        ?.withLocalAvailabilityFrom(local?.warrantyDocument)
+        .toJson();
+
+    final localAdditionalById = <String, StoredDocument>{
+      for (final document in local?.additionalDocuments ?? const [])
+        document.id: document,
+    };
+    mergedJson['additionalDocuments'] = cloud.additionalDocuments
+        .map(
+          (document) => document
+              .withLocalAvailabilityFrom(localAdditionalById[document.id])
+              .toJson(),
+        )
         .toList(growable: false);
 
     final localServiceById = {
-      for (final record in local.serviceRecords) record.id: record,
+      for (final record in local?.serviceRecords ?? const []) record.id: record,
     };
 
-    final serviceRecords =
-        (mergedJson['serviceRecords'] as List<dynamic>? ?? const [])
-            .whereType<Map>()
-            .map((item) {
-              final recordJson = Map<String, dynamic>.from(item);
-              final recordId = '${recordJson['id'] ?? ''}';
-              final localRecord = localServiceById[recordId];
+    mergedJson['serviceRecords'] = cloud.serviceRecords
+        .map((cloudRecord) {
+          final localRecord = localServiceById[cloudRecord.id];
+          final recordJson = Map<String, dynamic>.from(cloudRecord.toJson());
 
-              if (localRecord != null) {
-                recordJson['receiptDocument'] = localRecord.receiptDocument
-                    ?.toJson();
-                recordJson['reportDocument'] = localRecord.reportDocument
-                    ?.toJson();
-              }
+          recordJson['receiptDocument'] = cloudRecord.receiptDocument
+              ?.withLocalAvailabilityFrom(localRecord?.receiptDocument)
+              .toJson();
+          recordJson['reportDocument'] = cloudRecord.reportDocument
+              ?.withLocalAvailabilityFrom(localRecord?.reportDocument)
+              .toJson();
 
-              return recordJson;
-            })
-            .toList(growable: false);
-
-    mergedJson['serviceRecords'] = serviceRecords;
+          return recordJson;
+        })
+        .toList(growable: false);
 
     return Appliance.fromJson(mergedJson);
   }
@@ -648,25 +653,26 @@ class FirestoreApplianceRepository
   Map<String, dynamic> _structuredData(Appliance appliance) {
     final data = Map<String, dynamic>.from(appliance.toJson());
 
-    // Attachment binaries and device-local file paths are intentionally not
-    // synchronized in Phase 1. References such as invoiceReference and
-    // warrantyReference remain synchronized because they are normal fields.
-    data['invoiceDocument'] = null;
-    data['warrantyDocument'] = null;
-    data['additionalDocuments'] = <Object?>[];
+    // Phase 1C synchronizes metadata for every attachment while keeping the
+    // physical file and its localPath on the device that owns that copy.
+    data['invoiceDocument'] = appliance.invoiceDocument?.toCloudMetadataJson();
+    data['warrantyDocument'] = appliance.warrantyDocument
+        ?.toCloudMetadataJson();
+    data['additionalDocuments'] = appliance.additionalDocuments
+        .map((document) => document.toCloudMetadataJson())
+        .toList(growable: false);
 
-    final serviceRecords =
-        (data['serviceRecords'] as List<dynamic>? ?? const [])
-            .whereType<Map>()
-            .map((item) {
-              final record = Map<String, dynamic>.from(item);
-              record['receiptDocument'] = null;
-              record['reportDocument'] = null;
-              return record;
-            })
-            .toList(growable: false);
+    data['serviceRecords'] = appliance.serviceRecords
+        .map((record) {
+          final recordData = Map<String, dynamic>.from(record.toJson());
+          recordData['receiptDocument'] = record.receiptDocument
+              ?.toCloudMetadataJson();
+          recordData['reportDocument'] = record.reportDocument
+              ?.toCloudMetadataJson();
+          return recordData;
+        })
+        .toList(growable: false);
 
-    data['serviceRecords'] = serviceRecords;
     return data;
   }
 

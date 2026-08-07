@@ -25,6 +25,17 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     BuildContext context,
     StoredDocument document,
   ) async {
+    if (!document.isAvailableOnDevice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The document metadata is synced, but the file is not stored on this device yet.',
+          ),
+        ),
+      );
+      return;
+    }
+
     try {
       await OpenFilex.open(document.localPath);
     } catch (_) {
