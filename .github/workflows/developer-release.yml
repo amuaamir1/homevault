@@ -118,7 +118,7 @@ jobs:
             printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/android/app/homevault-release.jks"
           } > android/key.properties
 
-            - name: Calculate release identifiers from latest published release
+      - name: Calculate release identifiers from latest published release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
