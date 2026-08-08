@@ -380,44 +380,68 @@ class ApplianceStore extends ChangeNotifier {
   }
 
   Future<void> replaceAll(Iterable<Appliance> appliances) async {
-    final replacement = List<Appliance>.from(appliances);
-    await _repository.saveAppliances(replacement);
-    _appliances = replacement;
-    notifyListeners();
-    await _syncRemindersSafely();
+    await _runWithRepositoryWatchPaused<void>(() async {
+      final replacement = List<Appliance>.from(appliances);
+      await _repository.saveAppliances(replacement);
+      _appliances = replacement;
+      notifyListeners();
+      await _syncRemindersSafely();
+    });
   }
 
   Future<int> mergeAppliances(Iterable<Appliance> appliances) async {
-    final existingIds = _appliances.map((item) => item.id).toSet();
-    final existingSerials = _appliances
-        .map(_serialKey)
-        .whereType<String>()
-        .toSet();
-    final imported = <Appliance>[];
+    return _runWithRepositoryWatchPaused<int>(() async {
+      final existingIds = _appliances.map((item) => item.id).toSet();
+      final existingSerials = _appliances
+          .map(_serialKey)
+          .whereType<String>()
+          .toSet();
+      final imported = <Appliance>[];
 
-    for (final appliance in appliances) {
-      final serialKey = _serialKey(appliance);
-      if (existingIds.contains(appliance.id) ||
-          (serialKey != null && existingSerials.contains(serialKey))) {
-        continue;
+      for (final appliance in appliances) {
+        final serialKey = _serialKey(appliance);
+        if (existingIds.contains(appliance.id) ||
+            (serialKey != null && existingSerials.contains(serialKey))) {
+          continue;
+        }
+        imported.add(appliance);
+        existingIds.add(appliance.id);
+        if (serialKey != null) {
+          existingSerials.add(serialKey);
+        }
       }
-      imported.add(appliance);
-      existingIds.add(appliance.id);
-      if (serialKey != null) {
-        existingSerials.add(serialKey);
+
+      if (imported.isEmpty) {
+        return 0;
       }
+
+      final updated = [..._appliances, ...imported];
+      await _repository.saveAppliances(updated);
+      _appliances = updated;
+      notifyListeners();
+      await _syncRemindersSafely();
+      return imported.length;
+    });
+  }
+
+  Future<T> _runWithRepositoryWatchPaused<T>(
+    Future<T> Function() operation,
+  ) async {
+    final shouldRestart =
+        _repository is WatchableApplianceRepository && _ownerUid != null;
+
+    if (shouldRestart) {
+      await _repositorySubscription?.cancel();
+      _repositorySubscription = null;
     }
 
-    if (imported.isEmpty) {
-      return 0;
+    try {
+      return await operation();
+    } finally {
+      if (shouldRestart && _ownerUid != null) {
+        await _startRepositoryWatch();
+      }
     }
-
-    final updated = [..._appliances, ...imported];
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
-    notifyListeners();
-    await _syncRemindersSafely();
-    return imported.length;
   }
 
   String? _serialKey(Appliance appliance) {

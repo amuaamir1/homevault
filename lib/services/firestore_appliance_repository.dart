@@ -345,9 +345,22 @@ class FirestoreApplianceRepository
 
     if (!_hasCloudBaseline) {
       try {
-        final snapshot = await _appliancesCollection.get();
+        final snapshot = await _appliancesCollection.get().timeout(_retryWait);
+
         _updateStatusFromSnapshot(ownerAtStart, snapshot);
         _rememberCloudBaseline(_decodeSnapshot(snapshot));
+      } on TimeoutException {
+        _rememberCloudBaseline(appliances);
+
+        _emitForOwner(
+          ownerAtStart,
+          CloudSyncStatus(
+            state: CloudSyncState.offline,
+            lastSyncedAt: _lastSyncedAt,
+            message:
+                'Cloud connection is slow. Restore was saved locally and will sync automatically.',
+          ),
+        );
       } on FirebaseException catch (error) {
         if (!_isOfflineError(error)) {
           _emitForOwner(
