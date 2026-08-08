@@ -1,0 +1,310 @@
+name: HomeVault Developer Release
+
+run-name: HomeVault developer release from ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - 'develop/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: homevault-developer-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, sign, build and publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout developer commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Validate CI configuration
+        shell: bash
+        env:
+          FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION }}
+          FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          test -n "$FLUTTER_VERSION" || {
+            echo "::error::Repository variable FLUTTER_VERSION is missing."
+            exit 1
+          }
+
+          for name in \
+            FIREBASE_OPTIONS_DART_BASE64 \
+            GOOGLE_SERVICES_JSON_BASE64 \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_STORE_PASSWORD \
+            ANDROID_KEY_PASSWORD \
+            ANDROID_KEY_ALIAS
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required GitHub Actions secret $name is missing."
+              exit 1
+            fi
+          done
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ vars.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Restore Firebase configuration
+        shell: bash
+        env:
+          FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p lib android/app
+
+          printf '%s' "$FIREBASE_OPTIONS_DART_BASE64" \
+            | base64 --decode > lib/firebase_options.dart
+
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" \
+            | base64 --decode > android/app/google-services.json
+
+          test -s lib/firebase_options.dart
+          test -s android/app/google-services.json
+
+      - name: Restore Android release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p android/app
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" \
+            | base64 --decode > android/app/homevault-release.jks
+
+          test -s android/app/homevault-release.jks
+
+          {
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/android/app/homevault-release.jks"
+          } > android/key.properties
+
+      - name: Calculate CI release identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          run_number = int(os.environ["GITHUB_RUN_NUMBER"])
+
+          pubspec_path = Path("pubspec.yaml")
+          pubspec = pubspec_path.read_text(encoding="utf-8")
+
+          match = re.search(
+              r"(?m)^version:\s*([0-9A-Za-z.+_-]+)\+(\d+)\s*$",
+              pubspec,
+          )
+          if not match:
+              raise SystemExit(
+                  "pubspec.yaml must contain a version such as "
+                  "'version: 1.13.0+18'."
+              )
+
+          version_name = match.group(1)
+          base_build = int(match.group(2))
+          build_number = base_build + run_number
+
+          build_info_path = Path("lib/core/app_build_info.dart")
+          build_info = build_info_path.read_text(encoding="utf-8")
+
+          release_match = re.search(
+              r"static const String releaseNumber = 'R(\d+)';",
+              build_info,
+          )
+          if not release_match:
+              raise SystemExit(
+                  "Could not find AppBuildInfo.releaseNumber in "
+                  "lib/core/app_build_info.dart."
+              )
+
+          base_release = int(release_match.group(1))
+          release_number = f"R{base_release + run_number:02d}"
+
+          updated_pubspec, count = re.subn(
+              r"(?m)^version:\s*[^\r\n]+$",
+              f"version: {version_name}+{build_number}",
+              pubspec,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not update pubspec.yaml version.")
+          pubspec_path.write_text(updated_pubspec, encoding="utf-8")
+
+          replacements = (
+              (
+                  r"static const String version = '[^']*';",
+                  f"static const String version = '{version_name}';",
+                  "AppBuildInfo.version",
+              ),
+              (
+                  r"static const String buildNumber = '[^']*';",
+                  f"static const String buildNumber = '{build_number}';",
+                  "AppBuildInfo.buildNumber",
+              ),
+              (
+                  r"static const String releaseNumber = '[^']*';",
+                  f"static const String releaseNumber = '{release_number}';",
+                  "AppBuildInfo.releaseNumber",
+              ),
+          )
+
+          for pattern, replacement, label in replacements:
+              build_info, count = re.subn(
+                  pattern,
+                  replacement,
+                  build_info,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"Could not update {label}.")
+
+          display_pattern = (
+              r"static const String versionAndRelease\s*=\s*'[^']*';"
+          )
+          if re.search(display_pattern, build_info):
+              build_info = re.sub(
+                  display_pattern,
+                  "static const String versionAndRelease =\n"
+                  "      'v$version+$buildNumber - $releaseNumber';",
+                  build_info,
+                  count=1,
+              )
+
+          build_info_path.write_text(build_info, encoding="utf-8")
+
+          apk_name = (
+              f"HomeVault-Beta-v{version_name}+{build_number}-"
+              f"{release_number}.apk"
+          )
+          tag_name = (
+              f"homevault-beta-v{version_name}-build{build_number}-"
+              f"{release_number}"
+          )
+
+          github_env = Path(os.environ["GITHUB_ENV"])
+          with github_env.open("a", encoding="utf-8") as output:
+              output.write(f"VERSION_NAME={version_name}\n")
+              output.write(f"BUILD_NUMBER={build_number}\n")
+              output.write(f"RELEASE_NUMBER={release_number}\n")
+              output.write(f"APK_NAME={apk_name}\n")
+              output.write(f"TAG_NAME={tag_name}\n")
+
+          print(
+              f"Preparing HomeVault {release_number}: "
+              f"v{version_name}+{build_number}"
+          )
+          PY
+
+      - name: Show tool versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          dart --version
+          java -version
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        shell: bash
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: Automated tests
+        run: flutter test
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk \
+            --release \
+            --build-name="$VERSION_NAME" \
+            --build-number="$BUILD_NUMBER"
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+
+          cp \
+            build/app/outputs/flutter-apk/app-release.apk \
+            "dist/$APK_NAME"
+
+          (
+            cd dist
+            sha256sum "$APK_NAME" > "$APK_NAME.sha256.txt"
+          )
+
+          echo "Release asset:"
+          ls -lh "dist/$APK_NAME"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomeVault-${{ env.RELEASE_NUMBER }}
+          path: |
+            dist/${{ env.APK_NAME }}
+            dist/${{ env.APK_NAME }}.sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$TAG_NAME" \
+            "dist/$APK_NAME" \
+            "dist/$APK_NAME.sha256.txt" \
+            --target "$GITHUB_SHA" \
+            --title "HomeVault Beta $RELEASE_NUMBER - v$VERSION_NAME+$BUILD_NUMBER" \
+            --generate-notes \
+            --prerelease
