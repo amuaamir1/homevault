@@ -532,9 +532,14 @@ class ApplianceDetailsScreen extends StatelessWidget {
               _DetailRow(label: 'Model number', value: appliance.modelNumber),
               _DetailRow(label: 'Serial number', value: appliance.serialNumber),
               _DetailRow(
-                label: 'Purchase date',
+                label: 'Purchase / invoice date',
                 value: _date(appliance.purchaseDate),
               ),
+              if (appliance.warrantyDurationLabel.isNotEmpty)
+                _DetailRow(
+                  label: 'Warranty duration',
+                  value: appliance.warrantyDurationLabel,
+                ),
               _DetailRow(
                 label: 'Standard warranty',
                 value: _date(appliance.warrantyExpiryDate),
@@ -582,6 +587,11 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 value: appliance.warrantyReference,
                 emptyText: 'No warranty card reference added',
               ),
+              if (appliance.warrantyDurationLabel.isNotEmpty)
+                _DetailRow(
+                  label: 'Original duration',
+                  value: appliance.warrantyDurationLabel,
+                ),
               _DetailRow(
                 label: 'Effective expiry',
                 value: _date(appliance.effectiveWarrantyExpiryDate),

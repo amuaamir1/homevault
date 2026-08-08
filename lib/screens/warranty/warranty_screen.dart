@@ -522,6 +522,20 @@ class _WarrantyCard extends StatelessWidget {
                   ),
                 ),
               ],
+              if (appliance.warrantyDurationLabel.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.timelapse_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Warranty duration: ${appliance.warrantyDurationLabel}',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [

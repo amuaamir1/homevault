@@ -47,6 +47,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late final TextEditingController _websiteController;
   late final TextEditingController _supportNotesController;
   late final TextEditingController _invoiceController;
+  late final TextEditingController _warrantyDurationController;
   late final TextEditingController _warrantyProviderController;
   late final TextEditingController _warrantyReferenceController;
   late final TextEditingController _warrantyTermsController;
@@ -65,6 +66,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   DateTime? _purchaseDate;
   DateTime? _warrantyExpiryDate;
   DateTime? _extendedWarrantyExpiryDate;
+  bool _useManualWarrantyExpiry = false;
   WarrantyClaimStatus _warrantyClaimStatus = WarrantyClaimStatus.none;
   bool _warrantyMarkedExpired = false;
   bool _warrantyReminderEnabled = false;
@@ -130,6 +132,17 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _purchaseDate = appliance?.purchaseDate;
     _warrantyExpiryDate = appliance?.warrantyExpiryDate;
     _extendedWarrantyExpiryDate = appliance?.extendedWarrantyExpiryDate;
+    final savedDurationUnit = appliance?.warrantyDurationUnit;
+    final savedDurationValue = appliance?.warrantyDurationValue;
+    final hasLegacyNonYearDuration =
+        savedDurationUnit == WarrantyDurationUnit.months &&
+        savedDurationValue != null &&
+        savedDurationValue % 12 != 0;
+
+    _useManualWarrantyExpiry =
+        hasLegacyNonYearDuration ||
+        (appliance?.warrantyExpiryDate != null &&
+            appliance?.warrantyDurationValue == null);
     _warrantyClaimStatus =
         appliance?.warrantyClaimStatus ?? WarrantyClaimStatus.none;
     _warrantyMarkedExpired = appliance?.warrantyMarkedExpired ?? false;
@@ -174,6 +187,19 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _invoiceController = TextEditingController(
       text: appliance?.invoiceReference ?? '',
     );
+    final warrantyDurationYears = switch ((
+      appliance?.warrantyDurationValue,
+      appliance?.warrantyDurationUnit,
+    )) {
+      (final int value, WarrantyDurationUnit.years) => value,
+      (final int value, WarrantyDurationUnit.months) when value % 12 == 0 =>
+        value ~/ 12,
+      _ => null,
+    };
+
+    _warrantyDurationController = TextEditingController(
+      text: warrantyDurationYears?.toString() ?? '',
+    );
     _warrantyProviderController = TextEditingController(
       text: appliance?.warrantyProvider ?? '',
     );
@@ -216,6 +242,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _websiteController.dispose();
     _supportNotesController.dispose();
     _invoiceController.dispose();
+    _warrantyDurationController.dispose();
     _warrantyProviderController.dispose();
     _warrantyReferenceController.dispose();
     _warrantyTermsController.dispose();
@@ -225,6 +252,69 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _warrantyClaimNumberController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  int? get _enteredWarrantyDuration {
+    final value = int.tryParse(_warrantyDurationController.text.trim());
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
+  DateTime? get _calculatedWarrantyExpiry {
+    if (_useManualWarrantyExpiry) {
+      return _warrantyExpiryDate;
+    }
+
+    final startDate = _purchaseDate;
+    final duration = _enteredWarrantyDuration;
+    if (startDate == null || duration == null) {
+      return null;
+    }
+
+    return Appliance.calculateWarrantyExpiryDate(
+      startDate: startDate,
+      durationValue: duration,
+      durationUnit: WarrantyDurationUnit.years,
+    );
+  }
+
+  DateTime? get _effectiveDraftWarrantyExpiry {
+    final standard = _calculatedWarrantyExpiry;
+    final extended = _extendedWarrantyExpiryDate;
+
+    if (standard == null) return extended;
+    if (extended == null) return standard;
+    return extended.isAfter(standard) ? extended : standard;
+  }
+
+  void _clearStaleOutOfWarrantyOverride() {
+    if (!_warrantyMarkedExpired) return;
+
+    final expiry = _effectiveDraftWarrantyExpiry;
+    if (expiry == null) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expiryDay = DateTime(expiry.year, expiry.month, expiry.day);
+
+    // "Mark as out of warranty" is a manual override for a warranty that was
+    // voided/ended early. If the user edits the warranty terms so coverage is
+    // valid through today or a future date, treat the old override as stale.
+    // The user can still switch it on again afterward if the warranty was
+    // genuinely voided early.
+    if (!expiryDay.isBefore(today)) {
+      _warrantyMarkedExpired = false;
+    }
+  }
+
+  void _setManualWarrantyExpiry(bool useManual) {
+    setState(() {
+      if (useManual) {
+        _warrantyExpiryDate = _calculatedWarrantyExpiry ?? _warrantyExpiryDate;
+      }
+      _useManualWarrantyExpiry = useManual;
+      _clearStaleOutOfWarrantyOverride();
+    });
   }
 
   Future<void> _selectDate({required _DateSelection selection}) async {
@@ -261,6 +351,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       } else {
         _extendedWarrantyExpiryDate = selectedDate;
       }
+
+      _clearStaleOutOfWarrantyOverride();
     });
   }
 
@@ -362,7 +454,34 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     }
 
     final purchaseDate = _purchaseDate;
-    final warrantyDate = _warrantyExpiryDate;
+    final duration = _enteredWarrantyDuration;
+
+    if (!_useManualWarrantyExpiry &&
+        _warrantyDurationController.text.trim().isNotEmpty &&
+        duration == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a warranty duration greater than 0.'),
+        ),
+      );
+      return;
+    }
+
+    if (!_useManualWarrantyExpiry && duration != null && purchaseDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select the purchase / invoice date to calculate warranty expiry.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final warrantyDate = _useManualWarrantyExpiry
+        ? _warrantyExpiryDate
+        : _calculatedWarrantyExpiry;
+
     if (purchaseDate != null &&
         warrantyDate != null &&
         warrantyDate.isBefore(purchaseDate)) {
@@ -424,7 +543,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       modelNumber: _modelController.text.trim(),
       serialNumber: _serialController.text.trim(),
       purchaseDate: _purchaseDate,
-      warrantyExpiryDate: _warrantyExpiryDate,
+      warrantyExpiryDate: warrantyDate,
+      warrantyDurationValue: _useManualWarrantyExpiry ? null : duration,
+      warrantyDurationUnit: !_useManualWarrantyExpiry && duration != null
+          ? WarrantyDurationUnit.years
+          : null,
       supportProvider: _supportProviderController.text.trim(),
       supportPhone: _normalizeSupportNumber(_phoneController.text),
       supportEmail: _emailController.text.trim(),
@@ -612,24 +735,83 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               const _SectionTitle(
                 title: 'Purchase and warranty',
                 subtitle:
-                    'Save the dates, references, invoice, and warranty card.',
+                    'Use the purchase / invoice date and warranty duration to calculate expiry, then save references and documents.',
               ),
               const SizedBox(height: 12),
               _DateField(
-                label: 'Purchase date',
+                label: 'Purchase / invoice date',
                 value: _purchaseDate,
                 icon: Icons.shopping_bag_outlined,
                 onTap: () => _selectDate(selection: _DateSelection.purchase),
                 onClear: () => setState(() => _purchaseDate = null),
               ),
               const SizedBox(height: 12),
-              _DateField(
-                label: 'Warranty expiry date',
-                value: _warrantyExpiryDate,
-                icon: Icons.verified_outlined,
-                onTap: () => _selectDate(selection: _DateSelection.warranty),
-                onClear: () => setState(() => _warrantyExpiryDate = null),
-              ),
+              if (!_useManualWarrantyExpiry) ...[
+                TextFormField(
+                  key: const ValueKey('warrantyDurationYearsField'),
+                  controller: _warrantyDurationController,
+                  decoration: const InputDecoration(
+                    labelText: 'Warranty duration (years)',
+                    hintText: 'Enter number of years',
+                    prefixIcon: Icon(Icons.timelapse_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(2),
+                  ],
+                  onChanged: (_) {
+                    setState(_clearStaleOutOfWarrantyOverride);
+                  },
+                  validator: (value) {
+                    if (_useManualWarrantyExpiry) return null;
+                    final text = value?.trim() ?? '';
+                    if (text.isEmpty) return null;
+
+                    final duration = int.tryParse(text);
+                    if (duration == null || duration <= 0) {
+                      return 'Enter a value above 0.';
+                    }
+
+                    if (duration > 50) {
+                      return 'Use 50 years or less.';
+                    }
+
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                _CalculatedWarrantyField(
+                  purchaseDate: _purchaseDate,
+                  duration: _enteredWarrantyDuration,
+                  expiryDate: _calculatedWarrantyExpiry,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _setManualWarrantyExpiry(true),
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text('Enter expiry date manually'),
+                  ),
+                ),
+              ] else ...[
+                _DateField(
+                  label: 'Warranty expiry date',
+                  value: _warrantyExpiryDate,
+                  icon: Icons.verified_outlined,
+                  onTap: () => _selectDate(selection: _DateSelection.warranty),
+                  onClear: () => setState(() => _warrantyExpiryDate = null),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _setManualWarrantyExpiry(false),
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: const Text('Calculate from warranty duration'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _invoiceController,
@@ -773,6 +955,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               ),
               const SizedBox(height: 20),
               SwitchListTile.adaptive(
+                key: const ValueKey('warrantyMarkedExpiredSwitch'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Mark as out of warranty'),
                 subtitle: const Text(
@@ -981,6 +1164,63 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CalculatedWarrantyField extends StatelessWidget {
+  const _CalculatedWarrantyField({
+    required this.purchaseDate,
+    required this.duration,
+    required this.expiryDate,
+  });
+
+  final DateTime? purchaseDate;
+  final int? duration;
+  final DateTime? expiryDate;
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String value;
+    final String helper;
+
+    if (duration == null) {
+      value = 'Enter warranty duration';
+      helper =
+          'Enter the warranty period in years as provided by the manufacturer or retailer.';
+    } else if (purchaseDate == null) {
+      value = 'Select purchase / invoice date';
+      helper = 'The expiry date is calculated from the selected start date.';
+    } else {
+      value = expiryDate == null ? 'Not available' : _formatDate(expiryDate!);
+      helper =
+          '$duration ${duration == 1 ? 'year' : 'years'} from ${_formatDate(purchaseDate!)}.';
+    }
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Calculated warranty expiry',
+        prefixIcon: Icon(Icons.verified_outlined),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value),
+          const SizedBox(height: 4),
+          Text(
+            helper,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
