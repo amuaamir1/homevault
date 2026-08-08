@@ -292,10 +292,23 @@ class ApplianceStore extends ChangeNotifier {
     return sorted.take(3).toList(growable: false);
   }
 
+  Future<List<Appliance>> _persistAppliances(
+    List<Appliance> appliances, {
+    bool forceOverwrite = false,
+  }) async {
+    if (_repository is ConflictProtectedApplianceRepository) {
+      return (_repository as ConflictProtectedApplianceRepository)
+          .saveAppliancesProtected(appliances, forceOverwrite: forceOverwrite);
+    }
+
+    await _repository.saveAppliances(appliances);
+    return appliances;
+  }
+
   Future<void> add(Appliance appliance) async {
     final updated = [..._appliances, appliance];
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _scheduleReminderSafely(appliance);
   }
@@ -308,8 +321,8 @@ class ApplianceStore extends ChangeNotifier {
 
     final updated = [..._appliances];
     updated[index] = appliance;
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _scheduleReminderSafely(appliance);
   }
@@ -382,8 +395,11 @@ class ApplianceStore extends ChangeNotifier {
   Future<void> replaceAll(Iterable<Appliance> appliances) async {
     await _runWithRepositoryWatchPaused<void>(() async {
       final replacement = List<Appliance>.from(appliances);
-      await _repository.saveAppliances(replacement);
-      _appliances = replacement;
+      final persisted = await _persistAppliances(
+        replacement,
+        forceOverwrite: true,
+      );
+      _appliances = persisted;
       notifyListeners();
       await _syncRemindersSafely();
     });
@@ -416,8 +432,8 @@ class ApplianceStore extends ChangeNotifier {
       }
 
       final updated = [..._appliances, ...imported];
-      await _repository.saveAppliances(updated);
-      _appliances = updated;
+      final persisted = await _persistAppliances(updated);
+      _appliances = persisted;
       notifyListeners();
       await _syncRemindersSafely();
       return imported.length;
@@ -461,8 +477,8 @@ class ApplianceStore extends ChangeNotifier {
       return;
     }
 
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _cancelReminderSafely(applianceId);
   }

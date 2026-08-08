@@ -20,7 +20,8 @@ class FirestoreApplianceRepository
         OwnerScopedApplianceRepository,
         ApplianceRepositoryDiagnostics,
         WatchableApplianceRepository,
-        CloudSyncAwareApplianceRepository {
+        CloudSyncAwareApplianceRepository,
+        ConflictProtectedApplianceRepository {
   FirestoreApplianceRepository({
     FirebaseFirestore? firestore,
     FileApplianceRepository? localRepository,
@@ -42,6 +43,7 @@ class FirestoreApplianceRepository
   String? _ownerUid;
   String? _lastLoadWarning;
   Map<String, String> _lastCloudFingerprints = {};
+  Map<String, int> _lastCloudRevisions = {};
   bool _hasCloudBaseline = false;
   DateTime? _lastSyncedAt;
   String? _installationId;
@@ -97,6 +99,7 @@ class FirestoreApplianceRepository
     _ownerUid = normalized == null || normalized.isEmpty ? null : normalized;
     _lastLoadWarning = null;
     _lastCloudFingerprints = {};
+    _lastCloudRevisions = {};
     _hasCloudBaseline = false;
     _lastSyncedAt = null;
     _installationId = null;
@@ -337,53 +340,52 @@ class FirestoreApplianceRepository
 
   @override
   Future<void> saveAppliances(List<Appliance> appliances) async {
-    final ownerAtStart = _requiredOwnerUid;
+    await saveAppliancesProtected(appliances);
+  }
 
-    // Always preserve the complete on-device record first. This includes
-    // invoice/warranty/service attachment paths that must stay device-local.
-    await _localRepository.saveAppliances(appliances);
+  @override
+  Future<List<Appliance>> saveAppliancesProtected(
+    List<Appliance> appliances, {
+    bool forceOverwrite = false,
+  }) async {
+    final ownerAtStart = _requiredOwnerUid;
 
     if (!_hasCloudBaseline) {
       try {
-        final snapshot = await _appliancesCollection.get().timeout(_retryWait);
-
+        final snapshot = await _appliancesCollection
+            .get(const GetOptions(source: Source.server))
+            .timeout(_retryWait);
         _updateStatusFromSnapshot(ownerAtStart, snapshot);
         _rememberCloudBaseline(_decodeSnapshot(snapshot));
       } on TimeoutException {
-        _rememberCloudBaseline(appliances);
-
+        await _localRepository.saveAppliances(appliances);
         _emitForOwner(
           ownerAtStart,
           CloudSyncStatus(
             state: CloudSyncState.offline,
             lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: true,
             message:
-                'Cloud connection is slow. Restore was saved locally and will sync automatically.',
+                'Changes are saved on this device and need cloud verification.',
           ),
         );
+        return appliances;
       } on FirebaseException catch (error) {
-        if (!_isOfflineError(error)) {
+        if (_isOfflineError(error)) {
+          await _localRepository.saveAppliances(appliances);
           _emitForOwner(
             ownerAtStart,
             CloudSyncStatus(
-              state: CloudSyncState.error,
+              state: CloudSyncState.offline,
               lastSyncedAt: _lastSyncedAt,
-              message: _firebaseMessage(error),
+              hasPendingWrites: true,
+              message:
+                  'Changes are saved on this device and need cloud verification.',
             ),
           );
-          rethrow;
+          return appliances;
         }
-
-        // The local file is our best-known baseline when starting offline.
-        _rememberCloudBaseline(appliances);
-        _emitForOwner(
-          ownerAtStart,
-          CloudSyncStatus(
-            state: CloudSyncState.offline,
-            lastSyncedAt: _lastSyncedAt,
-            message: 'Changes will sync when a connection is available.',
-          ),
-        );
+        rethrow;
       }
     }
 
@@ -404,17 +406,8 @@ class FirestoreApplianceRepository
         .toList(growable: false);
 
     if (changedList.isEmpty && deletedList.isEmpty) {
-      return;
-    }
-
-    final batch = _firestore.batch();
-
-    for (final id in changedList) {
-      batch.set(_appliancesCollection.doc(id), _cloudPayload(desiredById[id]!));
-    }
-
-    for (final id in deletedList) {
-      batch.delete(_appliancesCollection.doc(id));
+      await _localRepository.saveAppliances(appliances);
+      return appliances;
     }
 
     _emitForOwner(
@@ -426,45 +419,134 @@ class FirestoreApplianceRepository
       ),
     );
 
-    final commit = batch.commit();
     try {
-      await commit.timeout(_writeWait);
+      final resolved = await _firestore
+          .runTransaction<List<Appliance>>((transaction) async {
+            final currentSnapshots =
+                <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+            for (final id in {...changedList, ...deletedList}) {
+              currentSnapshots[id] = await transaction.get(
+                _appliancesCollection.doc(id),
+              );
+            }
+
+            final resolvedById = <String, Appliance>{
+              for (final appliance in appliances) appliance.id: appliance,
+            };
+
+            for (final id in changedList) {
+              final desired = desiredById[id]!;
+              final current = currentSnapshots[id]!;
+              final currentData = current.data();
+              final currentRevision =
+                  (currentData?['cloudRevision'] as num?)?.toInt() ?? 0;
+              final expectedRevision = desired.cloudRevision;
+
+              if (!forceOverwrite) {
+                if (!current.exists && expectedRevision != 0) {
+                  throw ApplianceConflictException(
+                    applianceId: id,
+                    message:
+                        'This appliance was deleted on another device. Reopen HomeVault before making more changes.',
+                  );
+                }
+
+                if (current.exists && currentRevision != expectedRevision) {
+                  throw ApplianceConflictException(
+                    applianceId: id,
+                    message:
+                        'This appliance was updated on another device. Your older copy was not uploaded.',
+                  );
+                }
+              }
+
+              final nextRevision = currentRevision + 1;
+              transaction.set(
+                _appliancesCollection.doc(id),
+                _cloudPayload(desired, cloudRevision: nextRevision),
+              );
+
+              resolvedById[id] = desired.withCloudSyncMetadata(
+                cloudRevision: nextRevision,
+                cloudUpdatedByDevice: _requiredInstallationId,
+              );
+            }
+
+            for (final id in deletedList) {
+              final current = currentSnapshots[id]!;
+              if (!current.exists) {
+                continue;
+              }
+
+              final currentRevision =
+                  (current.data()?['cloudRevision'] as num?)?.toInt() ?? 0;
+              final expectedRevision = _lastCloudRevisions[id] ?? 0;
+
+              if (!forceOverwrite && currentRevision != expectedRevision) {
+                throw ApplianceConflictException(
+                  applianceId: id,
+                  message:
+                      'This appliance was updated on another device and was not deleted. Reopen it and try again.',
+                );
+              }
+
+              transaction.delete(_appliancesCollection.doc(id));
+            }
+
+            return appliances
+                .map((item) => resolvedById[item.id] ?? item)
+                .toList(growable: false);
+          })
+          .timeout(_retryWait);
+
+      await _localRepository.saveAppliances(resolved);
+      _rememberCloudBaseline(resolved);
       _lastLoadWarning = null;
-      _lastCloudFingerprints = desiredFingerprints;
-      _hasCloudBaseline = true;
       _markSynced(ownerAtStart);
+      return resolved;
+    } on ApplianceConflictException {
+      final snapshot = await _appliancesCollection
+          .get(const GetOptions(source: Source.server))
+          .timeout(_retryWait);
+      final cloudAppliances = _decodeSnapshot(snapshot);
+      final localAppliances = await _localRepository.loadAppliances();
+      final refreshed = _mergeCloudWithLocal(cloudAppliances, localAppliances);
+      await _localRepository.saveAppliances(refreshed);
+      _rememberCloudBaseline(cloudAppliances);
+      _markSynced(ownerAtStart);
+      rethrow;
     } on TimeoutException {
-      // The Firestore SDK retains this write locally. A metadata snapshot will
-      // switch the status back to Synced once the server acknowledges it.
-      _lastCloudFingerprints = desiredFingerprints;
-      _hasCloudBaseline = true;
+      await _localRepository.saveAppliances(appliances);
       _lastLoadWarning =
-          'Changes are saved on this device and are waiting for cloud sync.';
+          'Changes are saved locally and need cloud verification.';
       _emitForOwner(
         ownerAtStart,
         CloudSyncStatus(
           state: CloudSyncState.offline,
           lastSyncedAt: _lastSyncedAt,
           hasPendingWrites: true,
-          message: 'Changes are waiting for cloud sync.',
+          message:
+              'Changes are saved locally and will be checked before cloud upload.',
         ),
       );
+      return appliances;
     } on FirebaseException catch (error) {
       if (_isOfflineError(error)) {
-        // Do not advance the cloud baseline: retrySync() will re-send the
-        // local difference when connectivity returns.
+        await _localRepository.saveAppliances(appliances);
         _lastLoadWarning =
-            'Changes are saved locally and still need cloud sync.';
+            'Changes are saved locally and need cloud verification.';
         _emitForOwner(
           ownerAtStart,
           CloudSyncStatus(
             state: CloudSyncState.offline,
             lastSyncedAt: _lastSyncedAt,
             hasPendingWrites: true,
-            message: 'Changes are waiting for cloud sync.',
+            message:
+                'Changes are saved locally and will be checked before cloud upload.',
           ),
         );
-        return;
+        return appliances;
       }
 
       _emitForOwner(
@@ -474,17 +556,6 @@ class FirestoreApplianceRepository
           lastSyncedAt: _lastSyncedAt,
           hasPendingWrites: true,
           message: _firebaseMessage(error),
-        ),
-      );
-      rethrow;
-    } catch (error) {
-      _emitForOwner(
-        ownerAtStart,
-        CloudSyncStatus(
-          state: CloudSyncState.error,
-          lastSyncedAt: _lastSyncedAt,
-          hasPendingWrites: true,
-          message: 'HomeVault could not save cloud appliance data.',
         ),
       );
       rethrow;
@@ -615,9 +686,6 @@ class FirestoreApplianceRepository
         final data = Map<String, dynamic>.from(document.data());
         data.remove('cloudSchemaVersion');
         data.remove('cloudUpdatedAt');
-        data.remove('cloudUpdatedByDevice');
-        data.remove('cloudRevision');
-
         final appliance = Appliance.fromJson(data);
         if (appliance.id.isEmpty || appliance.id != document.id) {
           skipped++;
@@ -718,6 +786,8 @@ class FirestoreApplianceRepository
 
   Map<String, dynamic> _structuredData(Appliance appliance) {
     final data = Map<String, dynamic>.from(appliance.toJson());
+    data.remove('cloudRevision');
+    data.remove('cloudUpdatedByDevice');
 
     // Phase 1C synchronizes metadata for every attachment while keeping the
     // physical file and its localPath on the device that owns that copy.
@@ -742,13 +812,16 @@ class FirestoreApplianceRepository
     return data;
   }
 
-  Map<String, dynamic> _cloudPayload(Appliance appliance) {
+  Map<String, dynamic> _cloudPayload(
+    Appliance appliance, {
+    int? cloudRevision,
+  }) {
     return {
       ..._structuredData(appliance),
       'cloudSchemaVersion': _cloudSchemaVersion,
       'cloudUpdatedAt': FieldValue.serverTimestamp(),
       'cloudUpdatedByDevice': _requiredInstallationId,
-      'cloudRevision': FieldValue.increment(1),
+      'cloudRevision': cloudRevision ?? (appliance.cloudRevision + 1),
     };
   }
 

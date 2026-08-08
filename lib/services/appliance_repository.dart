@@ -36,6 +36,13 @@ abstract class CloudSyncAwareApplianceRepository {
   Future<void> retrySync();
 }
 
+abstract class ConflictProtectedApplianceRepository {
+  Future<List<Appliance>> saveAppliancesProtected(
+    List<Appliance> appliances, {
+    bool forceOverwrite = false,
+  });
+}
+
 class FileApplianceRepository
     implements
         ApplianceRepository,
@@ -228,6 +235,19 @@ class MemoryApplianceRepository implements ApplianceRepository {
   Future<void> saveAppliances(List<Appliance> appliances) async {
     _appliances = List<Appliance>.from(appliances);
   }
+}
+
+class ApplianceConflictException implements Exception {
+  const ApplianceConflictException({
+    required this.applianceId,
+    required this.message,
+  });
+
+  final String applianceId;
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class ApplianceStorageException implements Exception {

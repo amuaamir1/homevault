@@ -8,6 +8,7 @@ import '../../models/document_form_result.dart';
 import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
 import '../../models/stored_document.dart';
+import '../../services/appliance_repository.dart';
 import '../../services/document_storage_service.dart';
 import '../../services/support_action_service.dart';
 import '../../state/app_scope.dart';
@@ -116,6 +117,18 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.appliance.name} was updated.')),
       );
+    } on ApplianceConflictException catch (error) {
+      for (final document in result.documentsAdded) {
+        try {
+          await DocumentStorageService().deleteStoredDocument(document);
+        } catch (_) {
+          // Keep the conflict as the important result.
+        }
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       for (final document in result.documentsAdded) {
         try {
@@ -325,6 +338,12 @@ class ApplianceDetailsScreen extends StatelessWidget {
 
     try {
       await AppScope.read(context).delete(appliance.id);
+    } on ApplianceConflictException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
