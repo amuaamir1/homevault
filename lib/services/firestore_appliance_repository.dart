@@ -7,6 +7,7 @@ import '../models/appliance.dart';
 import '../models/cloud_sync_status.dart';
 import '../models/stored_document.dart';
 import 'appliance_repository.dart';
+import 'cloud_sync_identity_service.dart';
 
 /// Cloud-backed appliance repository used by HomeVault structured-data sync.
 ///
@@ -23,15 +24,18 @@ class FirestoreApplianceRepository
   FirestoreApplianceRepository({
     FirebaseFirestore? firestore,
     FileApplianceRepository? localRepository,
+    CloudSyncIdentityService? identityService,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _localRepository = localRepository ?? FileApplianceRepository();
+       _localRepository = localRepository ?? FileApplianceRepository(),
+       _identityService = identityService ?? CloudSyncIdentityService();
 
-  static const int _cloudSchemaVersion = 2;
+  static const int _cloudSchemaVersion = 3;
   static const Duration _writeWait = Duration(seconds: 5);
   static const Duration _retryWait = Duration(seconds: 8);
 
   final FirebaseFirestore _firestore;
   final FileApplianceRepository _localRepository;
+  final CloudSyncIdentityService _identityService;
   final StreamController<CloudSyncStatus> _syncStatusController =
       StreamController<CloudSyncStatus>.broadcast();
 
@@ -40,6 +44,7 @@ class FirestoreApplianceRepository
   Map<String, String> _lastCloudFingerprints = {};
   bool _hasCloudBaseline = false;
   DateTime? _lastSyncedAt;
+  String? _installationId;
   CloudSyncStatus _syncStatus = const CloudSyncStatus.unavailable();
 
   @override
@@ -59,6 +64,16 @@ class FirestoreApplianceRepository
       );
     }
     return uid;
+  }
+
+  String get _requiredInstallationId {
+    final installationId = _installationId;
+    if (installationId == null || installationId.isEmpty) {
+      throw const ApplianceStorageException(
+        'HomeVault could not identify this app installation.',
+      );
+    }
+    return installationId;
   }
 
   CollectionReference<Map<String, dynamic>> get _appliancesCollection =>
@@ -84,12 +99,15 @@ class FirestoreApplianceRepository
     _lastCloudFingerprints = {};
     _hasCloudBaseline = false;
     _lastSyncedAt = null;
+    _installationId = null;
 
     await _localRepository.bindOwner(_ownerUid);
+    await _identityService.bindOwner(_ownerUid);
 
     if (_ownerUid == null) {
       _emitSyncStatus(const CloudSyncStatus.unavailable());
     } else {
+      _installationId = await _identityService.installationId();
       _emitSyncStatus(const CloudSyncStatus(state: CloudSyncState.connecting));
     }
   }
@@ -114,9 +132,14 @@ class FirestoreApplianceRepository
       var cloudAppliances = _decodeSnapshot(cloudSnapshot);
 
       final migrationSnapshot = await _migrationDocument.get();
-      final migrationCompleted = migrationSnapshot.data()?['completed'] == true;
+      final migrationData = migrationSnapshot.data();
+      final cloudMigrationCompleted = migrationData?['completed'] == true;
+      final localMigrationCompleted = await _identityService
+          .hasCompletedStructuredMigration();
+      final cloudSchemaVersion =
+          (migrationData?['schemaVersion'] as num?)?.toInt() ?? 0;
 
-      if (!migrationCompleted) {
+      if (!localMigrationCompleted) {
         final cloudIds = cloudAppliances.map((item) => item.id).toSet();
         final missingFromCloud = localAppliances
             .where((item) => !cloudIds.contains(item.id))
@@ -134,7 +157,11 @@ class FirestoreApplianceRepository
         batch.set(_migrationDocument, {
           'completed': true,
           'schemaVersion': _cloudSchemaVersion,
-          'completedAt': FieldValue.serverTimestamp(),
+          'completedAt': cloudMigrationCompleted
+              ? migrationData!['completedAt']
+              : FieldValue.serverTimestamp(),
+          'lastConfirmedAt': FieldValue.serverTimestamp(),
+          'lastConfirmedByDevice': _requiredInstallationId,
         }, SetOptions(merge: true));
 
         if (missingFromCloud.isNotEmpty) {
@@ -151,6 +178,7 @@ class FirestoreApplianceRepository
         final commit = batch.commit();
         try {
           await commit.timeout(_writeWait);
+          await _identityService.markStructuredMigrationCompleted();
 
           cloudSnapshot = await _appliancesCollection.get();
           _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
@@ -163,8 +191,11 @@ class FirestoreApplianceRepository
                 'were moved to your HomeVault cloud account.';
           }
         } on TimeoutException {
-          // Firestore keeps the write queued locally. Keep local records
-          // visible while the SDK waits for connectivity to return.
+          // Firestore keeps the batch queued locally. Mark this device as
+          // migrated so stale local data cannot be re-imported on a later
+          // launch while that queued write is awaiting the server.
+          await _identityService.markStructuredMigrationCompleted();
+
           _emitForOwner(
             ownerAtStart,
             CloudSyncStatus(
@@ -179,6 +210,26 @@ class FirestoreApplianceRepository
             cloudAppliances,
             missingFromCloud,
           );
+        }
+      } else {
+        // This installation has already completed the one-time local import.
+        // Never re-import stale local records merely because the cloud marker
+        // is missing or an older schema marker is present.
+        if (!cloudMigrationCompleted ||
+            cloudSchemaVersion < _cloudSchemaVersion) {
+          try {
+            await _migrationDocument
+                .set({
+                  'completed': true,
+                  'schemaVersion': _cloudSchemaVersion,
+                  'lastConfirmedAt': FieldValue.serverTimestamp(),
+                  'lastConfirmedByDevice': _requiredInstallationId,
+                }, SetOptions(merge: true))
+                .timeout(_writeWait);
+          } on TimeoutException {
+            // The marker update is queued by Firestore. No appliance data is
+            // re-imported, which is the important safety behavior here.
+          }
         }
       }
 
@@ -551,6 +602,8 @@ class FirestoreApplianceRepository
         final data = Map<String, dynamic>.from(document.data());
         data.remove('cloudSchemaVersion');
         data.remove('cloudUpdatedAt');
+        data.remove('cloudUpdatedByDevice');
+        data.remove('cloudRevision');
 
         final appliance = Appliance.fromJson(data);
         if (appliance.id.isEmpty || appliance.id != document.id) {
@@ -681,6 +734,8 @@ class FirestoreApplianceRepository
       ..._structuredData(appliance),
       'cloudSchemaVersion': _cloudSchemaVersion,
       'cloudUpdatedAt': FieldValue.serverTimestamp(),
+      'cloudUpdatedByDevice': _requiredInstallationId,
+      'cloudRevision': FieldValue.increment(1),
     };
   }
 

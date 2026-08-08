@@ -117,7 +117,6 @@ class Appliance {
                   (item) =>
                       StoredDocument.fromJson(Map<String, dynamic>.from(item)),
                 )
-                .where((document) => document.localPath.isNotEmpty)
                 .toList(growable: false)
           : const [],
       serviceRecords: serviceJson is List
