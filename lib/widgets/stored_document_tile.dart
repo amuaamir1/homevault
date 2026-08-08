@@ -9,6 +9,7 @@ class StoredDocumentTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onOpen,
+    this.onRetryUpload,
     this.onEdit,
     this.onDelete,
   });
@@ -17,6 +18,7 @@ class StoredDocumentTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onOpen;
+  final VoidCallback? onRetryUpload;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -33,17 +35,33 @@ class StoredDocumentTile extends StatelessWidget {
     }
   }
 
+  String get _availabilityText {
+    if (document.isAvailableOnDevice && document.isAvailableInCloud) {
+      return '${document.formattedSize} • On this device & cloud';
+    }
+    if (document.isAvailableOnDevice) {
+      return '${document.formattedSize} • Cloud upload pending';
+    }
+    if (document.isAvailableInCloud) {
+      return '${document.formattedSize} • Available in cloud';
+    }
+    return '${document.formattedSize} • File unavailable';
+  }
+
+  bool get _canOpen =>
+      document.isAvailableOnDevice || document.isAvailableInCloud;
+
   @override
   Widget build(BuildContext context) {
     final reference = document.reference.trim();
-    final availabilityText = document.isAvailableOnDevice
-        ? document.formattedSize
-        : '${document.formattedSize} • File not on this device';
     final fileDetails = [
       document.fileName,
-      availabilityText,
+      _availabilityText,
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
+
+    final hasActions =
+        onRetryUpload != null || onEdit != null || onDelete != null;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -51,16 +69,20 @@ class StoredDocumentTile extends StatelessWidget {
       title: Text(title),
       subtitle: Text('$subtitle\n$fileDetails'),
       isThreeLine: true,
-      trailing: onEdit == null && onDelete == null
+      trailing: !hasActions
           ? IconButton(
               tooltip: document.isAvailableOnDevice
                   ? 'Open document'
-                  : 'File not on this device',
-              onPressed: document.isAvailableOnDevice ? onOpen : null,
+                  : document.isAvailableInCloud
+                  ? 'Download and open'
+                  : 'File unavailable',
+              onPressed: _canOpen ? onOpen : null,
               icon: Icon(
                 document.isAvailableOnDevice
                     ? Icons.open_in_new
-                    : Icons.cloud_done_outlined,
+                    : document.isAvailableInCloud
+                    ? Icons.cloud_download_outlined
+                    : Icons.cloud_off_outlined,
               ),
             )
           : PopupMenuButton<String>(
@@ -69,6 +91,9 @@ class StoredDocumentTile extends StatelessWidget {
                 switch (action) {
                   case 'open':
                     onOpen();
+                    break;
+                  case 'upload':
+                    onRetryUpload?.call();
                     break;
                   case 'edit':
                     onEdit?.call();
@@ -79,20 +104,38 @@ class StoredDocumentTile extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                if (document.isAvailableOnDevice)
-                  const PopupMenuItem(
+                if (_canOpen)
+                  PopupMenuItem(
                     value: 'open',
                     child: ListTile(
-                      leading: Icon(Icons.open_in_new),
-                      title: Text('Open'),
+                      leading: Icon(
+                        document.isAvailableOnDevice
+                            ? Icons.open_in_new
+                            : Icons.cloud_download_outlined,
+                      ),
+                      title: Text(
+                        document.isAvailableOnDevice
+                            ? 'Open'
+                            : 'Download and open',
+                      ),
                     ),
                   )
                 else
                   const PopupMenuItem(
                     enabled: false,
                     child: ListTile(
-                      leading: Icon(Icons.cloud_done_outlined),
-                      title: Text('File not on this device'),
+                      leading: Icon(Icons.cloud_off_outlined),
+                      title: Text('File unavailable'),
+                    ),
+                  ),
+                if (onRetryUpload != null &&
+                    document.isAvailableOnDevice &&
+                    !document.isAvailableInCloud)
+                  const PopupMenuItem(
+                    value: 'upload',
+                    child: ListTile(
+                      leading: Icon(Icons.cloud_upload_outlined),
+                      title: Text('Retry cloud upload'),
                     ),
                   ),
                 if (onEdit != null)
@@ -113,7 +156,7 @@ class StoredDocumentTile extends StatelessWidget {
                   ),
               ],
             ),
-      onTap: document.isAvailableOnDevice ? onOpen : null,
+      onTap: _canOpen ? onOpen : null,
     );
   }
 }

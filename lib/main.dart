@@ -6,6 +6,7 @@ import 'auth/auth_controller.dart';
 import 'firebase_options.dart';
 import 'profile/profile_controller.dart';
 import 'services/appliance_repository.dart';
+import 'services/cloud_document_storage_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/firestore_appliance_repository.dart';
 import 'services/warranty_notification_service.dart';
@@ -55,6 +56,7 @@ Future<void> main() async {
             localRepository: FileApplianceRepository(),
           ),
           reminderScheduler: notificationService,
+          cloudDocumentStorage: FirebaseCloudDocumentStorage(),
         )
       : ApplianceStore(reminderScheduler: notificationService);
 

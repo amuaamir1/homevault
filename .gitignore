@@ -46,3 +46,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 android/key.properties
+
+# Firebase client configuration is recreated from trusted local/CI settings.
+android/app/google-services.json
+android/app/google-services.json.*
+lib/firebase_options.dart
+lib/firebase_options.dart.*

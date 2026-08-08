@@ -8,19 +8,29 @@ import '../models/cloud_sync_status.dart';
 import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
+import '../services/cloud_document_storage_service.dart';
 import '../services/crash_reporting_service.dart';
+import '../services/document_storage_service.dart';
 import '../services/warranty_notification_service.dart';
 
 class ApplianceStore extends ChangeNotifier {
   ApplianceStore({
     ApplianceRepository? repository,
     WarrantyReminderScheduler? reminderScheduler,
+    CloudDocumentStorage? cloudDocumentStorage,
+    DocumentStorageService? documentStorageService,
   }) : _repository = repository ?? FileApplianceRepository(),
        _reminderScheduler =
-           reminderScheduler ?? const NoOpWarrantyReminderScheduler();
+           reminderScheduler ?? const NoOpWarrantyReminderScheduler(),
+       _cloudDocumentStorage =
+           cloudDocumentStorage ?? const NoOpCloudDocumentStorage(),
+       _documentStorageService =
+           documentStorageService ?? DocumentStorageService();
 
   final ApplianceRepository _repository;
   final WarrantyReminderScheduler _reminderScheduler;
+  final CloudDocumentStorage _cloudDocumentStorage;
+  final DocumentStorageService _documentStorageService;
   List<Appliance> _appliances = [];
   bool _isLoading = false;
   bool _isInitialized = false;
@@ -31,6 +41,7 @@ class ApplianceStore extends ChangeNotifier {
   StreamSubscription<List<Appliance>>? _repositorySubscription;
   StreamSubscription<CloudSyncStatus>? _syncStatusSubscription;
   CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
+  Future<void>? _documentSyncInProgress;
 
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
@@ -43,6 +54,7 @@ class ApplianceStore extends ChangeNotifier {
   CloudSyncStatus get cloudSyncStatus => _cloudSyncStatus;
   bool get cloudSyncAvailable =>
       _repository is CloudSyncAwareApplianceRepository;
+  bool get cloudDocumentStorageAvailable => _cloudDocumentStorage.isAvailable;
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -79,6 +91,8 @@ class ApplianceStore extends ChangeNotifier {
     final nextOwner = normalized == null || normalized.isEmpty
         ? null
         : normalized;
+
+    await _cloudDocumentStorage.bindOwner(nextOwner);
 
     if (_repository is! OwnerScopedApplianceRepository) {
       final ownerChanged = _ownerUid != nextOwner;
@@ -157,6 +171,7 @@ class ApplianceStore extends ChangeNotifier {
       _isInitialized = true;
       await _syncRemindersSafely();
       await _startRepositoryWatch();
+      unawaited(retryCloudDocumentSync());
     } catch (error, stack) {
       _loadError = error.toString();
       _isInitialized = false;
@@ -220,6 +235,7 @@ class ApplianceStore extends ChangeNotifier {
     try {
       await syncRepository.retrySync();
       await _startRepositoryWatch();
+      await retryCloudDocumentSync();
       return syncRepository.syncStatus.state == CloudSyncState.synced ||
           syncRepository.syncStatus.state == CloudSyncState.syncing;
     } catch (error, stack) {
@@ -253,6 +269,7 @@ class ApplianceStore extends ChangeNotifier {
 
         notifyListeners();
         unawaited(_syncRemindersSafely());
+        unawaited(retryCloudDocumentSync());
       },
       onError: (Object error, StackTrace stack) {
         _loadWarning =
@@ -305,12 +322,220 @@ class ApplianceStore extends ChangeNotifier {
     return appliances;
   }
 
+  Future<void> retryCloudDocumentSync() {
+    if (!_cloudDocumentStorage.isAvailable || _ownerUid == null) {
+      return Future.value();
+    }
+
+    final existing = _documentSyncInProgress;
+    if (existing != null) {
+      return existing;
+    }
+
+    final operation = _syncPendingCloudDocuments();
+    _documentSyncInProgress = operation;
+    return operation.whenComplete(() {
+      if (identical(_documentSyncInProgress, operation)) {
+        _documentSyncInProgress = null;
+      }
+    });
+  }
+
+  Future<StoredDocument> uploadDocument(
+    String applianceId,
+    String documentId,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable) {
+      throw const CloudDocumentStorageException(
+        'Cloud document storage is not available in this build.',
+      );
+    }
+
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    final document = _documentById(appliance, documentId);
+    if (document == null) {
+      throw StateError('The document could not be found.');
+    }
+
+    if (document.isAvailableInCloud) {
+      return document;
+    }
+
+    if (!document.isAvailableOnDevice) {
+      throw const CloudDocumentStorageException(
+        'The document file is not available on this device.',
+      );
+    }
+
+    final uploaded = await _cloudDocumentStorage.upload(
+      applianceId: applianceId,
+      document: document,
+    );
+
+    try {
+      await update(appliance.replaceDocument(documentId, uploaded));
+    } catch (_) {
+      try {
+        await _cloudDocumentStorage.delete(uploaded);
+      } catch (cleanupError, cleanupStack) {
+        await CrashReportingService.recordNonFatal(
+          cleanupError,
+          cleanupStack,
+          reason: 'Cleaning up an unreferenced cloud document upload',
+        );
+      }
+      rethrow;
+    }
+
+    final refreshedAppliance = applianceById(applianceId);
+    return refreshedAppliance == null
+        ? uploaded
+        : _documentById(refreshedAppliance, documentId) ?? uploaded;
+  }
+
+  Future<StoredDocument> downloadDocument(
+    String applianceId,
+    String documentId,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable) {
+      throw const CloudDocumentStorageException(
+        'Cloud document storage is not available in this build.',
+      );
+    }
+
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    final document = _documentById(appliance, documentId);
+    if (document == null) {
+      throw StateError('The document could not be found.');
+    }
+
+    if (document.isAvailableOnDevice) {
+      return document;
+    }
+
+    if (!document.isAvailableInCloud) {
+      throw const CloudDocumentStorageException(
+        'This document has not been uploaded to cloud storage yet.',
+      );
+    }
+
+    final destinationPath = await _documentStorageService
+        .prepareDownloadDestination(
+          applianceId: applianceId,
+          document: document,
+        );
+
+    final downloaded = await _cloudDocumentStorage.download(
+      document: document,
+      destinationPath: destinationPath,
+    );
+
+    // localPath is excluded from the Firestore fingerprint. This update writes
+    // the downloaded path only to this device's local repository and therefore
+    // does not create a new cloud revision by itself.
+    await update(appliance.replaceDocument(documentId, downloaded));
+
+    final refreshedAppliance = applianceById(applianceId);
+    return refreshedAppliance == null
+        ? downloaded
+        : _documentById(refreshedAppliance, documentId) ?? downloaded;
+  }
+
+  Future<void> _syncPendingCloudDocuments() async {
+    final applianceIds = _appliances
+        .map((appliance) => appliance.id)
+        .toList(growable: false);
+
+    for (final applianceId in applianceIds) {
+      final current = applianceById(applianceId);
+      if (current == null) continue;
+
+      final pendingIds = current.allDocuments
+          .where((document) => document.needsCloudUpload)
+          .map((document) => document.id)
+          .toList(growable: false);
+
+      for (final documentId in pendingIds) {
+        final latest = applianceById(applianceId);
+        final latestDocument = latest == null
+            ? null
+            : _documentById(latest, documentId);
+
+        if (latestDocument == null || !latestDocument.needsCloudUpload) {
+          continue;
+        }
+
+        try {
+          await uploadDocument(applianceId, documentId);
+        } catch (error, stack) {
+          await CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Uploading a pending HomeVault cloud document',
+          );
+        }
+      }
+    }
+  }
+
+  StoredDocument? _documentById(Appliance appliance, String documentId) {
+    for (final document in appliance.allDocuments) {
+      if (document.id == documentId) {
+        return document;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _cleanupRemovedCloudCopiesSafely(
+    Iterable<Appliance> previous,
+    Iterable<Appliance> current,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable) return;
+
+    final currentPaths = current
+        .expand((appliance) => appliance.allDocuments)
+        .map((document) => document.cloudStoragePath.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+
+    final staleDocuments = previous
+        .expand((appliance) => appliance.allDocuments)
+        .where(
+          (document) =>
+              document.isAvailableInCloud &&
+              !currentPaths.contains(document.cloudStoragePath.trim()),
+        )
+        .toList(growable: false);
+
+    for (final document in staleDocuments) {
+      try {
+        await _cloudDocumentStorage.delete(document);
+      } catch (error, stack) {
+        await CrashReportingService.recordNonFatal(
+          error,
+          stack,
+          reason: 'Deleting an unreferenced HomeVault cloud document',
+        );
+      }
+    }
+  }
+
   Future<void> add(Appliance appliance) async {
     final updated = [..._appliances, appliance];
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
     notifyListeners();
     await _scheduleReminderSafely(appliance);
+    unawaited(retryCloudDocumentSync());
   }
 
   Future<void> update(Appliance appliance) async {
@@ -319,12 +544,18 @@ class ApplianceStore extends ChangeNotifier {
       throw StateError('The appliance could not be found.');
     }
 
+    final previousAppliances = [..._appliances];
     final updated = [..._appliances];
     updated[index] = appliance;
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
     notifyListeners();
-    await _scheduleReminderSafely(appliance);
+
+    await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
+
+    final persistedAppliance = applianceById(appliance.id) ?? appliance;
+    await _scheduleReminderSafely(persistedAppliance);
+    unawaited(retryCloudDocumentSync());
   }
 
   Future<void> rescheduleWarrantyReminders() async {
@@ -394,6 +625,7 @@ class ApplianceStore extends ChangeNotifier {
 
   Future<void> replaceAll(Iterable<Appliance> appliances) async {
     await _runWithRepositoryWatchPaused<void>(() async {
+      final previousAppliances = [..._appliances];
       final replacement = List<Appliance>.from(appliances);
       final persisted = await _persistAppliances(
         replacement,
@@ -401,7 +633,9 @@ class ApplianceStore extends ChangeNotifier {
       );
       _appliances = persisted;
       notifyListeners();
+      await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
       await _syncRemindersSafely();
+      unawaited(retryCloudDocumentSync());
     });
   }
 
@@ -436,6 +670,7 @@ class ApplianceStore extends ChangeNotifier {
       _appliances = persisted;
       notifyListeners();
       await _syncRemindersSafely();
+      unawaited(retryCloudDocumentSync());
       return imported.length;
     });
   }
@@ -469,6 +704,7 @@ class ApplianceStore extends ChangeNotifier {
   }
 
   Future<void> delete(String applianceId) async {
+    final previousAppliances = [..._appliances];
     final updated = _appliances
         .where((item) => item.id != applianceId)
         .toList(growable: false);
@@ -480,6 +716,7 @@ class ApplianceStore extends ChangeNotifier {
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
     notifyListeners();
+    await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
     await _cancelReminderSafely(applianceId);
   }
 

@@ -78,6 +78,31 @@ class DocumentStorageService {
     );
   }
 
+  Future<String> prepareDownloadDestination({
+    required String applianceId,
+    required StoredDocument document,
+  }) async {
+    final rootDirectory = await getApplicationDocumentsDirectory();
+    await _ensureLegacyOwnership(rootDirectory);
+
+    final destinationDirectory = Directory(
+      path.join(
+        _accountApplianceRoot(rootDirectory).path,
+        _sanitisePathPart(applianceId),
+        _sanitisePathPart(document.type.storageFolder),
+      ),
+    );
+    await destinationDirectory.create(recursive: true);
+
+    final safeDocumentId = _sanitisePathPart(document.id);
+    final safeFileName = _sanitiseFileName(document.fileName);
+
+    return path.join(
+      destinationDirectory.path,
+      'cloud_${safeDocumentId}_$safeFileName',
+    );
+  }
+
   Future<void> deleteApplianceDocuments(String applianceId) async {
     final rootDirectory = await getApplicationDocumentsDirectory();
     await _ensureLegacyOwnership(rootDirectory);
