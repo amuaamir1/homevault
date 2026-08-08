@@ -3,6 +3,20 @@ import 'stored_document.dart';
 
 enum WarrantyStatus { active, expiringSoon, expired, notProvided }
 
+enum WarrantyDurationUnit { months, years }
+
+extension WarrantyDurationUnitLabel on WarrantyDurationUnit {
+  String get label => switch (this) {
+    WarrantyDurationUnit.months => 'Months',
+    WarrantyDurationUnit.years => 'Years',
+  };
+
+  String labelFor(int value) => switch (this) {
+    WarrantyDurationUnit.months => value == 1 ? 'month' : 'months',
+    WarrantyDurationUnit.years => value == 1 ? 'year' : 'years',
+  };
+}
+
 enum WarrantyClaimStatus {
   none,
   submitted,
@@ -34,6 +48,8 @@ class Appliance {
     this.serialNumber = '',
     this.purchaseDate,
     this.warrantyExpiryDate,
+    this.warrantyDurationValue,
+    this.warrantyDurationUnit,
     this.supportProvider = '',
     this.supportPhone = '',
     this.supportEmail = '',
@@ -85,6 +101,10 @@ class Appliance {
       serialNumber: json['serialNumber'] as String? ?? '',
       purchaseDate: _dateFromJson(json['purchaseDate']),
       warrantyExpiryDate: _dateFromJson(json['warrantyExpiryDate']),
+      warrantyDurationValue: _positiveIntFromJson(
+        json['warrantyDurationValue'],
+      ),
+      warrantyDurationUnit: _durationUnitFromJson(json['warrantyDurationUnit']),
       supportProvider: json['supportProvider'] as String? ?? '',
       supportPhone: json['supportPhone'] as String? ?? '',
       supportEmail: json['supportEmail'] as String? ?? '',
@@ -148,6 +168,8 @@ class Appliance {
   final String serialNumber;
   final DateTime? purchaseDate;
   final DateTime? warrantyExpiryDate;
+  final int? warrantyDurationValue;
+  final WarrantyDurationUnit? warrantyDurationUnit;
   final String supportProvider;
   final String supportPhone;
   final String supportEmail;
@@ -206,6 +228,60 @@ class Appliance {
       if (record.id == recordId) return record;
     }
     return null;
+  }
+
+  String get warrantyDurationLabel {
+    final value = warrantyDurationValue;
+    final unit = warrantyDurationUnit;
+    if (value == null || unit == null) return '';
+    return '$value ${unit.labelFor(value)}';
+  }
+
+  DateTime? get calculatedWarrantyExpiryDate {
+    final startDate = purchaseDate;
+    final value = warrantyDurationValue;
+    final unit = warrantyDurationUnit;
+    if (startDate == null || value == null || unit == null || value <= 0) {
+      return null;
+    }
+
+    return calculateWarrantyExpiryDate(
+      startDate: startDate,
+      durationValue: value,
+      durationUnit: unit,
+    );
+  }
+
+  static DateTime calculateWarrantyExpiryDate({
+    required DateTime startDate,
+    required int durationValue,
+    required WarrantyDurationUnit durationUnit,
+  }) {
+    if (durationValue <= 0) {
+      throw ArgumentError.value(
+        durationValue,
+        'durationValue',
+        'Warranty duration must be greater than zero.',
+      );
+    }
+
+    final monthsToAdd = switch (durationUnit) {
+      WarrantyDurationUnit.months => durationValue,
+      WarrantyDurationUnit.years => durationValue * 12,
+    };
+
+    final anniversary = _addCalendarMonths(startDate, monthsToAdd);
+
+    // Most warranties are expressed as an inclusive calendar period.
+    // For a normal calendar anniversary, the warranty ends the day before
+    // the same date in the target month/year (08 Aug 2026 + 2 years =>
+    // 07 Aug 2028). If the original day does not exist in the target month
+    // (for example 31 Jan + 1 month), use the clamped target date itself.
+    if (anniversary.day != startDate.day) {
+      return anniversary;
+    }
+
+    return anniversary.subtract(const Duration(days: 1));
   }
 
   DateTime? get effectiveWarrantyExpiryDate {
@@ -349,6 +425,8 @@ class Appliance {
       serialNumber: serialNumber,
       purchaseDate: purchaseDate,
       warrantyExpiryDate: warrantyExpiryDate,
+      warrantyDurationValue: warrantyDurationValue,
+      warrantyDurationUnit: warrantyDurationUnit,
       supportProvider: supportProvider,
       supportPhone: supportPhone,
       supportEmail: supportEmail,
@@ -402,6 +480,8 @@ class Appliance {
       'serialNumber': serialNumber,
       'purchaseDate': purchaseDate?.toIso8601String(),
       'warrantyExpiryDate': warrantyExpiryDate?.toIso8601String(),
+      'warrantyDurationValue': warrantyDurationValue,
+      'warrantyDurationUnit': warrantyDurationUnit?.name,
       'supportProvider': supportProvider,
       'supportPhone': supportPhone,
       'supportEmail': supportEmail,
@@ -465,6 +545,42 @@ class Appliance {
     return document.copyWith(
       type: type,
       title: document.title.trim().isEmpty ? fallbackTitle : document.title,
+    );
+  }
+
+  static int? _positiveIntFromJson(Object? value) {
+    final parsed = value is int ? value : int.tryParse('$value');
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  static WarrantyDurationUnit? _durationUnitFromJson(Object? value) {
+    final name = value as String?;
+    if (name == null || name.isEmpty) return null;
+    for (final unit in WarrantyDurationUnit.values) {
+      if (unit.name == name) return unit;
+    }
+    return null;
+  }
+
+  static DateTime _addCalendarMonths(DateTime date, int months) {
+    final monthIndex = date.month - 1 + months;
+    final targetYear = date.year + monthIndex ~/ 12;
+    final targetMonth = monthIndex % 12 + 1;
+    final lastDayOfTargetMonth = DateTime(targetYear, targetMonth + 1, 0).day;
+    final targetDay = date.day <= lastDayOfTargetMonth
+        ? date.day
+        : lastDayOfTargetMonth;
+
+    return DateTime(
+      targetYear,
+      targetMonth,
+      targetDay,
+      date.hour,
+      date.minute,
+      date.second,
+      date.millisecond,
+      date.microsecond,
     );
   }
 
