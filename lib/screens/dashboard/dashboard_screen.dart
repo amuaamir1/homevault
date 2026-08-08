@@ -7,7 +7,6 @@ import '../../profile/profile_scope.dart';
 import '../../services/homevault_report_service.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/quick_action_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
@@ -185,41 +184,23 @@ class DashboardScreen extends StatelessWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 1.28,
+                childAspectRatio: 1.55,
                 children: [
-                  QuickActionTile(
-                    icon: Icons.add_circle_outline,
-                    title: 'Add appliance',
-                    color: AppColors.primary,
-                    onTap: onAddAppliance,
-                  ),
-                  QuickActionTile(
-                    icon: Icons.manage_search_outlined,
-                    title: 'Global search',
-                    color: AppColors.primary,
-                    onTap: onOpenGlobalSearch,
-                  ),
-                  QuickActionTile(
-                    icon: Icons.verified_user_outlined,
-                    title: 'Warranty center',
-                    color: AppColors.success,
-                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.all),
-                  ),
-                  QuickActionTile(
+                  _DashboardActionCard(
                     icon: Icons.home_repair_service_outlined,
-                    title: 'Service center',
+                    label: 'Service center',
                     color: AppColors.secondary,
                     onTap: () => onOpenServiceCenter(ServiceFilter.all),
                   ),
-                  QuickActionTile(
+                  _DashboardActionCard(
                     icon: Icons.receipt_long_outlined,
-                    title: 'Documents',
+                    label: 'Documents',
                     color: AppColors.warning,
                     onTap: () => onNavigate(AppSection.documents),
                   ),
-                  QuickActionTile(
+                  _DashboardActionCard(
                     icon: Icons.insights_outlined,
-                    title: 'Reports',
+                    label: 'Reports',
                     color: AppColors.textSecondary,
                     onTap: onOpenReports,
                   ),
@@ -279,7 +260,7 @@ class DashboardScreen extends StatelessWidget {
                         subtitle: Text(
                           appliance.brand.isEmpty
                               ? appliance.category
-                              : '${appliance.brand} â€¢ ${appliance.category}',
+                              : '${appliance.brand} Ã¢â‚¬Â¢ ${appliance.category}',
                         ),
                         trailing: WarrantyStatusChip(
                           status: appliance.warrantyStatusAt(DateTime.now()),
@@ -444,6 +425,59 @@ class _MetricCard extends StatelessWidget {
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardActionCard extends StatelessWidget {
+  const _DashboardActionCard({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: color, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 20),
             ],
           ),
         ),

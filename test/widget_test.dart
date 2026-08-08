@@ -86,7 +86,7 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final addApplianceButton = find.text('Add appliance').first;
+    final addApplianceButton = find.byTooltip('Add appliance');
     expect(addApplianceButton, findsOneWidget);
 
     await tester.ensureVisible(addApplianceButton);
@@ -221,7 +221,9 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final warrantyButton = find.text('Warranty center').first;
+    final warrantyButton = find.byKey(
+      const ValueKey('dashboardActiveWarrantyMetric'),
+    );
 
     expect(warrantyButton, findsOneWidget);
 
