@@ -2,12 +2,12 @@ name: HomeVault Developer Release
 
 run-name: HomeVault developer release from ${{ github.sha }}
 
-on:
+'on':
   push:
     branches:
-      - 'develop'
-      - 'develop*'
-      - 'develop/**'
+      - develop
+      - develop*
+      - develop/**
 
 permissions:
   contents: write
