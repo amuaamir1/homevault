@@ -11,9 +11,10 @@ import 'cloud_sync_identity_service.dart';
 
 /// Cloud-backed appliance repository used by HomeVault structured-data sync.
 ///
-/// Firestore stores appliance, warranty, support, service, and notes data.
-/// Device-specific attachment paths remain in the local repository so a path
-/// from one phone is never treated as a valid path on another phone.
+/// Firestore stores appliance, warranty, support, service, notes, and
+/// attachment metadata. Device-specific local paths remain in the local
+/// repository, while private Firebase Storage object paths synchronize between
+/// devices so another authenticated device can download the physical file.
 class FirestoreApplianceRepository
     implements
         ApplianceRepository,
@@ -30,7 +31,7 @@ class FirestoreApplianceRepository
        _localRepository = localRepository ?? FileApplianceRepository(),
        _identityService = identityService ?? CloudSyncIdentityService();
 
-  static const int _cloudSchemaVersion = 3;
+  static const int _cloudSchemaVersion = 4;
   static const Duration _writeWait = Duration(seconds: 5);
   static const Duration _retryWait = Duration(seconds: 8);
 
@@ -789,8 +790,8 @@ class FirestoreApplianceRepository
     data.remove('cloudRevision');
     data.remove('cloudUpdatedByDevice');
 
-    // Phase 1C synchronizes metadata for every attachment while keeping the
-    // physical file and its localPath on the device that owns that copy.
+    // Attachment metadata includes the private Firebase Storage object path,
+    // but localPath always remains device-specific.
     data['invoiceDocument'] = appliance.invoiceDocument?.toCloudMetadataJson();
     data['warrantyDocument'] = appliance.warrantyDocument
         ?.toCloudMetadataJson();

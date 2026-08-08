@@ -48,7 +48,7 @@ class FileApplianceRepository
         ApplianceRepository,
         OwnerScopedApplianceRepository,
         ApplianceRepositoryDiagnostics {
-  static const int _schemaVersion = 4;
+  static const int _schemaVersion = 5;
 
   String? _ownerUid;
   String? _lastLoadWarning;

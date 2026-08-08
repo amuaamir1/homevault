@@ -106,17 +106,22 @@ class DocumentAttachmentField extends StatelessWidget {
                                 ).colorScheme.onSurfaceVariant,
                               ),
                         ),
-                        if (!selectedDocument.isAvailableOnDevice) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            'Metadata synced • file not on this device',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ],
+                        const SizedBox(height: 3),
+                        Text(
+                          selectedDocument.isAvailableOnDevice &&
+                                  selectedDocument.isAvailableInCloud
+                              ? 'Available on this device and in cloud'
+                              : selectedDocument.isAvailableOnDevice
+                              ? 'Available on this device • cloud upload pending'
+                              : selectedDocument.isAvailableInCloud
+                              ? 'Available in cloud • download when needed'
+                              : 'File not available on this device or in cloud',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
                       ],
                     ),
                   ),

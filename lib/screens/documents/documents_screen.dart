@@ -4,6 +4,7 @@ import 'package:open_filex/open_filex.dart';
 import '../../models/appliance.dart';
 import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
+import '../../services/cloud_document_storage_service.dart';
 import '../../services/document_storage_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
@@ -23,26 +24,96 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Future<void> _openDocument(
     BuildContext context,
+    String applianceId,
     StoredDocument document,
   ) async {
-    if (!document.isAvailableOnDevice) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The document metadata is synced, but the file is not stored on this device yet.',
+    var availableDocument = document;
+
+    if (!availableDocument.isAvailableOnDevice) {
+      if (!availableDocument.isAvailableInCloud) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This file has not been uploaded to cloud storage and is not available on this device.',
+            ),
           ),
+        );
+        return;
+      }
+
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Downloading document from HomeVault cloud...'),
+          duration: Duration(seconds: 30),
         ),
       );
-      return;
+
+      try {
+        availableDocument = await AppScope.read(
+          context,
+        ).downloadDocument(applianceId, document.id);
+      } on CloudDocumentStorageException catch (error) {
+        messenger.hideCurrentSnackBar();
+        if (!context.mounted) return;
+        messenger.showSnackBar(SnackBar(content: Text(error.message)));
+        return;
+      } catch (_) {
+        messenger.hideCurrentSnackBar();
+        if (!context.mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('The cloud document could not be downloaded.'),
+          ),
+        );
+        return;
+      }
+
+      messenger.hideCurrentSnackBar();
     }
 
     try {
-      await OpenFilex.open(document.localPath);
+      await OpenFilex.open(availableDocument.localPath);
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('The document could not be opened on this device.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _retryCloudUpload(
+    BuildContext context,
+    String applianceId,
+    StoredDocument document,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Uploading document to HomeVault cloud...'),
+        duration: Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      await AppScope.read(context).uploadDocument(applianceId, document.id);
+      messenger.hideCurrentSnackBar();
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Document uploaded to cloud storage.')),
+      );
+    } on CloudDocumentStorageException catch (error) {
+      messenger.hideCurrentSnackBar();
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      messenger.hideCurrentSnackBar();
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('The cloud upload could not be completed.'),
         ),
       );
     }
@@ -289,8 +360,16 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                     title: entry.document.displayTitle,
                                     subtitle:
                                         '${entry.document.type.label} • ${entry.appliance.name}',
-                                    onOpen: () =>
-                                        _openDocument(context, entry.document),
+                                    onOpen: () => _openDocument(
+                                      context,
+                                      entry.appliance.id,
+                                      entry.document,
+                                    ),
+                                    onRetryUpload: () => _retryCloudUpload(
+                                      context,
+                                      entry.appliance.id,
+                                      entry.document,
+                                    ),
                                     onEdit: () => _editDocument(context, entry),
                                     onDelete: () =>
                                         _deleteDocument(context, entry),

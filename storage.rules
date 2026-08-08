@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedInAs(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function allowedDocumentType() {
+      return request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'image/jpeg'
+        || request.resource.contentType == 'image/png';
+    }
+
+    match /users/{userId}/appliances/{applianceId}/documents/{documentId}/{fileName} {
+      allow read: if signedInAs(userId);
+
+      allow create, update: if signedInAs(userId)
+        && request.resource.size <= 15 * 1024 * 1024
+        && allowedDocumentType();
+
+      allow delete: if signedInAs(userId);
+    }
+  }
+}

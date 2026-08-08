@@ -59,6 +59,8 @@ class StoredDocument {
     required this.localPath,
     required this.sizeBytes,
     required this.attachedAt,
+    this.cloudStoragePath = '',
+    this.cloudContentType = '',
   }) : id = _resolveId(id, attachedAt, fileName);
 
   factory StoredDocument.fromJson(Map<String, dynamic> json) {
@@ -77,6 +79,8 @@ class StoredDocument {
       localPath: localPath,
       sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
       attachedAt: attachedAt,
+      cloudStoragePath: json['cloudStoragePath'] as String? ?? '',
+      cloudContentType: json['cloudContentType'] as String? ?? '',
     );
   }
 
@@ -86,9 +90,20 @@ class StoredDocument {
   final String reference;
   final String notes;
   final String fileName;
+
+  /// Physical file location on this device only.
   final String localPath;
+
   final int sizeBytes;
   final DateTime attachedAt;
+
+  /// Private Firebase Storage object path. This is safe to synchronize through
+  /// Firestore because access is still controlled by Firebase Authentication
+  /// and Storage Security Rules.
+  final String cloudStoragePath;
+
+  /// MIME type used for the Firebase Storage object.
+  final String cloudContentType;
 
   StoredDocument copyWith({
     String? id,
@@ -100,6 +115,8 @@ class StoredDocument {
     String? localPath,
     int? sizeBytes,
     DateTime? attachedAt,
+    String? cloudStoragePath,
+    String? cloudContentType,
   }) {
     return StoredDocument(
       id: id ?? this.id,
@@ -111,6 +128,8 @@ class StoredDocument {
       localPath: localPath ?? this.localPath,
       sizeBytes: sizeBytes ?? this.sizeBytes,
       attachedAt: attachedAt ?? this.attachedAt,
+      cloudStoragePath: cloudStoragePath ?? this.cloudStoragePath,
+      cloudContentType: cloudContentType ?? this.cloudContentType,
     );
   }
 
@@ -125,16 +144,24 @@ class StoredDocument {
       'localPath': localPath,
       'sizeBytes': sizeBytes,
       'attachedAt': attachedAt.toIso8601String(),
+      'cloudStoragePath': cloudStoragePath,
+      'cloudContentType': cloudContentType,
     };
   }
 
   String get displayTitle => title.trim().isEmpty ? type.label : title.trim();
 
-  /// True only when this device has a physical copy of the attachment.
-  ///
-  /// Phase 1C synchronizes document metadata between devices but deliberately
-  /// keeps [localPath] device-specific until cloud file storage is added.
+  /// True when this device has a local copy of the attachment.
   bool get isAvailableOnDevice => localPath.trim().isNotEmpty;
+
+  /// True when an authenticated HomeVault device can retrieve the file from
+  /// Firebase Storage.
+  bool get isAvailableInCloud => cloudStoragePath.trim().isNotEmpty;
+
+  /// A local-only file should be uploaded when cloud document storage is
+  /// available. Existing Phase 1C attachments naturally migrate through this
+  /// state.
+  bool get needsCloudUpload => isAvailableOnDevice && !isAvailableInCloud;
 
   /// Metadata safe to store in Firestore. The device-only local path is never
   /// uploaded because that path is meaningless on another phone.
