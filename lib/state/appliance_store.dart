@@ -38,6 +38,8 @@ class ApplianceStore extends ChangeNotifier {
   String? _loadWarning;
   String? _ownerUid;
   Future<void>? _initialization;
+  Future<void>? _ownerBinding;
+  String? _ownerBindingTarget;
   StreamSubscription<List<Appliance>>? _repositorySubscription;
   StreamSubscription<CloudSyncStatus>? _syncStatusSubscription;
   CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
@@ -86,12 +88,51 @@ class ApplianceStore extends ChangeNotifier {
     return null;
   }
 
-  Future<void> bindOwner(String? uid) async {
+  Future<void> bindOwner(String? uid) {
     final normalized = uid?.trim();
     final nextOwner = normalized == null || normalized.isEmpty
         ? null
         : normalized;
 
+    final activeBinding = _ownerBinding;
+    if (activeBinding != null && _ownerBindingTarget == nextOwner) {
+      return activeBinding;
+    }
+
+    Future<void> runBinding() async {
+      if (activeBinding != null) {
+        try {
+          await activeBinding;
+        } catch (_) {
+          // A newer authentication state must still be allowed to bind even
+          // when the previous owner transition failed.
+        }
+      }
+      await _bindOwnerResolved(nextOwner);
+    }
+
+    final operation = runBinding();
+    _ownerBinding = operation;
+    _ownerBindingTarget = nextOwner;
+
+    void clearActiveBinding() {
+      if (identical(_ownerBinding, operation)) {
+        _ownerBinding = null;
+        _ownerBindingTarget = null;
+      }
+    }
+
+    unawaited(
+      operation.then<void>(
+        (_) => clearActiveBinding(),
+        onError: (Object _, StackTrace _) => clearActiveBinding(),
+      ),
+    );
+
+    return operation;
+  }
+
+  Future<void> _bindOwnerResolved(String? nextOwner) async {
     await _cloudDocumentStorage.bindOwner(nextOwner);
 
     if (_repository is! OwnerScopedApplianceRepository) {

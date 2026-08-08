@@ -33,6 +33,7 @@ class FirestoreApplianceRepository
 
   static const int _cloudSchemaVersion = 4;
   static const Duration _writeWait = Duration(seconds: 5);
+  static const Duration _startupReadWait = Duration(seconds: 2);
   static const Duration _retryWait = Duration(seconds: 8);
 
   final FirebaseFirestore _firestore;
@@ -131,11 +132,15 @@ class FirestoreApplianceRepository
     );
 
     try {
-      var cloudSnapshot = await _appliancesCollection.get();
+      var cloudSnapshot = await _appliancesCollection.get().timeout(
+        _startupReadWait,
+      );
       _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
       var cloudAppliances = _decodeSnapshot(cloudSnapshot);
 
-      final migrationSnapshot = await _migrationDocument.get();
+      final migrationSnapshot = await _migrationDocument.get().timeout(
+        _startupReadWait,
+      );
       final migrationData = migrationSnapshot.data();
       final cloudMigrationCompleted = migrationData?['completed'] == true;
       final localMigrationCompleted = await _identityService
@@ -184,7 +189,9 @@ class FirestoreApplianceRepository
           await commit.timeout(_writeWait);
           await _identityService.markStructuredMigrationCompleted();
 
-          cloudSnapshot = await _appliancesCollection.get();
+          cloudSnapshot = await _appliancesCollection.get().timeout(
+            _startupReadWait,
+          );
           _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
           cloudAppliances = _decodeSnapshot(cloudSnapshot);
 
@@ -247,6 +254,19 @@ class FirestoreApplianceRepository
       }
 
       return merged;
+    } on TimeoutException {
+      _lastLoadWarning =
+          'Cloud sync is taking longer than expected. '
+          'Showing the latest data saved on this device while HomeVault reconnects.';
+      _emitForOwner(
+        ownerAtStart,
+        CloudSyncStatus(
+          state: CloudSyncState.connecting,
+          lastSyncedAt: _lastSyncedAt,
+          message: 'Showing device data while cloud sync reconnects.',
+        ),
+      );
+      return localAppliances;
     } on FirebaseException catch (error) {
       if (_isOfflineError(error)) {
         _rememberCloudBaseline(localAppliances);

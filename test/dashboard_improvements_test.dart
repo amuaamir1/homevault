@@ -102,8 +102,8 @@ void main() {
     expect(find.text('At a glance'), findsOneWidget);
     expect(find.text('Warranty overview'), findsOneWidget);
     expect(find.text('Coming up'), findsOneWidget);
-    expect(find.text('Record completeness'), findsOneWidget);
-    expect(find.text('Quick actions'), findsOneWidget);
+    expect(find.text('Record completeness'), findsNothing);
+    expect(find.text('Quick actions'), findsNothing);
 
     final applianceMetric = find.byKey(
       const ValueKey('dashboardApplianceMetric'),

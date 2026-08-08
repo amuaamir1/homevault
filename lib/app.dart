@@ -54,6 +54,7 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
   late final bool _ownsProfileController;
   String? _profileUserId;
   int _authenticationEpoch = 0;
+  Future<void> _authenticationApplyQueue = Future<void>.value();
 
   @override
   void initState() {
@@ -77,11 +78,24 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
 
   Future<void> _initializeAuthentication() async {
     await _authController!.initialize();
-    await _applyAuthenticationState();
+    await _scheduleAuthenticationStateApply();
   }
 
   void _handleAuthenticationChanged() {
-    unawaited(_applyAuthenticationState());
+    unawaited(_scheduleAuthenticationStateApply());
+  }
+
+  Future<void> _scheduleAuthenticationStateApply() {
+    _authenticationApplyQueue = _authenticationApplyQueue
+        .then((_) => _applyAuthenticationState())
+        .catchError((Object error, StackTrace stack) async {
+          await CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Applying authenticated HomeVault startup state',
+          );
+        });
+    return _authenticationApplyQueue;
   }
 
   Future<void> _applyAuthenticationState() async {

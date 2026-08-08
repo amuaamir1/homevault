@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../models/app_section.dart';
 import '../../models/appliance.dart';
 import '../../models/homevault_report.dart';
 import '../../profile/profile_scope.dart';
@@ -14,8 +13,9 @@ import '../warranty/warranty_screen.dart';
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
-    required this.onNavigate,
     required this.onAddAppliance,
+    required this.onOpenAppliances,
+    required this.onOpenDocuments,
     required this.onOpenWarrantyCenter,
     required this.onOpenServiceCenter,
     required this.onOpenGlobalSearch,
@@ -23,8 +23,9 @@ class DashboardScreen extends StatelessWidget {
     required this.onOpenAppliance,
   });
 
-  final ValueChanged<AppSection> onNavigate;
   final Future<void> Function() onAddAppliance;
+  final Future<void> Function() onOpenAppliances;
+  final Future<void> Function() onOpenDocuments;
   final Future<void> Function(WarrantyFilter initialFilter)
   onOpenWarrantyCenter;
   final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
@@ -109,7 +110,7 @@ class DashboardScreen extends StatelessWidget {
                     label: 'Appliances',
                     value: '${report.totalAppliances}',
                     color: AppColors.primary,
-                    onTap: () => onNavigate(AppSection.appliances),
+                    onTap: onOpenAppliances,
                   ),
                   _MetricCard(
                     key: const ValueKey('dashboardDocumentMetric'),
@@ -117,7 +118,7 @@ class DashboardScreen extends StatelessWidget {
                     label: 'Documents',
                     value: '${report.totalDocuments}',
                     color: AppColors.warning,
-                    onTap: () => onNavigate(AppSection.documents),
+                    onTap: onOpenDocuments,
                   ),
                   _MetricCard(
                     key: const ValueKey('dashboardActiveWarrantyMetric'),
@@ -162,51 +163,6 @@ class DashboardScreen extends StatelessWidget {
                 onOpenServiceCenter: onOpenServiceCenter,
               ),
               const SizedBox(height: 28),
-              _RecordHealthCard(report: report, onOpenReports: onOpenReports),
-              const SizedBox(height: 28),
-              Text(
-                'Quick actions',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Go straight to the tasks you use most.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.55,
-                children: [
-                  _DashboardActionCard(
-                    icon: Icons.home_repair_service_outlined,
-                    label: 'Service center',
-                    color: AppColors.secondary,
-                    onTap: () => onOpenServiceCenter(ServiceFilter.all),
-                  ),
-                  _DashboardActionCard(
-                    icon: Icons.receipt_long_outlined,
-                    label: 'Documents',
-                    color: AppColors.warning,
-                    onTap: () => onNavigate(AppSection.documents),
-                  ),
-                  _DashboardActionCard(
-                    icon: Icons.insights_outlined,
-                    label: 'Reports',
-                    color: AppColors.textSecondary,
-                    onTap: onOpenReports,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
               Row(
                 children: [
                   Expanded(
@@ -219,7 +175,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   if (recentAppliances.isNotEmpty)
                     TextButton(
-                      onPressed: () => onNavigate(AppSection.appliances),
+                      onPressed: onOpenAppliances,
                       child: const Text('View all'),
                     ),
                 ],
@@ -260,7 +216,7 @@ class DashboardScreen extends StatelessWidget {
                         subtitle: Text(
                           appliance.brand.isEmpty
                               ? appliance.category
-                              : '${appliance.brand} Ã¢â‚¬Â¢ ${appliance.category}',
+                              : '${appliance.brand} \u2022 ${appliance.category}',
                         ),
                         trailing: WarrantyStatusChip(
                           status: appliance.warrantyStatusAt(DateTime.now()),
@@ -425,59 +381,6 @@ class _MetricCard extends StatelessWidget {
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardActionCard extends StatelessWidget {
-  const _DashboardActionCard({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: color, size: 23),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              const Icon(Icons.chevron_right, size: 20),
             ],
           ),
         ),
@@ -746,139 +649,4 @@ class _UpcomingItem {
   final int daysRemaining;
   final IconData icon;
   final Color color;
-}
-
-class _RecordHealthCard extends StatelessWidget {
-  const _RecordHealthCard({required this.report, required this.onOpenReports});
-
-  final HomeVaultReport report;
-  final Future<void> Function() onOpenReports;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = report.totalAppliances;
-    final completeWarranty = report.appliancesWithWarrantyDate;
-    final completeDocuments = report.appliancesWithDocuments;
-    final completeSupport = report.appliancesWithSupport;
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpenReports,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.fact_check_outlined,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Record completeness',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          total == 0
-                              ? 'Add an appliance to start building your records.'
-                              : 'Fill the important details so they are ready when you need them.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _CompletenessRow(
-                label: 'Warranty dates',
-                completed: completeWarranty,
-                total: total,
-              ),
-              const SizedBox(height: 12),
-              _CompletenessRow(
-                label: 'Documents',
-                completed: completeDocuments,
-                total: total,
-              ),
-              const SizedBox(height: 12),
-              _CompletenessRow(
-                label: 'Support details',
-                completed: completeSupport,
-                total: total,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CompletenessRow extends StatelessWidget {
-  const _CompletenessRow({
-    required this.label,
-    required this.completed,
-    required this.total,
-  });
-
-  final String label;
-  final int completed;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = total == 0 ? 0.0 : completed / total;
-
-    return Row(
-      children: [
-        SizedBox(
-          width: 105,
-          child: Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Expanded(
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 7,
-            borderRadius: BorderRadius.circular(99),
-          ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 42,
-          child: Text(
-            '$completed/$total',
-            textAlign: TextAlign.end,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
-  }
 }

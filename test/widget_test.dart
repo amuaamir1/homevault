@@ -72,12 +72,34 @@ void main() {
 
     expect(find.text('HomeVault'), findsOneWidget);
     expect(find.text('Welcome Aamir'), findsOneWidget);
-    expect(find.text('Quick actions'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Appliances'), findsWidgets);
-    expect(find.text('Documents'), findsWidgets);
-    expect(find.text('Support'), findsWidgets);
-    expect(find.text('Settings'), findsWidgets);
+    expect(find.text('Quick actions'), findsNothing);
+
+    final navigationBar = find.byType(NavigationBar);
+    expect(navigationBar, findsOneWidget);
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Home')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Service center')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Support')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Settings')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Appliances')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Documents')),
+      findsNothing,
+    );
   });
 
   testWidgets('user can open the add appliance form', (tester) async {
@@ -86,7 +108,10 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final addApplianceButton = find.byTooltip('Add appliance');
+    final addApplianceButton = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byTooltip('Add appliance'),
+    );
     expect(addApplianceButton, findsOneWidget);
 
     await tester.ensureVisible(addApplianceButton);
@@ -139,11 +164,11 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final documentsDestination = find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text('Documents'),
+    final documentsMetric = find.byKey(
+      const ValueKey('dashboardDocumentMetric'),
     );
-    await tester.tap(documentsDestination);
+    expect(documentsMetric, findsOneWidget);
+    await tester.tap(documentsMetric);
     await tester.pumpAndSettle();
 
     expect(find.text('AC manual'), findsOneWidget);
@@ -281,12 +306,21 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final serviceButton = find.text('Service center').first;
-    await tester.ensureVisible(serviceButton);
-    await tester.tap(serviceButton);
+    final serviceDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Service center'),
+    );
+    expect(serviceDestination, findsOneWidget);
+    await tester.tap(serviceDestination);
     await tester.pumpAndSettle();
 
-    expect(find.text('Service center'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Service center'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Service records'), findsOneWidget);
 
     final serviceList = find.byKey(const Key('serviceCenterList'));
