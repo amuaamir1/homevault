@@ -181,7 +181,7 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await store.initialize(force: true);
+            await store.refresh();
             await _loadNotificationStatus();
           },
           child: ListView(

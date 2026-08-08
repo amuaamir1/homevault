@@ -65,168 +65,173 @@ class DashboardScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => store.initialize(force: true),
-        child: SingleChildScrollView(
-          key: const Key('dashboardScrollView'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DashboardHeader(firstName: firstName),
-              if (store.loadWarning != null) ...[
-                const SizedBox(height: 14),
-                MaterialBanner(
-                  content: Text(store.loadWarning!),
-                  leading: const Icon(Icons.warning_amber_outlined),
-                  actions: [
-                    TextButton(
-                      onPressed: store.clearLoadWarning,
-                      child: const Text('Dismiss'),
+      body: ScrollConfiguration(
+        key: const ValueKey('dashboardNoStretchScrollConfiguration'),
+        behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+        child: RefreshIndicator(
+          onRefresh: store.refresh,
+          child: SingleChildScrollView(
+            key: const Key('dashboardScrollView'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DashboardHeader(firstName: firstName),
+                if (store.loadWarning != null) ...[
+                  const SizedBox(height: 14),
+                  MaterialBanner(
+                    content: Text(store.loadWarning!),
+                    leading: const Icon(Icons.warning_amber_outlined),
+                    actions: [
+                      TextButton(
+                        onPressed: store.clearLoadWarning,
+                        child: const Text('Dismiss'),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 24),
+                _SectionTitle(
+                  title: 'At a glance',
+                  subtitle: 'A quick summary of your HomeVault.',
+                  actionLabel: 'Reports',
+                  onAction: onOpenReports,
+                ),
+                const SizedBox(height: 12),
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.55,
+                  children: [
+                    _MetricCard(
+                      key: const ValueKey('dashboardApplianceMetric'),
+                      icon: Icons.home_repair_service_outlined,
+                      label: 'Appliances',
+                      value: '${report.totalAppliances}',
+                      color: AppColors.primary,
+                      onTap: onOpenAppliances,
+                    ),
+                    _MetricCard(
+                      key: const ValueKey('dashboardDocumentMetric'),
+                      icon: Icons.description_outlined,
+                      label: 'Documents',
+                      value: '${report.totalDocuments}',
+                      color: AppColors.warning,
+                      onTap: onOpenDocuments,
+                    ),
+                    _MetricCard(
+                      key: const ValueKey('dashboardActiveWarrantyMetric'),
+                      icon: Icons.verified_user_outlined,
+                      label: 'Active warranty',
+                      value: '${report.warrantyCount(WarrantyStatus.active)}',
+                      color: AppColors.success,
+                      onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
+                    ),
+                    _MetricCard(
+                      key: const ValueKey('dashboardServiceDueMetric'),
+                      icon: Icons.event_available_outlined,
+                      label: 'Service due',
+                      value: '${report.upcomingServices.length}',
+                      color: AppColors.secondary,
+                      onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
                     ),
                   ],
                 ),
-              ],
-              const SizedBox(height: 24),
-              _SectionTitle(
-                title: 'At a glance',
-                subtitle: 'A quick summary of your HomeVault.',
-                actionLabel: 'Reports',
-                onAction: onOpenReports,
-              ),
-              const SizedBox(height: 12),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.55,
-                children: [
-                  _MetricCard(
-                    key: const ValueKey('dashboardApplianceMetric'),
-                    icon: Icons.home_repair_service_outlined,
-                    label: 'Appliances',
-                    value: '${report.totalAppliances}',
-                    color: AppColors.primary,
-                    onTap: onOpenAppliances,
-                  ),
-                  _MetricCard(
-                    key: const ValueKey('dashboardDocumentMetric'),
-                    icon: Icons.description_outlined,
-                    label: 'Documents',
-                    value: '${report.totalDocuments}',
-                    color: AppColors.warning,
-                    onTap: onOpenDocuments,
-                  ),
-                  _MetricCard(
-                    key: const ValueKey('dashboardActiveWarrantyMetric'),
-                    icon: Icons.verified_user_outlined,
-                    label: 'Active warranty',
-                    value: '${report.warrantyCount(WarrantyStatus.active)}',
-                    color: AppColors.success,
-                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
-                  ),
-                  _MetricCard(
-                    key: const ValueKey('dashboardServiceDueMetric'),
-                    icon: Icons.event_available_outlined,
-                    label: 'Service due',
-                    value: '${report.upcomingServices.length}',
-                    color: AppColors.secondary,
-                    onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              _SectionTitle(
-                title: 'Warranty overview',
-                subtitle: 'See which appliances are covered or need attention.',
-                actionLabel: 'View all',
-                onAction: () => onOpenWarrantyCenter(WarrantyFilter.all),
-              ),
-              const SizedBox(height: 12),
-              _WarrantyOverview(
-                report: report,
-                onOpenWarrantyCenter: onOpenWarrantyCenter,
-              ),
-              const SizedBox(height: 28),
-              _SectionTitle(
-                title: 'Coming up',
-                subtitle: 'Upcoming warranty expiries and service dates.',
-              ),
-              const SizedBox(height: 12),
-              _UpcomingActions(
-                report: report,
-                onOpenAppliance: onOpenAppliance,
-                onOpenWarrantyCenter: onOpenWarrantyCenter,
-                onOpenServiceCenter: onOpenServiceCenter,
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Recent appliances',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  if (recentAppliances.isNotEmpty)
-                    TextButton(
-                      onPressed: onOpenAppliances,
-                      child: const Text('View all'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (recentAppliances.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.inventory_2_outlined, size: 40),
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          child: Text(
-                            'No appliances added yet. Add your first appliance to begin.',
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Add appliance',
-                          onPressed: onAddAppliance,
-                          icon: const Icon(Icons.add_circle_outline),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                ...recentAppliances.map(
-                  (appliance) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.devices_other),
-                        ),
-                        title: Text(appliance.name),
-                        subtitle: Text(
-                          appliance.brand.isEmpty
-                              ? appliance.category
-                              : '${appliance.brand} \u2022 ${appliance.category}',
-                        ),
-                        trailing: WarrantyStatusChip(
-                          status: appliance.warrantyStatusAt(DateTime.now()),
-                        ),
-                        onTap: () => onOpenAppliance(appliance.id),
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 28),
+                _SectionTitle(
+                  title: 'Warranty overview',
+                  subtitle:
+                      'See which appliances are covered or need attention.',
+                  actionLabel: 'View all',
+                  onAction: () => onOpenWarrantyCenter(WarrantyFilter.all),
                 ),
-            ],
+                const SizedBox(height: 12),
+                _WarrantyOverview(
+                  report: report,
+                  onOpenWarrantyCenter: onOpenWarrantyCenter,
+                ),
+                const SizedBox(height: 28),
+                _SectionTitle(
+                  title: 'Coming up',
+                  subtitle: 'Upcoming warranty expiries and service dates.',
+                ),
+                const SizedBox(height: 12),
+                _UpcomingActions(
+                  report: report,
+                  onOpenAppliance: onOpenAppliance,
+                  onOpenWarrantyCenter: onOpenWarrantyCenter,
+                  onOpenServiceCenter: onOpenServiceCenter,
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Recent appliances',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (recentAppliances.isNotEmpty)
+                      TextButton(
+                        onPressed: onOpenAppliances,
+                        child: const Text('View all'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (recentAppliances.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.inventory_2_outlined, size: 40),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Text(
+                              'No appliances added yet. Add your first appliance to begin.',
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Add appliance',
+                            onPressed: onAddAppliance,
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ...recentAppliances.map(
+                    (appliance) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Card(
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.devices_other),
+                          ),
+                          title: Text(appliance.name),
+                          subtitle: Text(
+                            appliance.brand.isEmpty
+                                ? appliance.category
+                                : '${appliance.brand} \u2022 ${appliance.category}',
+                          ),
+                          trailing: WarrantyStatusChip(
+                            status: appliance.warrantyStatusAt(DateTime.now()),
+                          ),
+                          onTap: () => onOpenAppliance(appliance.id),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

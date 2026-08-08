@@ -33,6 +33,25 @@ class _DelayedOwnerRepository
   Future<void> saveAppliances(List<Appliance> appliances) async {}
 }
 
+class _DelayedRefreshRepository implements ApplianceRepository {
+  final Completer<List<Appliance>> refreshRelease =
+      Completer<List<Appliance>>();
+
+  int loadCalls = 0;
+
+  @override
+  Future<List<Appliance>> loadAppliances() {
+    loadCalls += 1;
+    if (loadCalls == 1) {
+      return Future.value(const []);
+    }
+    return refreshRelease.future;
+  }
+
+  @override
+  Future<void> saveAppliances(List<Appliance> appliances) async {}
+}
+
 void main() {
   test(
     'same owner bind is coalesced while startup binding is in progress',
@@ -55,6 +74,36 @@ void main() {
       expect(store.ownerUid, 'user-1');
       expect(store.isLoading, isFalse);
       expect(store.isInitialized, isTrue);
+    },
+  );
+
+  test(
+    'repeated refresh requests share one load and keep initialized data visible',
+    () async {
+      final repository = _DelayedRefreshRepository();
+      final store = ApplianceStore(repository: repository);
+      addTearDown(store.dispose);
+
+      await store.initialize();
+      expect(store.isInitialized, isTrue);
+      expect(store.isLoading, isFalse);
+      expect(repository.loadCalls, 1);
+
+      final firstRefresh = store.refresh();
+      final secondRefresh = store.refresh();
+
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.loadCalls, 2);
+      expect(store.isInitialized, isTrue);
+      expect(store.isLoading, isFalse);
+
+      repository.refreshRelease.complete(const []);
+      await Future.wait([firstRefresh, secondRefresh]);
+
+      expect(repository.loadCalls, 2);
+      expect(store.isInitialized, isTrue);
+      expect(store.isLoading, isFalse);
     },
   );
 }

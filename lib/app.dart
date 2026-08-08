@@ -297,7 +297,9 @@ class _StartupGate extends StatelessWidget {
     final store = AppScope.of(context);
     final uid = AuthScope.of(context).user?.uid;
 
-    if (store.ownerUid != uid || store.isLoading) {
+    final initialLoadPending = !store.isInitialized && store.loadError == null;
+
+    if (store.ownerUid != uid || initialLoadPending) {
       return const _LoadingScreen(message: 'Loading your HomeVault...');
     }
 

@@ -38,6 +38,7 @@ class ApplianceStore extends ChangeNotifier {
   String? _loadWarning;
   String? _ownerUid;
   Future<void>? _initialization;
+  Future<void>? _refreshInProgress;
   Future<void>? _ownerBinding;
   String? _ownerBindingTarget;
   StreamSubscription<List<Appliance>>? _repositorySubscription;
@@ -158,6 +159,7 @@ class ApplianceStore extends ChangeNotifier {
     _cloudSyncStatus = const CloudSyncStatus.unavailable();
 
     _ownerUid = nextOwner;
+    _refreshInProgress = null;
     _appliances = [];
     _loadError = null;
     _loadWarning = null;
@@ -197,6 +199,102 @@ class ApplianceStore extends ChangeNotifier {
     return _initialization!;
   }
 
+  /// Refreshes already loaded appliance data without putting the whole app
+  /// back through the startup loading gate.
+  ///
+  /// Repeated pull-to-refresh gestures share the same in-flight operation so
+  /// they cannot stack multiple cloud reads on top of each other.
+  Future<void> refresh() {
+    if (!_isInitialized) {
+      return initialize(force: true);
+    }
+
+    final activeRefresh = _refreshInProgress;
+    if (activeRefresh != null) {
+      return activeRefresh;
+    }
+
+    final operation = _refreshLoadedData();
+    _refreshInProgress = operation;
+
+    return operation.whenComplete(() {
+      if (identical(_refreshInProgress, operation)) {
+        _refreshInProgress = null;
+      }
+    });
+  }
+
+  Future<void> _refreshLoadedData() async {
+    final ownerAtStart = _ownerUid;
+
+    try {
+      final refreshed = await _repository.loadAppliances().timeout(
+        const Duration(seconds: 12),
+      );
+
+      if (_ownerUid != ownerAtStart) {
+        return;
+      }
+
+      _appliances = refreshed;
+      _loadError = null;
+      _isInitialized = true;
+
+      if (_repository is ApplianceRepositoryDiagnostics) {
+        _loadWarning =
+            (_repository as ApplianceRepositoryDiagnostics).lastLoadWarning;
+      }
+
+      notifyListeners();
+
+      // These follow-up tasks should never hold the pull-to-refresh spinner
+      // open or send the app back to its startup loading screen.
+      unawaited(_syncRemindersSafely());
+      if (_repositorySubscription == null) {
+        unawaited(_startRepositoryWatch());
+      }
+      unawaited(retryCloudDocumentSync());
+    } on TimeoutException catch (error, stack) {
+      if (_ownerUid != ownerAtStart) {
+        return;
+      }
+
+      _loadError = null;
+      _isInitialized = true;
+      _loadWarning =
+          'Refresh is taking longer than expected. '
+          'Your last loaded HomeVault data is still available.';
+      notifyListeners();
+
+      unawaited(
+        CrashReportingService.recordNonFatal(
+          error,
+          stack,
+          reason: 'Refreshing appliance data timed out',
+        ),
+      );
+    } catch (error, stack) {
+      if (_ownerUid != ownerAtStart) {
+        return;
+      }
+
+      _loadError = null;
+      _isInitialized = true;
+      _loadWarning =
+          'HomeVault could not refresh right now. '
+          'Your last loaded data is still available.';
+      notifyListeners();
+
+      unawaited(
+        CrashReportingService.recordNonFatal(
+          error,
+          stack,
+          reason: 'Refreshing appliance data',
+        ),
+      );
+    }
+  }
+
   Future<void> _load() async {
     _isLoading = true;
     _loadError = null;
@@ -210,7 +308,7 @@ class ApplianceStore extends ChangeNotifier {
             (_repository as ApplianceRepositoryDiagnostics).lastLoadWarning;
       }
       _isInitialized = true;
-      await _syncRemindersSafely();
+      unawaited(_syncRemindersSafely());
       await _startRepositoryWatch();
       unawaited(retryCloudDocumentSync());
     } catch (error, stack) {

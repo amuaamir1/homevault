@@ -104,6 +104,10 @@ void main() {
     expect(find.text('Coming up'), findsOneWidget);
     expect(find.text('Record completeness'), findsNothing);
     expect(find.text('Quick actions'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('dashboardNoStretchScrollConfiguration')),
+      findsOneWidget,
+    );
 
     final applianceMetric = find.byKey(
       const ValueKey('dashboardApplianceMetric'),
