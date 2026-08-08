@@ -457,6 +457,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       additionalDocuments: existingAppliance?.additionalDocuments ?? const [],
       serviceRecords: existingAppliance?.serviceRecords ?? const [],
       notes: _notesController.text.trim(),
+      cloudRevision: existingAppliance?.cloudRevision ?? 0,
+      cloudUpdatedByDevice: existingAppliance?.cloudUpdatedByDevice ?? '',
       createdAt: existingAppliance?.createdAt ?? DateTime.now(),
     );
 

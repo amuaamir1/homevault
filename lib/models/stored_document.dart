@@ -130,6 +130,29 @@ class StoredDocument {
 
   String get displayTitle => title.trim().isEmpty ? type.label : title.trim();
 
+  /// True only when this device has a physical copy of the attachment.
+  ///
+  /// Phase 1C synchronizes document metadata between devices but deliberately
+  /// keeps [localPath] device-specific until cloud file storage is added.
+  bool get isAvailableOnDevice => localPath.trim().isNotEmpty;
+
+  /// Metadata safe to store in Firestore. The device-only local path is never
+  /// uploaded because that path is meaningless on another phone.
+  Map<String, dynamic> toCloudMetadataJson() {
+    return {...toJson(), 'localPath': ''};
+  }
+
+  /// Keeps cloud metadata authoritative while restoring this device's local
+  /// path when it already has the same document file.
+  StoredDocument withLocalAvailabilityFrom(StoredDocument? localDocument) {
+    if (localDocument != null &&
+        localDocument.id == id &&
+        localDocument.isAvailableOnDevice) {
+      return copyWith(localPath: localDocument.localPath);
+    }
+    return copyWith(localPath: '');
+  }
+
   String get extension {
     final dotIndex = fileName.lastIndexOf('.');
     if (dotIndex == -1 || dotIndex == fileName.length - 1) {

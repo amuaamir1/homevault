@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/appliance.dart';
+import '../models/cloud_sync_status.dart';
 import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
@@ -26,6 +28,9 @@ class ApplianceStore extends ChangeNotifier {
   String? _loadWarning;
   String? _ownerUid;
   Future<void>? _initialization;
+  StreamSubscription<List<Appliance>>? _repositorySubscription;
+  StreamSubscription<CloudSyncStatus>? _syncStatusSubscription;
+  CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
 
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
@@ -35,6 +40,9 @@ class ApplianceStore extends ChangeNotifier {
   String? get loadError => _loadError;
   String? get loadWarning => _loadWarning;
   String? get ownerUid => _ownerUid;
+  CloudSyncStatus get cloudSyncStatus => _cloudSyncStatus;
+  bool get cloudSyncAvailable =>
+      _repository is CloudSyncAwareApplianceRepository;
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -88,6 +96,12 @@ class ApplianceStore extends ChangeNotifier {
 
     if (_ownerUid == nextOwner && _isInitialized) return;
 
+    await _repositorySubscription?.cancel();
+    _repositorySubscription = null;
+    await _syncStatusSubscription?.cancel();
+    _syncStatusSubscription = null;
+    _cloudSyncStatus = const CloudSyncStatus.unavailable();
+
     _ownerUid = nextOwner;
     _appliances = [];
     _loadError = null;
@@ -97,6 +111,7 @@ class ApplianceStore extends ChangeNotifier {
 
     final ownedRepository = _repository as OwnerScopedApplianceRepository;
     await ownedRepository.bindOwner(nextOwner);
+    await _startSyncStatusWatch();
 
     if (nextOwner == null) {
       _isLoading = false;
@@ -141,19 +156,119 @@ class ApplianceStore extends ChangeNotifier {
       }
       _isInitialized = true;
       await _syncRemindersSafely();
+      await _startRepositoryWatch();
     } catch (error, stack) {
       _loadError = error.toString();
       _isInitialized = false;
       await CrashReportingService.recordNonFatal(
         error,
         stack,
-        reason: 'Loading local appliance data',
+        reason: 'Loading appliance data',
       );
     } finally {
       _isLoading = false;
       _initialization = null;
       notifyListeners();
     }
+  }
+
+  Future<void> _startSyncStatusWatch() async {
+    if (_repository is! CloudSyncAwareApplianceRepository) {
+      _cloudSyncStatus = const CloudSyncStatus.unavailable();
+      return;
+    }
+
+    await _syncStatusSubscription?.cancel();
+
+    final syncRepository = _repository as CloudSyncAwareApplianceRepository;
+    _cloudSyncStatus = syncRepository.syncStatus;
+    _syncStatusSubscription = syncRepository.watchSyncStatus().listen(
+      (status) {
+        _cloudSyncStatus = status;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stack) {
+        _cloudSyncStatus = CloudSyncStatus(
+          state: CloudSyncState.error,
+          lastSyncedAt: _cloudSyncStatus.lastSyncedAt,
+          hasPendingWrites: _cloudSyncStatus.hasPendingWrites,
+          message: 'Cloud sync status could not be updated.',
+        );
+        notifyListeners();
+
+        unawaited(
+          CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Listening for cloud sync status',
+          ),
+        );
+      },
+    );
+
+    notifyListeners();
+  }
+
+  Future<bool> retryCloudSync() async {
+    if (_repository is! CloudSyncAwareApplianceRepository ||
+        _ownerUid == null) {
+      return false;
+    }
+
+    final syncRepository = _repository as CloudSyncAwareApplianceRepository;
+
+    try {
+      await syncRepository.retrySync();
+      await _startRepositoryWatch();
+      return syncRepository.syncStatus.state == CloudSyncState.synced ||
+          syncRepository.syncStatus.state == CloudSyncState.syncing;
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Retrying cloud appliance sync',
+      );
+      return false;
+    }
+  }
+
+  Future<void> _startRepositoryWatch() async {
+    if (_repository is! WatchableApplianceRepository || _ownerUid == null) {
+      return;
+    }
+
+    await _repositorySubscription?.cancel();
+
+    final watchableRepository = _repository as WatchableApplianceRepository;
+    _repositorySubscription = watchableRepository.watchAppliances().listen(
+      (appliances) {
+        _appliances = appliances;
+        _isInitialized = true;
+        _loadError = null;
+
+        if (_repository is ApplianceRepositoryDiagnostics) {
+          _loadWarning =
+              (_repository as ApplianceRepositoryDiagnostics).lastLoadWarning;
+        }
+
+        notifyListeners();
+        unawaited(_syncRemindersSafely());
+      },
+      onError: (Object error, StackTrace stack) {
+        _loadWarning =
+            'Cloud sync is temporarily unavailable. '
+            'Your last loaded data remains available.';
+        notifyListeners();
+
+        unawaited(
+          CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Listening for cloud appliance changes',
+          ),
+        );
+      },
+    );
   }
 
   void clearLoadWarning() {
@@ -177,10 +292,23 @@ class ApplianceStore extends ChangeNotifier {
     return sorted.take(3).toList(growable: false);
   }
 
+  Future<List<Appliance>> _persistAppliances(
+    List<Appliance> appliances, {
+    bool forceOverwrite = false,
+  }) async {
+    if (_repository is ConflictProtectedApplianceRepository) {
+      return (_repository as ConflictProtectedApplianceRepository)
+          .saveAppliancesProtected(appliances, forceOverwrite: forceOverwrite);
+    }
+
+    await _repository.saveAppliances(appliances);
+    return appliances;
+  }
+
   Future<void> add(Appliance appliance) async {
     final updated = [..._appliances, appliance];
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _scheduleReminderSafely(appliance);
   }
@@ -193,8 +321,8 @@ class ApplianceStore extends ChangeNotifier {
 
     final updated = [..._appliances];
     updated[index] = appliance;
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _scheduleReminderSafely(appliance);
   }
@@ -265,44 +393,71 @@ class ApplianceStore extends ChangeNotifier {
   }
 
   Future<void> replaceAll(Iterable<Appliance> appliances) async {
-    final replacement = List<Appliance>.from(appliances);
-    await _repository.saveAppliances(replacement);
-    _appliances = replacement;
-    notifyListeners();
-    await _syncRemindersSafely();
+    await _runWithRepositoryWatchPaused<void>(() async {
+      final replacement = List<Appliance>.from(appliances);
+      final persisted = await _persistAppliances(
+        replacement,
+        forceOverwrite: true,
+      );
+      _appliances = persisted;
+      notifyListeners();
+      await _syncRemindersSafely();
+    });
   }
 
   Future<int> mergeAppliances(Iterable<Appliance> appliances) async {
-    final existingIds = _appliances.map((item) => item.id).toSet();
-    final existingSerials = _appliances
-        .map(_serialKey)
-        .whereType<String>()
-        .toSet();
-    final imported = <Appliance>[];
+    return _runWithRepositoryWatchPaused<int>(() async {
+      final existingIds = _appliances.map((item) => item.id).toSet();
+      final existingSerials = _appliances
+          .map(_serialKey)
+          .whereType<String>()
+          .toSet();
+      final imported = <Appliance>[];
 
-    for (final appliance in appliances) {
-      final serialKey = _serialKey(appliance);
-      if (existingIds.contains(appliance.id) ||
-          (serialKey != null && existingSerials.contains(serialKey))) {
-        continue;
+      for (final appliance in appliances) {
+        final serialKey = _serialKey(appliance);
+        if (existingIds.contains(appliance.id) ||
+            (serialKey != null && existingSerials.contains(serialKey))) {
+          continue;
+        }
+        imported.add(appliance);
+        existingIds.add(appliance.id);
+        if (serialKey != null) {
+          existingSerials.add(serialKey);
+        }
       }
-      imported.add(appliance);
-      existingIds.add(appliance.id);
-      if (serialKey != null) {
-        existingSerials.add(serialKey);
+
+      if (imported.isEmpty) {
+        return 0;
       }
+
+      final updated = [..._appliances, ...imported];
+      final persisted = await _persistAppliances(updated);
+      _appliances = persisted;
+      notifyListeners();
+      await _syncRemindersSafely();
+      return imported.length;
+    });
+  }
+
+  Future<T> _runWithRepositoryWatchPaused<T>(
+    Future<T> Function() operation,
+  ) async {
+    final shouldRestart =
+        _repository is WatchableApplianceRepository && _ownerUid != null;
+
+    if (shouldRestart) {
+      await _repositorySubscription?.cancel();
+      _repositorySubscription = null;
     }
 
-    if (imported.isEmpty) {
-      return 0;
+    try {
+      return await operation();
+    } finally {
+      if (shouldRestart && _ownerUid != null) {
+        await _startRepositoryWatch();
+      }
     }
-
-    final updated = [..._appliances, ...imported];
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
-    notifyListeners();
-    await _syncRemindersSafely();
-    return imported.length;
   }
 
   String? _serialKey(Appliance appliance) {
@@ -322,10 +477,17 @@ class ApplianceStore extends ChangeNotifier {
       return;
     }
 
-    await _repository.saveAppliances(updated);
-    _appliances = updated;
+    final persisted = await _persistAppliances(updated);
+    _appliances = persisted;
     notifyListeners();
     await _cancelReminderSafely(applianceId);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_repositorySubscription?.cancel());
+    unawaited(_syncStatusSubscription?.cancel());
+    super.dispose();
   }
 
   Future<void> _syncRemindersSafely() async {

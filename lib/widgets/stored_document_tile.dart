@@ -36,9 +36,12 @@ class StoredDocumentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reference = document.reference.trim();
+    final availabilityText = document.isAvailableOnDevice
+        ? document.formattedSize
+        : '${document.formattedSize} • File not on this device';
     final fileDetails = [
       document.fileName,
-      document.formattedSize,
+      availabilityText,
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
 
@@ -50,9 +53,15 @@ class StoredDocumentTile extends StatelessWidget {
       isThreeLine: true,
       trailing: onEdit == null && onDelete == null
           ? IconButton(
-              tooltip: 'Open document',
-              onPressed: onOpen,
-              icon: const Icon(Icons.open_in_new),
+              tooltip: document.isAvailableOnDevice
+                  ? 'Open document'
+                  : 'File not on this device',
+              onPressed: document.isAvailableOnDevice ? onOpen : null,
+              icon: Icon(
+                document.isAvailableOnDevice
+                    ? Icons.open_in_new
+                    : Icons.cloud_done_outlined,
+              ),
             )
           : PopupMenuButton<String>(
               tooltip: 'Document actions',
@@ -70,19 +79,28 @@ class StoredDocumentTile extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'open',
-                  child: ListTile(
-                    leading: Icon(Icons.open_in_new),
-                    title: Text('Open'),
+                if (document.isAvailableOnDevice)
+                  const PopupMenuItem(
+                    value: 'open',
+                    child: ListTile(
+                      leading: Icon(Icons.open_in_new),
+                      title: Text('Open'),
+                    ),
+                  )
+                else
+                  const PopupMenuItem(
+                    enabled: false,
+                    child: ListTile(
+                      leading: Icon(Icons.cloud_done_outlined),
+                      title: Text('File not on this device'),
+                    ),
                   ),
-                ),
                 if (onEdit != null)
                   const PopupMenuItem(
                     value: 'edit',
                     child: ListTile(
                       leading: Icon(Icons.edit_outlined),
-                      title: Text('Edit'),
+                      title: Text('Edit metadata'),
                     ),
                   ),
                 if (onDelete != null)
@@ -95,7 +113,7 @@ class StoredDocumentTile extends StatelessWidget {
                   ),
               ],
             ),
-      onTap: onOpen,
+      onTap: document.isAvailableOnDevice ? onOpen : null,
     );
   }
 }

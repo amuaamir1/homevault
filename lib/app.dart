@@ -198,7 +198,10 @@ class _AppGate extends StatelessWidget {
     }
 
     final profile = ProfileScope.of(context);
-    if (profile.isLoading) {
+    final authenticatedUid = auth.user?.uid;
+
+    if (authenticatedUid == null ||
+        !profile.isResolvedForUser(authenticatedUid)) {
       return const _LoadingScreen(message: 'Loading your profile...');
     }
 

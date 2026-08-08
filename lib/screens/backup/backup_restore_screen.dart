@@ -95,6 +95,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       await _backupService.cleanupUnreferencedDocuments(
         store.appliances,
         ownerUid: uid,
+        protectedFilePaths: prepared.createdFilePaths,
       );
 
       if (!mounted) return;

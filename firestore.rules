@@ -9,6 +9,17 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, create, update, delete: if signedInAs(userId);
 
+      match /appliances/{applianceId} {
+        allow read, delete: if signedInAs(userId);
+
+        allow create, update: if signedInAs(userId)
+          && request.resource.data.id == applianceId;
+      }
+
+      match /syncMeta/{documentId} {
+        allow read, create, update, delete: if signedInAs(userId);
+      }
+
       match /feedback/{feedbackId} {
         allow create: if signedInAs(userId)
           && request.resource.data.uid == userId

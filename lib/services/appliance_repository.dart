@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/appliance.dart';
+import '../models/cloud_sync_status.dart';
 
 abstract class ApplianceRepository {
   Future<List<Appliance>> loadAppliances();
@@ -21,6 +22,25 @@ abstract class OwnerScopedApplianceRepository {
 
 abstract class ApplianceRepositoryDiagnostics {
   String? get lastLoadWarning;
+}
+
+abstract class WatchableApplianceRepository {
+  Stream<List<Appliance>> watchAppliances();
+}
+
+abstract class CloudSyncAwareApplianceRepository {
+  CloudSyncStatus get syncStatus;
+
+  Stream<CloudSyncStatus> watchSyncStatus();
+
+  Future<void> retrySync();
+}
+
+abstract class ConflictProtectedApplianceRepository {
+  Future<List<Appliance>> saveAppliancesProtected(
+    List<Appliance> appliances, {
+    bool forceOverwrite = false,
+  });
 }
 
 class FileApplianceRepository
@@ -215,6 +235,19 @@ class MemoryApplianceRepository implements ApplianceRepository {
   Future<void> saveAppliances(List<Appliance> appliances) async {
     _appliances = List<Appliance>.from(appliances);
   }
+}
+
+class ApplianceConflictException implements Exception {
+  const ApplianceConflictException({
+    required this.applianceId,
+    required this.message,
+  });
+
+  final String applianceId;
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class ApplianceStorageException implements Exception {

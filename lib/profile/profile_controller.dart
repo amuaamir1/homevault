@@ -32,6 +32,14 @@ class ProfileController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasCompleteProfile => _profile?.isComplete == true;
 
+  /// True only after this controller has finished resolving the profile for
+  /// the currently authenticated Firebase user.
+  ///
+  /// A null profile can be a valid resolved state for a brand-new account, so
+  /// routing must not use `profile == null` alone to decide that setup is
+  /// required.
+  bool isResolvedForUser(String uid) => !_isLoading && _loadedUid == uid;
+
   Future<void> loadForUser(AuthenticatedUser user, {bool force = false}) async {
     if (_isTestController) return;
     if (!force && _loadedUid == user.uid && !_isLoading) return;

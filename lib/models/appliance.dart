@@ -57,6 +57,8 @@ class Appliance {
     List<StoredDocument> additionalDocuments = const [],
     List<ServiceRecord> serviceRecords = const [],
     this.notes = '',
+    this.cloudRevision = 0,
+    this.cloudUpdatedByDevice = '',
   }) : additionalDocuments = List.unmodifiable(additionalDocuments),
        serviceRecords = List.unmodifiable(serviceRecords);
 
@@ -117,7 +119,6 @@ class Appliance {
                   (item) =>
                       StoredDocument.fromJson(Map<String, dynamic>.from(item)),
                 )
-                .where((document) => document.localPath.isNotEmpty)
                 .toList(growable: false)
           : const [],
       serviceRecords: serviceJson is List
@@ -131,6 +132,8 @@ class Appliance {
                 .toList(growable: false)
           : const [],
       notes: json['notes'] as String? ?? '',
+      cloudRevision: (json['cloudRevision'] as num?)?.toInt() ?? 0,
+      cloudUpdatedByDevice: json['cloudUpdatedByDevice'] as String? ?? '',
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -168,6 +171,8 @@ class Appliance {
   final List<StoredDocument> additionalDocuments;
   final List<ServiceRecord> serviceRecords;
   final String notes;
+  final int cloudRevision;
+  final String cloudUpdatedByDevice;
   final DateTime createdAt;
 
   List<StoredDocument> get allDocuments => List.unmodifiable([
@@ -332,6 +337,8 @@ class Appliance {
     bool setWarrantyDocument = false,
     List<StoredDocument>? additionalDocuments,
     List<ServiceRecord>? serviceRecords,
+    int? cloudRevision,
+    String? cloudUpdatedByDevice,
   }) {
     return Appliance(
       id: id,
@@ -369,7 +376,19 @@ class Appliance {
       additionalDocuments: additionalDocuments ?? this.additionalDocuments,
       serviceRecords: serviceRecords ?? this.serviceRecords,
       notes: notes,
+      cloudRevision: cloudRevision ?? this.cloudRevision,
+      cloudUpdatedByDevice: cloudUpdatedByDevice ?? this.cloudUpdatedByDevice,
       createdAt: createdAt,
+    );
+  }
+
+  Appliance withCloudSyncMetadata({
+    required int cloudRevision,
+    required String cloudUpdatedByDevice,
+  }) {
+    return _rebuild(
+      cloudRevision: cloudRevision,
+      cloudUpdatedByDevice: cloudUpdatedByDevice,
     );
   }
 
@@ -411,6 +430,8 @@ class Appliance {
           .map((record) => record.toJson())
           .toList(),
       'notes': notes,
+      'cloudRevision': cloudRevision,
+      'cloudUpdatedByDevice': cloudUpdatedByDevice,
       'createdAt': createdAt.toIso8601String(),
     };
   }

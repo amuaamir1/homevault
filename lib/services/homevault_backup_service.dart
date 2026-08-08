@@ -420,6 +420,7 @@ class HomeVaultBackupService {
   Future<void> cleanupUnreferencedDocuments(
     Iterable<Appliance> appliances, {
     String? ownerUid,
+    Iterable<String> protectedFilePaths = const [],
   }) async {
     final documentsDirectory = await _documentsDirectoryProvider();
     final roots = <Directory>[
@@ -434,12 +435,18 @@ class HomeVaultBackupService {
       );
     }
 
-    final referenced = appliances
-        .expand((appliance) => appliance.allDocuments)
-        .map(
-          (document) => path.normalize(File(document.localPath).absolute.path),
-        )
-        .toSet();
+    final referenced = <String>{
+      ...appliances
+          .expand((appliance) => appliance.allDocuments)
+          .where((document) => document.localPath.trim().isNotEmpty)
+          .map(
+            (document) =>
+                path.normalize(File(document.localPath).absolute.path),
+          ),
+      ...protectedFilePaths
+          .where((filePath) => filePath.trim().isNotEmpty)
+          .map((filePath) => path.normalize(File(filePath).absolute.path)),
+    };
 
     for (final applianceRoot in roots) {
       if (!await applianceRoot.exists()) continue;
