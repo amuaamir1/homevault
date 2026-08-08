@@ -75,80 +75,68 @@ void main() {
   });
 
   testWidgets('cloud-only document shows download availability', (
-  tester,
-) async {
-  final document = StoredDocument(
-    id: 'invoice-cloud',
-    type: DocumentType.invoice,
-    title: 'Invoice',
-    fileName: 'invoice.pdf',
-    localPath: '',
-    sizeBytes: 1024,
-    attachedAt: DateTime(2026, 8, 8),
-    cloudStoragePath:
-        'users/user-1/appliances/appliance-1/documents/'
-        'invoice-cloud/invoice.pdf',
-    cloudContentType: 'application/pdf',
-  );
+    tester,
+  ) async {
+    final document = StoredDocument(
+      id: 'invoice-cloud',
+      type: DocumentType.invoice,
+      title: 'Invoice',
+      fileName: 'invoice.pdf',
+      localPath: '',
+      sizeBytes: 1024,
+      attachedAt: DateTime(2026, 8, 8),
+      cloudStoragePath:
+          'users/user-1/appliances/appliance-1/documents/'
+          'invoice-cloud/invoice.pdf',
+      cloudContentType: 'application/pdf',
+    );
 
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: StoredDocumentTile(
-          document: document,
-          title: 'Invoice',
-          subtitle: 'Invoice • Bedroom AC',
-          onOpen: () {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StoredDocumentTile(
+            document: document,
+            title: 'Invoice',
+            subtitle: 'Invoice • Bedroom AC',
+            onOpen: () {},
+          ),
         ),
       ),
-    ),
-  );
+    );
 
-  expect(
-    find.textContaining('Available in cloud'),
-    findsOneWidget,
-  );
+    expect(find.textContaining('Available in cloud'), findsOneWidget);
 
-  expect(
-    find.byTooltip('Download and open'),
-    findsOneWidget,
-  );
-});
+    expect(find.byTooltip('Download and open'), findsOneWidget);
+  });
 
-testWidgets('document without local or cloud file shows unavailable', (
-  tester,
-) async {
-  final document = StoredDocument(
-    id: 'invoice-unavailable',
-    type: DocumentType.invoice,
-    title: 'Invoice',
-    fileName: 'invoice.pdf',
-    localPath: '',
-    sizeBytes: 1024,
-    attachedAt: DateTime(2026, 8, 8),
-  );
+  testWidgets('document without local or cloud file shows unavailable', (
+    tester,
+  ) async {
+    final document = StoredDocument(
+      id: 'invoice-unavailable',
+      type: DocumentType.invoice,
+      title: 'Invoice',
+      fileName: 'invoice.pdf',
+      localPath: '',
+      sizeBytes: 1024,
+      attachedAt: DateTime(2026, 8, 8),
+    );
 
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: StoredDocumentTile(
-          document: document,
-          title: 'Invoice',
-          subtitle: 'Invoice • Bedroom AC',
-          onOpen: () {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StoredDocumentTile(
+            document: document,
+            title: 'Invoice',
+            subtitle: 'Invoice • Bedroom AC',
+            onOpen: () {},
+          ),
         ),
       ),
-    ),
-  );
+    );
 
-  expect(
-    find.textContaining('File unavailable'),
-    findsOneWidget,
-  );
+    expect(find.textContaining('File unavailable'), findsOneWidget);
 
-  expect(
-    find.byTooltip('File unavailable'),
-    findsOneWidget,
-  );
-});
+    expect(find.byTooltip('File unavailable'), findsOneWidget);
+  });
 }
