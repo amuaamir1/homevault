@@ -28,7 +28,7 @@ class ReportsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Reports & insights')),
       body: RefreshIndicator(
-        onRefresh: () => store.initialize(force: true),
+        onRefresh: store.refresh,
         child: ListView(
           key: const Key('reportsList'),
           physics: const AlwaysScrollableScrollPhysics(),

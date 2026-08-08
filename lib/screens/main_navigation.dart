@@ -77,6 +77,21 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 
+  Future<void> _openAppliances() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            AppliancesScreen(onAddAppliance: _openAddAppliance),
+      ),
+    );
+  }
+
+  Future<void> _openDocuments() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (context) => const DocumentsScreen()),
+    );
+  }
+
   Future<void> _openReports() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (context) => const ReportsScreen()),
@@ -98,7 +113,6 @@ class _MainNavigationState extends State<MainNavigation> {
         return;
       }
 
-      setState(() => _selectedSection = AppSection.appliances);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.appliance.name} was saved.')),
       );
@@ -144,16 +158,16 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final screens = <Widget>[
       DashboardScreen(
-        onNavigate: _goToSection,
         onAddAppliance: _openAddAppliance,
+        onOpenAppliances: _openAppliances,
+        onOpenDocuments: _openDocuments,
         onOpenWarrantyCenter: _openWarrantyCenter,
         onOpenServiceCenter: _openServiceCenter,
         onOpenGlobalSearch: _openGlobalSearch,
         onOpenReports: _openReports,
         onOpenAppliance: _openApplianceDetails,
       ),
-      AppliancesScreen(onAddAppliance: _openAddAppliance),
-      const DocumentsScreen(),
+      const ServiceCenterScreen(),
       const SupportScreen(),
       const SettingsScreen(),
     ];
@@ -172,14 +186,9 @@ class _MainNavigationState extends State<MainNavigation> {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.home_repair_service_outlined),
-            selectedIcon: Icon(Icons.home_repair_service),
-            label: 'Appliances',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Documents',
+            icon: Icon(Icons.build_circle_outlined),
+            selectedIcon: Icon(Icons.build_circle),
+            label: 'Service center',
           ),
           NavigationDestination(
             icon: Icon(Icons.support_agent_outlined),

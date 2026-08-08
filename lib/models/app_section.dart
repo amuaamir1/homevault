@@ -1,1 +1,1 @@
-enum AppSection { home, appliances, documents, support, settings }
+enum AppSection { home, serviceCenter, support, settings }

@@ -72,12 +72,34 @@ void main() {
 
     expect(find.text('HomeVault'), findsOneWidget);
     expect(find.text('Welcome Aamir'), findsOneWidget);
-    expect(find.text('Quick actions'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Appliances'), findsWidgets);
-    expect(find.text('Documents'), findsWidgets);
-    expect(find.text('Support'), findsWidgets);
-    expect(find.text('Settings'), findsWidgets);
+    expect(find.text('Quick actions'), findsNothing);
+
+    final navigationBar = find.byType(NavigationBar);
+    expect(navigationBar, findsOneWidget);
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Home')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Service center')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Support')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Settings')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Appliances')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: navigationBar, matching: find.text('Documents')),
+      findsNothing,
+    );
   });
 
   testWidgets('user can open the add appliance form', (tester) async {
@@ -86,7 +108,15 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final addApplianceButton = find.text('Add appliance').first;
+    // The dashboard has more than one 'Add appliance' tooltip (for example,
+    // the AppBar action and an in-content action). Scope the finder to the
+    // AppBar so this test targets the intended control.
+    final addApplianceButton = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Add appliance',
+      ),
+    );
     expect(addApplianceButton, findsOneWidget);
 
     await tester.ensureVisible(addApplianceButton);
@@ -139,11 +169,11 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final documentsDestination = find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text('Documents'),
+    final documentsMetric = find.byKey(
+      const ValueKey('dashboardDocumentMetric'),
     );
-    await tester.tap(documentsDestination);
+    expect(documentsMetric, findsOneWidget);
+    await tester.tap(documentsMetric);
     await tester.pumpAndSettle();
 
     expect(find.text('AC manual'), findsOneWidget);
@@ -221,7 +251,9 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final warrantyButton = find.text('Warranty center').first;
+    final warrantyButton = find.byKey(
+      const ValueKey('dashboardActiveWarrantyMetric'),
+    );
 
     expect(warrantyButton, findsOneWidget);
 
@@ -279,12 +311,21 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    final serviceButton = find.text('Service center').first;
-    await tester.ensureVisible(serviceButton);
-    await tester.tap(serviceButton);
+    final serviceDestination = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Service center'),
+    );
+    expect(serviceDestination, findsOneWidget);
+    await tester.tap(serviceDestination);
     await tester.pumpAndSettle();
 
-    expect(find.text('Service center'), findsOneWidget);
+    // 'Service center' also appears in the bottom navigation label. Verify
+    // the screen title specifically instead of matching both widgets.
+    final serviceCenterTitle = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.text('Service center'),
+    );
+    expect(serviceCenterTitle, findsOneWidget);
     expect(find.text('Service records'), findsOneWidget);
 
     final serviceList = find.byKey(const Key('serviceCenterList'));
@@ -380,7 +421,7 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    await tester.tap(find.byTooltip('Reports and insights'));
+    await tester.tap(find.widgetWithText(TextButton, 'Reports'));
     await tester.pumpAndSettle();
 
     expect(find.text('Reports & insights'), findsOneWidget);
