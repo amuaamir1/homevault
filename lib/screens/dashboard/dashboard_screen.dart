@@ -6,7 +6,7 @@ import '../../profile/profile_scope.dart';
 import '../../services/homevault_report_service.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/dashboard_card.dart';
+import '../../widgets/hero_stat_card.dart';
 import '../../widgets/quick_action_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
 import '../service/service_center_screen.dart';
@@ -80,7 +80,7 @@ class DashboardScreen extends StatelessWidget {
                 'Manage appliance details, warranties, invoices, support, and maintenance in one place.',
                 style: Theme.of(
                   context,
-                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondaryLight),
               ),
               if (store.loadWarning != null) ...[
                 const SizedBox(height: 16),
@@ -96,74 +96,75 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 24),
+
+              // ---- Hero stat: the one number that matters most ----
+              HeroStatCard(
+                title: 'ACTIVE WARRANTIES',
+                value: '${report.warrantyCount(WarrantyStatus.active)}',
+                subtitle:
+                    '${report.totalAppliances} appliances tracked · '
+                    '${report.warrantyCount(WarrantyStatus.expiringSoon)} expiring soon',
+                icon: Icons.verified,
+                onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
+              ),
+              const SizedBox(height: 16),
+
+              // ---- Secondary stats: denser 3-column grid ----
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.05,
+                crossAxisCount: 3,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.95,
                 children: [
-                  DashboardCard(
-                    icon: Icons.home_repair_service,
-                    title: 'Appliances',
+                  MiniStatCard(
+                    label: 'Appliances',
                     value: '${report.totalAppliances}',
+                    icon: Icons.home_repair_service,
                     color: AppColors.primary,
                     onTap: () => onNavigate(AppSection.appliances),
                   ),
-                  DashboardCard(
-                    icon: Icons.description_outlined,
-                    title: 'Documents',
+                  MiniStatCard(
+                    label: 'Documents',
                     value: '${report.totalDocuments}',
-                    color: AppColors.warning,
+                    icon: Icons.description_outlined,
+                    color: AppColors.accent,
                     onTap: () => onNavigate(AppSection.documents),
                   ),
-                  DashboardCard(
-                    icon: Icons.build_circle_outlined,
-                    title: 'Service records',
+                  MiniStatCard(
+                    label: 'Service records',
                     value: '${report.totalServiceRecords}',
+                    icon: Icons.build_circle_outlined,
                     color: AppColors.secondary,
                     onTap: () => onOpenServiceCenter(ServiceFilter.all),
                   ),
-                  DashboardCard(
-                    icon: Icons.payments_outlined,
-                    title: 'Service cost',
+                  MiniStatCard(
+                    label: 'Service cost',
                     value: _formatAmount(report.totalServiceCost),
+                    icon: Icons.payments_outlined,
                     color: AppColors.success,
                     onTap: onOpenReports,
                   ),
-                  DashboardCard(
-                    icon: Icons.verified,
-                    title: 'Active warranty',
-                    value: '${report.warrantyCount(WarrantyStatus.active)}',
-                    color: AppColors.success,
-                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
-                  ),
-                  DashboardCard(
-                    icon: Icons.warning_amber,
-                    title: 'Expiring soon',
+                  MiniStatCard(
+                    label: 'Expiring soon',
                     value:
                         '${report.warrantyCount(WarrantyStatus.expiringSoon)}',
+                    icon: Icons.warning_amber,
                     color: AppColors.warning,
                     onTap: () =>
                         onOpenWarrantyCenter(WarrantyFilter.expiringSoon),
                   ),
-                  DashboardCard(
-                    icon: Icons.cancel,
-                    title: 'Expired',
-                    value: '${report.warrantyCount(WarrantyStatus.expired)}',
-                    color: AppColors.danger,
-                    onTap: () => onOpenWarrantyCenter(WarrantyFilter.expired),
-                  ),
-                  DashboardCard(
-                    icon: Icons.event_available_outlined,
-                    title: 'Service due',
+                  MiniStatCard(
+                    label: 'Service due',
                     value: '${report.upcomingServices.length}',
+                    icon: Icons.event_available_outlined,
                     color: AppColors.warning,
                     onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
                   ),
                 ],
               ),
+
               const SizedBox(height: 28),
               _AttentionSummary(
                 missingWarrantyDates: report.appliancesWithoutWarrantyDate,
@@ -227,7 +228,7 @@ class DashboardScreen extends StatelessWidget {
                   QuickActionTile(
                     icon: Icons.verified_user_outlined,
                     title: 'Warranty center',
-                    color: AppColors.textSecondary,
+                    color: AppColors.textSecondaryLight,
                     onTap: () => onOpenWarrantyCenter(WarrantyFilter.all),
                   ),
                 ],

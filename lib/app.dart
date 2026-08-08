@@ -142,6 +142,8 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
       debugShowCheckedModeBanner: false,
       title: 'HomeVault',
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       home: _AppGate(
         firebaseInitializationError: widget.firebaseInitializationError,
       ),

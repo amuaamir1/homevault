@@ -204,7 +204,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           30,
                         ),
                         decoration: const BoxDecoration(
-                          color: AppColors.background,
+                          color: AppColors.backgroundLight,
                           borderRadius: BorderRadius.vertical(
                             top: Radius.circular(30),
                           ),
@@ -303,7 +303,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             'Use your verified email and password.',
             style: Theme.of(
               context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondaryLight),
           ),
           const SizedBox(height: 24),
           TextFormField(
@@ -386,7 +386,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             'Register with email, Google, or Apple.',
             style: Theme.of(
               context,
-            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondaryLight),
           ),
           const SizedBox(height: 24),
           TextFormField(
@@ -528,7 +528,7 @@ class _SocialDivider extends StatelessWidget {
           child: Text(
             'OR CONTINUE WITH',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textSecondary,
+              color: AppColors.textSecondaryLight,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
             ),

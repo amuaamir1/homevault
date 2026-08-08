@@ -28,7 +28,7 @@ class WarrantyStatusChip extends StatelessWidget {
       ),
       WarrantyStatus.notProvided => (
         'No warranty date',
-        AppColors.textSecondary,
+        AppColors.textSecondaryLight,
         Icons.help_outline,
       ),
     };

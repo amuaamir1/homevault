@@ -74,11 +74,46 @@ void main() {
     });
   });
 
-  testWidgets('metadata-only document clearly shows file is not local', (
+  testWidgets('cloud-only document shows download availability', (
     tester,
   ) async {
     final document = StoredDocument(
       id: 'invoice-cloud',
+      type: DocumentType.invoice,
+      title: 'Invoice',
+      fileName: 'invoice.pdf',
+      localPath: '',
+      sizeBytes: 1024,
+      attachedAt: DateTime(2026, 8, 8),
+      cloudStoragePath:
+          'users/user-1/appliances/appliance-1/documents/'
+          'invoice-cloud/invoice.pdf',
+      cloudContentType: 'application/pdf',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StoredDocumentTile(
+            document: document,
+            title: 'Invoice',
+            subtitle: 'Invoice • Bedroom AC',
+            onOpen: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Available in cloud'), findsOneWidget);
+
+    expect(find.byTooltip('Download and open'), findsOneWidget);
+  });
+
+  testWidgets('document without local or cloud file shows unavailable', (
+    tester,
+  ) async {
+    final document = StoredDocument(
+      id: 'invoice-unavailable',
       type: DocumentType.invoice,
       title: 'Invoice',
       fileName: 'invoice.pdf',
@@ -100,7 +135,8 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('File not on this device'), findsOneWidget);
-    expect(find.byTooltip('File not on this device'), findsOneWidget);
+    expect(find.textContaining('File unavailable'), findsOneWidget);
+
+    expect(find.byTooltip('File unavailable'), findsOneWidget);
   });
 }

@@ -418,7 +418,7 @@ class _WarrantySummary extends StatelessWidget {
       (
         'No date',
         store.warrantyCount(WarrantyStatus.notProvided, now: now),
-        AppColors.textSecondary,
+        AppColors.textSecondaryLight,
       ),
     ];
 
