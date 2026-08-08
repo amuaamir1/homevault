@@ -58,11 +58,6 @@ class DashboardScreen extends StatelessWidget {
             onPressed: onOpenGlobalSearch,
             icon: const Icon(Icons.search),
           ),
-          IconButton(
-            tooltip: 'Reports and insights',
-            onPressed: onOpenReports,
-            icon: const Icon(Icons.insights_outlined),
-          ),
         ],
       ),
       body: ScrollConfiguration(

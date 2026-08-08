@@ -108,9 +108,14 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
+    // The dashboard has more than one 'Add appliance' tooltip (for example,
+    // the AppBar action and an in-content action). Scope the finder to the
+    // AppBar so this test targets the intended control.
     final addApplianceButton = find.descendant(
       of: find.byType(AppBar),
-      matching: find.byTooltip('Add appliance'),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Add appliance',
+      ),
     );
     expect(addApplianceButton, findsOneWidget);
 
@@ -314,13 +319,13 @@ void main() {
     await tester.tap(serviceDestination);
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Service center'),
-      ),
-      findsOneWidget,
+    // 'Service center' also appears in the bottom navigation label. Verify
+    // the screen title specifically instead of matching both widgets.
+    final serviceCenterTitle = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.text('Service center'),
     );
+    expect(serviceCenterTitle, findsOneWidget);
     expect(find.text('Service records'), findsOneWidget);
 
     final serviceList = find.byKey(const Key('serviceCenterList'));
@@ -416,7 +421,7 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    await tester.tap(find.byTooltip('Reports and insights'));
+    await tester.tap(find.widgetWithText(TextButton, 'Reports'));
     await tester.pumpAndSettle();
 
     expect(find.text('Reports & insights'), findsOneWidget);
