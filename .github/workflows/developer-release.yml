@@ -5,14 +5,17 @@ run-name: HomeVault developer release from ${{ github.sha }}
 on:
   push:
     branches:
+      - 'develop'
+      - 'develop*'
       - 'develop/**'
 
 permissions:
   contents: write
 
 concurrency:
-  group: homevault-developer-release
+  group: homevault-release-publishing
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -115,34 +118,50 @@ jobs:
             printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/android/app/homevault-release.jks"
           } > android/key.properties
 
-      - name: Calculate CI release identifiers
+            - name: Calculate release identifiers from latest published release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           python3 <<'PY'
+          import json
           import os
           import re
+          import subprocess
           from pathlib import Path
 
-          run_number = int(os.environ["GITHUB_RUN_NUMBER"])
+          # ---------------------------------------------------------
+          # Read the semantic version from source.
+          #
+          # Example:
+          # version: 1.12.2+17
+          #
+          # CI controls the +build number.
+          # The developer controls 1.12.2 / 1.13.0 / etc.
+          # ---------------------------------------------------------
 
           pubspec_path = Path("pubspec.yaml")
           pubspec = pubspec_path.read_text(encoding="utf-8")
 
-          match = re.search(
-              r"(?m)^version:\s*([0-9A-Za-z.+_-]+)\+(\d+)\s*$",
+          version_match = re.search(
+              r"(?m)^version:\s*([^+\s]+)\+(\d+)\s*$",
               pubspec,
           )
-          if not match:
+
+          if not version_match:
               raise SystemExit(
                   "pubspec.yaml must contain a version such as "
-                  "'version: 1.13.0+18'."
+                  "'version: 1.12.2+17'."
               )
 
-          version_name = match.group(1)
-          base_build = int(match.group(2))
-          build_number = base_build + run_number
+          version_name = version_match.group(1)
+          checked_in_build = int(version_match.group(2))
+
+          # ---------------------------------------------------------
+          # Read checked-in R number as fallback only.
+          # ---------------------------------------------------------
 
           build_info_path = Path("lib/core/app_build_info.dart")
           build_info = build_info_path.read_text(encoding="utf-8")
@@ -151,14 +170,147 @@ jobs:
               r"static const String releaseNumber = 'R(\d+)';",
               build_info,
           )
+
           if not release_match:
               raise SystemExit(
                   "Could not find AppBuildInfo.releaseNumber in "
                   "lib/core/app_build_info.dart."
               )
 
-          base_release = int(release_match.group(1))
-          release_number = f"R{base_release + run_number:02d}"
+          checked_in_release = int(release_match.group(1))
+
+          # ---------------------------------------------------------
+          # Prevent accidentally publishing the same commit twice.
+          # ---------------------------------------------------------
+
+          current_sha = os.environ["GITHUB_SHA"]
+
+          tag_result = subprocess.run(
+              [
+                  "git",
+                  "tag",
+                  "--points-at",
+                  current_sha,
+              ],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+
+          existing_homevault_tags = [
+              tag.strip()
+              for tag in tag_result.stdout.splitlines()
+              if tag.strip().lower().startswith("homevault-beta-")
+          ]
+
+          if existing_homevault_tags:
+              raise SystemExit(
+                  "This commit already has a HomeVault release tag: "
+                  + ", ".join(existing_homevault_tags)
+              )
+
+          # ---------------------------------------------------------
+          # Get successfully PUBLISHED GitHub releases.
+          #
+          # Failed workflow runs do not create a GitHub Release,
+          # therefore they do not consume a build/R number.
+          # ---------------------------------------------------------
+
+          release_result = subprocess.run(
+              [
+                  "gh",
+                  "release",
+                  "list",
+                  "--limit",
+                  "100",
+                  "--json",
+                  "tagName,publishedAt,isDraft,isPrerelease",
+              ],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+
+          releases = json.loads(release_result.stdout)
+
+          # Expected HomeVault tag:
+          #
+          # homevault-beta-v1.12.2-build19-R08
+          #
+          tag_pattern = re.compile(
+              r"^homevault-beta-v.+-build"
+              r"(?P<build>\d+)-R(?P<release>\d+)$",
+              re.IGNORECASE,
+          )
+
+          published_homevault_releases = []
+
+          for release in releases:
+              if release.get("isDraft"):
+                  continue
+
+              published_at = release.get("publishedAt")
+
+              if not published_at:
+                  continue
+
+              tag_name = release.get("tagName", "")
+              match = tag_pattern.match(tag_name)
+
+              if not match:
+                  continue
+
+              published_homevault_releases.append(
+                  {
+                      "tag": tag_name,
+                      "publishedAt": published_at,
+                      "build": int(match.group("build")),
+                      "release": int(match.group("release")),
+                  }
+              )
+
+          # ---------------------------------------------------------
+          # Calculate next BUILD and R number.
+          # ---------------------------------------------------------
+
+          if published_homevault_releases:
+              latest = max(
+                  published_homevault_releases,
+                  key=lambda item: item["publishedAt"],
+              )
+
+              previous_build = latest["build"]
+              previous_release = latest["release"]
+
+              print("")
+              print(
+                  "Latest successfully published HomeVault release:"
+              )
+              print(f"  {latest['tag']}")
+              print(f"  Build: {previous_build}")
+              print(f"  Release: R{previous_release:02d}")
+          else:
+              # First CI-generated GitHub Release.
+              previous_build = checked_in_build
+              previous_release = checked_in_release
+
+              print("")
+              print(
+                  "No previous CI-generated HomeVault release found."
+              )
+              print(
+                  "Using checked-in build/release values as baseline."
+              )
+              print(f"  Build: {previous_build}")
+              print(f"  Release: R{previous_release:02d}")
+
+          build_number = previous_build + 1
+          release_number = f"R{previous_release + 1:02d}"
+
+          # ---------------------------------------------------------
+          # Update pubspec.yaml inside CI workspace.
+          # Nothing is committed back to Git.
+          # ---------------------------------------------------------
 
           updated_pubspec, count = re.subn(
               r"(?m)^version:\s*[^\r\n]+$",
@@ -166,9 +318,20 @@ jobs:
               pubspec,
               count=1,
           )
+
           if count != 1:
-              raise SystemExit("Could not update pubspec.yaml version.")
-          pubspec_path.write_text(updated_pubspec, encoding="utf-8")
+              raise SystemExit(
+                  "Could not update pubspec.yaml version."
+              )
+
+          pubspec_path.write_text(
+              updated_pubspec,
+              encoding="utf-8",
+          )
+
+          # ---------------------------------------------------------
+          # Update AppBuildInfo inside CI workspace.
+          # ---------------------------------------------------------
 
           replacements = (
               (
@@ -183,7 +346,8 @@ jobs:
               ),
               (
                   r"static const String releaseNumber = '[^']*';",
-                  f"static const String releaseNumber = '{release_number}';",
+                  f"static const String releaseNumber = "
+                  f"'{release_number}';",
                   "AppBuildInfo.releaseNumber",
               ),
           )
@@ -195,44 +359,83 @@ jobs:
                   build_info,
                   count=1,
               )
+
               if count != 1:
-                  raise SystemExit(f"Could not update {label}.")
+                  raise SystemExit(
+                      f"Could not update {label}."
+                  )
 
           display_pattern = (
-              r"static const String versionAndRelease\s*=\s*'[^']*';"
+              r"static const String versionAndRelease"
+              r"\s*=\s*'[^']*';"
           )
+
           if re.search(display_pattern, build_info):
               build_info = re.sub(
                   display_pattern,
                   "static const String versionAndRelease =\n"
-                  "      'v$version+$buildNumber - $releaseNumber';",
+                  "      'v$version+$buildNumber - "
+                  "$releaseNumber';",
                   build_info,
                   count=1,
               )
 
-          build_info_path.write_text(build_info, encoding="utf-8")
+          build_info_path.write_text(
+              build_info,
+              encoding="utf-8",
+          )
+
+          # ---------------------------------------------------------
+          # Generate release names.
+          # ---------------------------------------------------------
 
           apk_name = (
-              f"HomeVault-Beta-v{version_name}+{build_number}-"
-              f"{release_number}.apk"
+              f"HomeVault-Beta-v{version_name}"
+              f"+{build_number}-{release_number}.apk"
           )
+
           tag_name = (
-              f"homevault-beta-v{version_name}-build{build_number}-"
-              f"{release_number}"
+              f"homevault-beta-v{version_name}-"
+              f"build{build_number}-{release_number}"
           )
+
+          # ---------------------------------------------------------
+          # Export for following workflow steps.
+          # ---------------------------------------------------------
 
           github_env = Path(os.environ["GITHUB_ENV"])
-          with github_env.open("a", encoding="utf-8") as output:
-              output.write(f"VERSION_NAME={version_name}\n")
-              output.write(f"BUILD_NUMBER={build_number}\n")
-              output.write(f"RELEASE_NUMBER={release_number}\n")
-              output.write(f"APK_NAME={apk_name}\n")
-              output.write(f"TAG_NAME={tag_name}\n")
 
-          print(
-              f"Preparing HomeVault {release_number}: "
-              f"v{version_name}+{build_number}"
-          )
+          with github_env.open(
+              "a",
+              encoding="utf-8",
+          ) as output:
+              output.write(
+                  f"VERSION_NAME={version_name}\n"
+              )
+              output.write(
+                  f"BUILD_NUMBER={build_number}\n"
+              )
+              output.write(
+                  f"RELEASE_NUMBER={release_number}\n"
+              )
+              output.write(
+                  f"APK_NAME={apk_name}\n"
+              )
+              output.write(
+                  f"TAG_NAME={tag_name}\n"
+              )
+
+          print("")
+          print("======================================")
+          print(" HomeVault release candidate")
+          print("======================================")
+          print(f" Branch  : {os.environ['GITHUB_REF_NAME']}")
+          print(f" Version : {version_name}")
+          print(f" Build   : {build_number}")
+          print(f" Release : {release_number}")
+          print(f" APK     : {apk_name}")
+          print(f" Tag     : {tag_name}")
+          print("======================================")
           PY
 
       - name: Show tool versions
