@@ -663,12 +663,29 @@ class ApplianceDetailsScreen extends StatelessWidget {
             title: 'Service and maintenance',
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'} • Total cost ${appliance.totalServiceCost.toStringAsFixed(2)}',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'}',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Total cost: ${_formatIndianCurrency(appliance.totalServiceCost)}/-',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: () => _addServiceRecord(context, appliance),
                     icon: const Icon(Icons.add),
@@ -700,12 +717,15 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ...([
                   ...appliance.serviceRecords,
                 ]..sort((a, b) => b.serviceDate.compareTo(a.serviceDate))).map(
-                  (record) => ServiceRecordTile(
-                    record: record,
-                    onEdit: () =>
-                        _editServiceRecord(context, appliance, record),
-                    onDelete: () =>
-                        _deleteServiceRecord(context, appliance, record),
+                  (record) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: ServiceRecordTile(
+                      record: record,
+                      onEdit: () =>
+                          _editServiceRecord(context, appliance, record),
+                      onDelete: () =>
+                          _deleteServiceRecord(context, appliance, record),
+                    ),
                   ),
                 ),
             ],
@@ -888,6 +908,28 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatIndianCurrency(double value) {
+  if (!value.isFinite) return '₹0';
+
+  final rounded = value.round();
+  final negative = rounded < 0;
+  final digits = rounded.abs().toString();
+  if (digits.length <= 3) {
+    return '${negative ? '-' : ''}₹$digits';
+  }
+
+  final lastThree = digits.substring(digits.length - 3);
+  var leading = digits.substring(0, digits.length - 3);
+  final groups = <String>[];
+  while (leading.length > 2) {
+    groups.insert(0, leading.substring(leading.length - 2));
+    leading = leading.substring(0, leading.length - 2);
+  }
+  if (leading.isNotEmpty) groups.insert(0, leading);
+
+  return '${negative ? '-' : ''}₹${groups.join(',')},$lastThree';
 }
 
 class _DetailRowData {

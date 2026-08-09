@@ -398,32 +398,42 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(
-                        label: 'Service records',
-                        value: '${store.totalServiceRecordCount}',
-                        icon: Icons.build_circle_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SummaryCard(
-                        label: 'Due in 30 days',
-                        value: '$dueSoon',
-                        icon: Icons.event_available_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SummaryCard(
-                        label: 'Total cost',
-                        value: totalCost.toStringAsFixed(0),
-                        icon: Icons.payments_outlined,
-                      ),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cardWidth = constraints.maxWidth >= 520
+                        ? (constraints.maxWidth - 20) / 3
+                        : (constraints.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        SizedBox(
+                          width: cardWidth,
+                          child: _SummaryCard(
+                            label: 'Service records',
+                            value: '${store.totalServiceRecordCount}',
+                            icon: Icons.build_circle_outlined,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _SummaryCard(
+                            label: 'Due in 30 days',
+                            value: '$dueSoon',
+                            icon: Icons.event_available_outlined,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _SummaryCard(
+                            label: 'Total cost',
+                            value: '${_formatIndianCurrency(totalCost)}/-',
+                            icon: Icons.payments_outlined,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -442,20 +452,20 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  height: 42,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _filterOrder.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final filter = _filterOrder[index];
-                      return ChoiceChip(
-                        label: Text(filter.label),
-                        selected: _filter == filter,
-                        onSelected: (_) => setState(() => _filter = filter),
-                      );
-                    },
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < _filterOrder.length; index++) ...[
+                        if (index > 0) const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text(_filterOrder[index].label),
+                          selected: _filter == _filterOrder[index],
+                          onSelected: (_) =>
+                              setState(() => _filter = _filterOrder[index]),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -509,6 +519,26 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
       ),
     );
   }
+}
+
+String _formatIndianCurrency(double value) {
+  final rounded = value.round();
+  final negative = rounded < 0;
+  final digits = rounded.abs().toString();
+  if (digits.length <= 3) {
+    return '${negative ? '-' : ''}₹$digits';
+  }
+
+  final lastThree = digits.substring(digits.length - 3);
+  var leading = digits.substring(0, digits.length - 3);
+  final groups = <String>[];
+  while (leading.length > 2) {
+    groups.insert(0, leading.substring(leading.length - 2));
+    leading = leading.substring(0, leading.length - 2);
+  }
+  if (leading.isNotEmpty) groups.insert(0, leading);
+
+  return '${negative ? '-' : ''}₹${groups.join(',')},$lastThree';
 }
 
 class _ServiceEntry {

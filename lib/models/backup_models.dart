@@ -118,3 +118,43 @@ class BackupFormatException implements Exception {
   @override
   String toString() => message;
 }
+
+enum CloudBackupSource { automatic, manual, preRestoreSafety }
+
+extension CloudBackupSourceDetails on CloudBackupSource {
+  String get label => switch (this) {
+    CloudBackupSource.automatic => 'Automatic',
+    CloudBackupSource.manual => 'Manual',
+    CloudBackupSource.preRestoreSafety => 'Safety',
+  };
+
+  String get storageValue => switch (this) {
+    CloudBackupSource.automatic => 'automatic',
+    CloudBackupSource.manual => 'manual',
+    CloudBackupSource.preRestoreSafety => 'preRestoreSafety',
+  };
+}
+
+class CloudBackupSnapshot {
+  const CloudBackupSnapshot({
+    required this.id,
+    required this.createdAt,
+    required this.source,
+    required this.applianceCount,
+    required this.documentCount,
+    required this.missingDocuments,
+    required this.sizeBytes,
+    required this.storagePath,
+    required this.appVersion,
+  });
+
+  final String id;
+  final DateTime createdAt;
+  final CloudBackupSource source;
+  final int applianceCount;
+  final int documentCount;
+  final int missingDocuments;
+  final int sizeBytes;
+  final String storagePath;
+  final String appVersion;
+}
