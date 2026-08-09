@@ -34,7 +34,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'This file has not been uploaded to cloud storage and is not available on this device.',
+              'This document file is unavailable. Edit the document and choose the file again.',
             ),
           ),
         );
@@ -44,7 +44,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Downloading document from HomeVault cloud...'),
+          content: Text('Preparing document...'),
           duration: Duration(seconds: 30),
         ),
       );
@@ -63,7 +63,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         if (!context.mounted) return;
         messenger.showSnackBar(
           const SnackBar(
-            content: Text('The cloud document could not be downloaded.'),
+            content: Text('The document could not be prepared right now.'),
           ),
         );
         return;
@@ -79,41 +79,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('The document could not be opened on this device.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _retryCloudUpload(
-    BuildContext context,
-    String applianceId,
-    StoredDocument document,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Uploading document to HomeVault cloud...'),
-        duration: Duration(seconds: 30),
-      ),
-    );
-
-    try {
-      await AppScope.read(context).uploadDocument(applianceId, document.id);
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Document uploaded to cloud storage.')),
-      );
-    } on CloudDocumentStorageException catch (error) {
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('The cloud upload could not be completed.'),
         ),
       );
     }
@@ -361,11 +326,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                     subtitle:
                                         '${entry.document.type.label} • ${entry.appliance.name}',
                                     onOpen: () => _openDocument(
-                                      context,
-                                      entry.appliance.id,
-                                      entry.document,
-                                    ),
-                                    onRetryUpload: () => _retryCloudUpload(
                                       context,
                                       entry.appliance.id,
                                       entry.document,

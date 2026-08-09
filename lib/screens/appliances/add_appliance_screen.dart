@@ -66,6 +66,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   DateTime? _purchaseDate;
   DateTime? _warrantyExpiryDate;
   DateTime? _extendedWarrantyExpiryDate;
+  WarrantyDurationUnit _warrantyDurationUnit = WarrantyDurationUnit.years;
   bool _useManualWarrantyExpiry = false;
   WarrantyClaimStatus _warrantyClaimStatus = WarrantyClaimStatus.none;
   bool _warrantyMarkedExpired = false;
@@ -134,15 +135,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _extendedWarrantyExpiryDate = appliance?.extendedWarrantyExpiryDate;
     final savedDurationUnit = appliance?.warrantyDurationUnit;
     final savedDurationValue = appliance?.warrantyDurationValue;
-    final hasLegacyNonYearDuration =
-        savedDurationUnit == WarrantyDurationUnit.months &&
-        savedDurationValue != null &&
-        savedDurationValue % 12 != 0;
+    _warrantyDurationUnit = savedDurationUnit ?? WarrantyDurationUnit.years;
 
     _useManualWarrantyExpiry =
-        hasLegacyNonYearDuration ||
-        (appliance?.warrantyExpiryDate != null &&
-            appliance?.warrantyDurationValue == null);
+        appliance?.warrantyExpiryDate != null &&
+        appliance?.warrantyDurationValue == null;
     _warrantyClaimStatus =
         appliance?.warrantyClaimStatus ?? WarrantyClaimStatus.none;
     _warrantyMarkedExpired = appliance?.warrantyMarkedExpired ?? false;
@@ -187,18 +184,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _invoiceController = TextEditingController(
       text: appliance?.invoiceReference ?? '',
     );
-    final warrantyDurationYears = switch ((
-      appliance?.warrantyDurationValue,
-      appliance?.warrantyDurationUnit,
-    )) {
-      (final int value, WarrantyDurationUnit.years) => value,
-      (final int value, WarrantyDurationUnit.months) when value % 12 == 0 =>
-        value ~/ 12,
-      _ => null,
-    };
-
     _warrantyDurationController = TextEditingController(
-      text: warrantyDurationYears?.toString() ?? '',
+      text: savedDurationValue?.toString() ?? '',
     );
     _warrantyProviderController = TextEditingController(
       text: appliance?.warrantyProvider ?? '',
@@ -274,7 +261,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     return Appliance.calculateWarrantyExpiryDate(
       startDate: startDate,
       durationValue: duration,
-      durationUnit: WarrantyDurationUnit.years,
+      durationUnit: _warrantyDurationUnit,
     );
   }
 
@@ -546,7 +533,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       warrantyExpiryDate: warrantyDate,
       warrantyDurationValue: _useManualWarrantyExpiry ? null : duration,
       warrantyDurationUnit: !_useManualWarrantyExpiry && duration != null
-          ? WarrantyDurationUnit.years
+          ? _warrantyDurationUnit
           : null,
       supportProvider: _supportProviderController.text.trim(),
       supportPhone: _normalizeSupportNumber(_phoneController.text),
@@ -735,7 +722,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               const _SectionTitle(
                 title: 'Purchase and warranty',
                 subtitle:
-                    'Use the purchase / invoice date and warranty duration to calculate expiry, then save references and documents.',
+                    'Use the purchase / invoice date and a warranty duration in months or years to calculate expiry, then save references and documents.',
               ),
               const SizedBox(height: 12),
               _DateField(
@@ -747,44 +734,101 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               ),
               const SizedBox(height: 12),
               if (!_useManualWarrantyExpiry) ...[
-                TextFormField(
-                  key: const ValueKey('warrantyDurationYearsField'),
-                  controller: _warrantyDurationController,
-                  decoration: const InputDecoration(
-                    labelText: 'Warranty duration (years)',
-                    hintText: 'Enter number of years',
-                    prefixIcon: Icon(Icons.timelapse_outlined),
-                  ),
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        key: const ValueKey('warrantyDurationValueField'),
+                        controller: _warrantyDurationController,
+                        decoration: InputDecoration(
+                          labelText: 'Warranty duration',
+                          hintText:
+                              _warrantyDurationUnit ==
+                                  WarrantyDurationUnit.years
+                              ? 'Example: 2'
+                              : 'Example: 18',
+                          prefixIcon: const Icon(Icons.timelapse_outlined),
+                        ),
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.next,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        onChanged: (_) {
+                          setState(_clearStaleOutOfWarrantyOverride);
+                        },
+                        validator: (value) {
+                          if (_useManualWarrantyExpiry) return null;
+                          final input = value?.trim() ?? '';
+                          if (input.isEmpty) return null;
+
+                          final duration = int.tryParse(input);
+                          if (duration == null || duration <= 0) {
+                            return 'Enter a value above 0.';
+                          }
+
+                          final maxDuration =
+                              _warrantyDurationUnit ==
+                                  WarrantyDurationUnit.years
+                              ? 50
+                              : 600;
+                          if (duration > maxDuration) {
+                            final unit =
+                                _warrantyDurationUnit ==
+                                    WarrantyDurationUnit.years
+                                ? 'years'
+                                : 'months';
+                            return 'Use $maxDuration $unit or less.';
+                          }
+
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: Semantics(
+                        label: 'Warranty duration unit',
+                        child: DropdownButtonFormField<WarrantyDurationUnit>(
+                          key: const ValueKey('warrantyDurationUnitField'),
+                          initialValue: _warrantyDurationUnit,
+                          isExpanded: true,
+                          decoration: const InputDecoration(),
+                          items: WarrantyDurationUnit.values
+                              .map(
+                                (unit) => DropdownMenuItem(
+                                  value: unit,
+                                  child: Text(
+                                    unit == WarrantyDurationUnit.years
+                                        ? 'Year'
+                                        : 'Month',
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (unit) {
+                            if (unit == null || unit == _warrantyDurationUnit) {
+                              return;
+                            }
+                            setState(() {
+                              _warrantyDurationUnit = unit;
+                              _clearStaleOutOfWarrantyOverride();
+                            });
+                          },
+                        ),
+                      ),
+                    ),
                   ],
-                  onChanged: (_) {
-                    setState(_clearStaleOutOfWarrantyOverride);
-                  },
-                  validator: (value) {
-                    if (_useManualWarrantyExpiry) return null;
-                    final text = value?.trim() ?? '';
-                    if (text.isEmpty) return null;
-
-                    final duration = int.tryParse(text);
-                    if (duration == null || duration <= 0) {
-                      return 'Enter a value above 0.';
-                    }
-
-                    if (duration > 50) {
-                      return 'Use 50 years or less.';
-                    }
-
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 10),
                 _CalculatedWarrantyField(
                   purchaseDate: _purchaseDate,
                   duration: _enteredWarrantyDuration,
+                  durationUnit: _warrantyDurationUnit,
                   expiryDate: _calculatedWarrantyExpiry,
                 ),
                 Align(
@@ -1172,11 +1216,13 @@ class _CalculatedWarrantyField extends StatelessWidget {
   const _CalculatedWarrantyField({
     required this.purchaseDate,
     required this.duration,
+    required this.durationUnit,
     required this.expiryDate,
   });
 
   final DateTime? purchaseDate;
   final int? duration;
+  final WarrantyDurationUnit durationUnit;
   final DateTime? expiryDate;
 
   String _formatDate(DateTime date) {
@@ -1189,18 +1235,19 @@ class _CalculatedWarrantyField extends StatelessWidget {
   Widget build(BuildContext context) {
     final String value;
     final String helper;
+    final warrantyDuration = duration;
 
-    if (duration == null) {
+    if (warrantyDuration == null) {
       value = 'Enter warranty duration';
       helper =
-          'Enter the warranty period in years as provided by the manufacturer or retailer.';
+          'Enter the warranty period and choose whether it is in months or years.';
     } else if (purchaseDate == null) {
       value = 'Select purchase / invoice date';
       helper = 'The expiry date is calculated from the selected start date.';
     } else {
       value = expiryDate == null ? 'Not available' : _formatDate(expiryDate!);
       helper =
-          '$duration ${duration == 1 ? 'year' : 'years'} from ${_formatDate(purchaseDate!)}.';
+          '$warrantyDuration ${durationUnit.labelFor(warrantyDuration)} from ${_formatDate(purchaseDate!)}.';
     }
 
     return InputDecorator(

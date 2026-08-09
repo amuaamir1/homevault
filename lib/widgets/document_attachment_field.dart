@@ -106,22 +106,18 @@ class DocumentAttachmentField extends StatelessWidget {
                                 ).colorScheme.onSurfaceVariant,
                               ),
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          selectedDocument.isAvailableOnDevice &&
-                                  selectedDocument.isAvailableInCloud
-                              ? 'Available on this device and in cloud'
-                              : selectedDocument.isAvailableOnDevice
-                              ? 'Available on this device • cloud upload pending'
-                              : selectedDocument.isAvailableInCloud
-                              ? 'Available in cloud • download when needed'
-                              : 'File not available on this device or in cloud',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
+                        if (!selectedDocument.isAvailableOnDevice &&
+                            !selectedDocument.isAvailableInCloud) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            'File unavailable. Choose the file again to restore access.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

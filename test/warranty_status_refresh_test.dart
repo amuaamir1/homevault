@@ -43,7 +43,7 @@ void main() {
         const ValueKey('warrantyMarkedExpiredSwitch'),
       );
       final durationFinder = find.byKey(
-        const ValueKey('warrantyDurationYearsField'),
+        const ValueKey('warrantyDurationValueField'),
       );
 
       // AddApplianceScreen uses a lazy ListView. The switch is far below the
@@ -81,6 +81,91 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
+    },
+  );
+
+  testWidgets('new appliance defaults warranty duration unit to Year', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: AddApplianceScreen()));
+    await tester.pumpAndSettle();
+
+    final listView = find.byType(ListView);
+    final unitFinder = find.byKey(const ValueKey('warrantyDurationUnitField'));
+
+    await tester.dragUntilVisible(unitFinder, listView, const Offset(0, -450));
+    await tester.pumpAndSettle();
+
+    expect(unitFinder, findsOneWidget);
+    expect(find.text('Year'), findsOneWidget);
+
+    final dropdown = tester
+        .widget<DropdownButtonFormField<WarrantyDurationUnit>>(unitFinder);
+    expect(dropdown.initialValue, WarrantyDurationUnit.years);
+
+    await tester.tap(unitFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Month'), findsOneWidget);
+    expect(find.text('Year'), findsWidgets);
+    expect(find.text('Months'), findsNothing);
+    expect(find.text('Years'), findsNothing);
+  });
+
+  testWidgets(
+    'month-based warranty stays editable in automatic calculation mode',
+    (tester) async {
+      final appliance = Appliance(
+        id: 'month-warranty-1',
+        name: 'Washing machine',
+        category: 'Laundry',
+        brand: 'Bosch',
+        purchaseDate: DateTime(2026, 8, 8),
+        warrantyExpiryDate: DateTime(2028, 2, 7),
+        warrantyDurationValue: 18,
+        warrantyDurationUnit: WarrantyDurationUnit.months,
+        createdAt: DateTime(2026, 8, 8),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: AddApplianceScreen(appliance: appliance)),
+      );
+      await tester.pumpAndSettle();
+
+      final listView = find.byType(ListView);
+      final durationFinder = find.byKey(
+        const ValueKey('warrantyDurationValueField'),
+      );
+      final unitFinder = find.byKey(
+        const ValueKey('warrantyDurationUnitField'),
+      );
+
+      // ListView lazily builds and disposes off-screen children. Check the
+      // duration field while it is visible before scrolling farther down to
+      // the unit selector.
+      await tester.dragUntilVisible(
+        durationFinder,
+        listView,
+        const Offset(0, -400),
+      );
+      await tester.pumpAndSettle();
+
+      expect(durationFinder, findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(durationFinder).controller?.text,
+        '18',
+      );
+
+      await tester.dragUntilVisible(
+        unitFinder,
+        listView,
+        const Offset(0, -250),
+      );
+      await tester.pumpAndSettle();
+
+      expect(unitFinder, findsOneWidget);
+      expect(find.text('Month'), findsOneWidget);
+      expect(find.text('07/02/2028'), findsOneWidget);
     },
   );
 

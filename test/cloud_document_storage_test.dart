@@ -3,11 +3,13 @@ import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/services/cloud_document_storage_service.dart';
+import 'package:homevault/services/document_storage_service.dart';
 import 'package:homevault/state/appliance_store.dart';
 
 class _FakeCloudDocumentStorage implements CloudDocumentStorage {
   String? ownerUid;
   final List<String> uploadedIds = [];
+  final List<String> downloadedIds = [];
   final List<String> deletedPaths = [];
 
   @override
@@ -36,6 +38,7 @@ class _FakeCloudDocumentStorage implements CloudDocumentStorage {
     required StoredDocument document,
     required String destinationPath,
   }) async {
+    downloadedIds.add(document.id);
     return document.copyWith(localPath: destinationPath);
   }
 
@@ -43,6 +46,19 @@ class _FakeCloudDocumentStorage implements CloudDocumentStorage {
   Future<void> delete(StoredDocument document) async {
     deletedPaths.add(document.cloudStoragePath);
   }
+}
+
+class _FakeDocumentStorageService extends DocumentStorageService {
+  @override
+  Future<String> prepareDownloadDestination({
+    required String applianceId,
+    required StoredDocument document,
+  }) async {
+    return '/cache/$applianceId/${document.id}/${document.fileName}';
+  }
+
+  @override
+  Future<void> deleteStoredDocument(StoredDocument document) async {}
 }
 
 StoredDocument _document({
@@ -72,6 +88,14 @@ Appliance _appliance(StoredDocument? document) {
     createdAt: DateTime(2026, 8, 8),
     invoiceDocument: document,
   );
+}
+
+Future<void> _waitUntil(bool Function() condition) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  fail('Timed out waiting for the background document synchronization.');
 }
 
 void main() {
@@ -104,6 +128,7 @@ void main() {
     final store = ApplianceStore(
       repository: repository,
       cloudDocumentStorage: cloudStorage,
+      documentStorageService: _FakeDocumentStorageService(),
     );
 
     await store.bindOwner('user-1');
@@ -121,6 +146,40 @@ void main() {
     store.dispose();
   });
 
+  test('cloud-only document is cached automatically after sign-in', () async {
+    const cloudPath =
+        'users/user-1/appliances/appliance-1/documents/invoice-1/file.pdf';
+    final repository = MemoryApplianceRepository(
+      initialAppliances: [
+        _appliance(_document(localPath: '', cloudPath: cloudPath)),
+      ],
+    );
+    final cloudStorage = _FakeCloudDocumentStorage();
+    final store = ApplianceStore(
+      repository: repository,
+      cloudDocumentStorage: cloudStorage,
+      documentStorageService: _FakeDocumentStorageService(),
+    );
+
+    await store.bindOwner('user-1');
+    await _waitUntil(
+      () => store.appliances.single.invoiceDocument!.isAvailableOnDevice,
+    );
+
+    final cached = store.appliances.single.invoiceDocument!;
+    expect(cloudStorage.downloadedIds, ['invoice-1']);
+    expect(cached.localPath, '/cache/appliance-1/invoice-1/invoice.pdf');
+    expect(cached.isAvailableInCloud, isTrue);
+
+    final persisted = await repository.loadAppliances();
+    expect(
+      persisted.single.invoiceDocument!.localPath,
+      '/cache/appliance-1/invoice-1/invoice.pdf',
+    );
+
+    store.dispose();
+  });
+
   test('removing document cleans its previous cloud object', () async {
     final cloudPath =
         'users/user-1/appliances/appliance-1/documents/invoice-1/file.pdf';
@@ -131,6 +190,7 @@ void main() {
     final store = ApplianceStore(
       repository: repository,
       cloudDocumentStorage: cloudStorage,
+      documentStorageService: _FakeDocumentStorageService(),
     );
 
     await store.bindOwner('user-1');

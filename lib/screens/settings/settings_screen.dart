@@ -269,7 +269,7 @@ class _CloudSyncTile extends StatelessWidget {
         padding: const EdgeInsets.only(top: 4),
         child: Text(
           '${details.statusText}\n'
-          'Structured data syncs across devices; attachment files remain local for now.',
+          'Appliances and documents sync automatically across your signed-in devices.',
         ),
       ),
       trailing: cloudSyncAvailable

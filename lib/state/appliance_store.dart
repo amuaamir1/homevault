@@ -45,6 +45,7 @@ class ApplianceStore extends ChangeNotifier {
   StreamSubscription<CloudSyncStatus>? _syncStatusSubscription;
   CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
   Future<void>? _documentSyncInProgress;
+  final Map<String, Future<StoredDocument>> _documentDownloads = {};
 
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
@@ -471,7 +472,7 @@ class ApplianceStore extends ChangeNotifier {
       return existing;
     }
 
-    final operation = _syncPendingCloudDocuments();
+    final operation = _synchronizeCloudDocuments();
     _documentSyncInProgress = operation;
     return operation.whenComplete(() {
       if (identical(_documentSyncInProgress, operation)) {
@@ -539,6 +540,27 @@ class ApplianceStore extends ChangeNotifier {
   Future<StoredDocument> downloadDocument(
     String applianceId,
     String documentId,
+  ) {
+    final ownerKey = _ownerUid ?? 'signed-out';
+    final transferKey = '$ownerKey::$applianceId::$documentId';
+    final activeDownload = _documentDownloads[transferKey];
+    if (activeDownload != null) {
+      return activeDownload;
+    }
+
+    final operation = _downloadDocumentResolved(applianceId, documentId);
+    _documentDownloads[transferKey] = operation;
+
+    return operation.whenComplete(() {
+      if (identical(_documentDownloads[transferKey], operation)) {
+        _documentDownloads.remove(transferKey);
+      }
+    });
+  }
+
+  Future<StoredDocument> _downloadDocumentResolved(
+    String applianceId,
+    String documentId,
   ) async {
     if (!_cloudDocumentStorage.isAvailable) {
       throw const CloudDocumentStorageException(
@@ -562,10 +584,11 @@ class ApplianceStore extends ChangeNotifier {
 
     if (!document.isAvailableInCloud) {
       throw const CloudDocumentStorageException(
-        'This document has not been uploaded to cloud storage yet.',
+        'This document is not available for automatic download yet.',
       );
     }
 
+    final ownerAtStart = _ownerUid;
     final destinationPath = await _documentStorageService
         .prepareDownloadDestination(
           applianceId: applianceId,
@@ -577,32 +600,97 @@ class ApplianceStore extends ChangeNotifier {
       destinationPath: destinationPath,
     );
 
-    // localPath is excluded from the Firestore fingerprint. This update writes
-    // the downloaded path only to this device's local repository and therefore
-    // does not create a new cloud revision by itself.
-    await update(appliance.replaceDocument(documentId, downloaded));
+    if (_ownerUid != ownerAtStart) {
+      try {
+        await _documentStorageService.deleteStoredDocument(downloaded);
+      } catch (_) {
+        // Account switching must not expose a downloaded file to another user.
+      }
+      throw const CloudDocumentStorageException(
+        'The document download stopped because the signed-in account changed.',
+      );
+    }
+
+    final latestAppliance = applianceById(applianceId);
+    final latestDocument = latestAppliance == null
+        ? null
+        : _documentById(latestAppliance, documentId);
+
+    if (latestAppliance == null ||
+        latestDocument == null ||
+        latestDocument.cloudStoragePath.trim() !=
+            document.cloudStoragePath.trim()) {
+      try {
+        await _documentStorageService.deleteStoredDocument(downloaded);
+      } catch (_) {
+        // A newer document version remains authoritative even if cleanup fails.
+      }
+      throw const CloudDocumentStorageException(
+        'This document changed while it was being prepared. Open it again.',
+      );
+    }
+
+    final cachedDocument = latestDocument.copyWith(
+      localPath: downloaded.localPath,
+      sizeBytes: downloaded.sizeBytes,
+    );
+
+    // localPath is excluded from the Firestore fingerprint. Persisting this
+    // cache updates only this device when the structured document metadata has
+    // not changed, so automatic downloads do not create cloud revisions.
+    try {
+      await _persistDocumentCache(latestAppliance, documentId, cachedDocument);
+    } catch (_) {
+      try {
+        await _documentStorageService.deleteStoredDocument(downloaded);
+      } catch (_) {
+        // Preserve the persistence error if temporary-cache cleanup fails.
+      }
+      rethrow;
+    }
 
     final refreshedAppliance = applianceById(applianceId);
     return refreshedAppliance == null
-        ? downloaded
-        : _documentById(refreshedAppliance, documentId) ?? downloaded;
+        ? cachedDocument
+        : _documentById(refreshedAppliance, documentId) ?? cachedDocument;
   }
 
-  Future<void> _syncPendingCloudDocuments() async {
+  Future<void> _persistDocumentCache(
+    Appliance appliance,
+    String documentId,
+    StoredDocument document,
+  ) async {
+    final index = _appliances.indexWhere((item) => item.id == appliance.id);
+    if (index == -1) {
+      throw StateError('The appliance could not be found.');
+    }
+
+    final updated = [..._appliances];
+    updated[index] = appliance.replaceDocument(documentId, document);
+    _appliances = await _persistAppliances(updated);
+    notifyListeners();
+  }
+
+  /// Keeps attachment synchronization invisible during normal use. Local-only
+  /// files are uploaded in the background and cloud-only files are cached on
+  /// this device automatically after sign-in, refresh, or a remote update.
+  Future<void> _synchronizeCloudDocuments() async {
     final applianceIds = _appliances
         .map((appliance) => appliance.id)
         .toList(growable: false);
 
+    // Upload local-only files first. A successful upload leaves the document
+    // available both locally and in cloud, so it will not enter the cache pass.
     for (final applianceId in applianceIds) {
       final current = applianceById(applianceId);
       if (current == null) continue;
 
-      final pendingIds = current.allDocuments
+      final pendingUploadIds = current.allDocuments
           .where((document) => document.needsCloudUpload)
           .map((document) => document.id)
           .toList(growable: false);
 
-      for (final documentId in pendingIds) {
+      for (final documentId in pendingUploadIds) {
         final latest = applianceById(applianceId);
         final latestDocument = latest == null
             ? null
@@ -619,6 +707,45 @@ class ApplianceStore extends ChangeNotifier {
             error,
             stack,
             reason: 'Uploading a pending HomeVault cloud document',
+          );
+        }
+      }
+    }
+
+    // Cache files that came from another signed-in device. This runs in the
+    // background, so users normally open documents without seeing transfer
+    // states or needing to press a download button.
+    for (final applianceId in applianceIds) {
+      final current = applianceById(applianceId);
+      if (current == null) continue;
+
+      final pendingDownloadIds = current.allDocuments
+          .where(
+            (document) =>
+                !document.isAvailableOnDevice && document.isAvailableInCloud,
+          )
+          .map((document) => document.id)
+          .toList(growable: false);
+
+      for (final documentId in pendingDownloadIds) {
+        final latest = applianceById(applianceId);
+        final latestDocument = latest == null
+            ? null
+            : _documentById(latest, documentId);
+
+        if (latestDocument == null ||
+            latestDocument.isAvailableOnDevice ||
+            !latestDocument.isAvailableInCloud) {
+          continue;
+        }
+
+        try {
+          await downloadDocument(applianceId, documentId);
+        } catch (error, stack) {
+          await CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Caching a HomeVault cloud document on this device',
           );
         }
       }

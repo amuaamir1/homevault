@@ -9,7 +9,6 @@ class StoredDocumentTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onOpen,
-    this.onRetryUpload,
     this.onEdit,
     this.onDelete,
   });
@@ -18,7 +17,6 @@ class StoredDocumentTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onOpen;
-  final VoidCallback? onRetryUpload;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -35,33 +33,23 @@ class StoredDocumentTile extends StatelessWidget {
     }
   }
 
-  String get _availabilityText {
-    if (document.isAvailableOnDevice && document.isAvailableInCloud) {
-      return '${document.formattedSize} • On this device & cloud';
-    }
-    if (document.isAvailableOnDevice) {
-      return '${document.formattedSize} • Cloud upload pending';
-    }
-    if (document.isAvailableInCloud) {
-      return '${document.formattedSize} • Available in cloud';
-    }
-    return '${document.formattedSize} • File unavailable';
-  }
-
   bool get _canOpen =>
       document.isAvailableOnDevice || document.isAvailableInCloud;
+
+  String get _fileStatusText => _canOpen
+      ? document.formattedSize
+      : '${document.formattedSize} • File unavailable';
 
   @override
   Widget build(BuildContext context) {
     final reference = document.reference.trim();
     final fileDetails = [
       document.fileName,
-      _availabilityText,
+      _fileStatusText,
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
 
-    final hasActions =
-        onRetryUpload != null || onEdit != null || onDelete != null;
+    final hasActions = onEdit != null || onDelete != null;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -71,18 +59,10 @@ class StoredDocumentTile extends StatelessWidget {
       isThreeLine: true,
       trailing: !hasActions
           ? IconButton(
-              tooltip: document.isAvailableOnDevice
-                  ? 'Open document'
-                  : document.isAvailableInCloud
-                  ? 'Download and open'
-                  : 'File unavailable',
+              tooltip: _canOpen ? 'Open document' : 'File unavailable',
               onPressed: _canOpen ? onOpen : null,
               icon: Icon(
-                document.isAvailableOnDevice
-                    ? Icons.open_in_new
-                    : document.isAvailableInCloud
-                    ? Icons.cloud_download_outlined
-                    : Icons.cloud_off_outlined,
+                _canOpen ? Icons.open_in_new : Icons.warning_amber_outlined,
               ),
             )
           : PopupMenuButton<String>(
@@ -91,9 +71,6 @@ class StoredDocumentTile extends StatelessWidget {
                 switch (action) {
                   case 'open':
                     onOpen();
-                    break;
-                  case 'upload':
-                    onRetryUpload?.call();
                     break;
                   case 'edit':
                     onEdit?.call();
@@ -105,37 +82,19 @@ class StoredDocumentTile extends StatelessWidget {
               },
               itemBuilder: (context) => [
                 if (_canOpen)
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'open',
                     child: ListTile(
-                      leading: Icon(
-                        document.isAvailableOnDevice
-                            ? Icons.open_in_new
-                            : Icons.cloud_download_outlined,
-                      ),
-                      title: Text(
-                        document.isAvailableOnDevice
-                            ? 'Open'
-                            : 'Download and open',
-                      ),
+                      leading: Icon(Icons.open_in_new),
+                      title: Text('Open'),
                     ),
                   )
                 else
                   const PopupMenuItem(
                     enabled: false,
                     child: ListTile(
-                      leading: Icon(Icons.cloud_off_outlined),
+                      leading: Icon(Icons.warning_amber_outlined),
                       title: Text('File unavailable'),
-                    ),
-                  ),
-                if (onRetryUpload != null &&
-                    document.isAvailableOnDevice &&
-                    !document.isAvailableInCloud)
-                  const PopupMenuItem(
-                    value: 'upload',
-                    child: ListTile(
-                      leading: Icon(Icons.cloud_upload_outlined),
-                      title: Text('Retry cloud upload'),
                     ),
                   ),
                 if (onEdit != null)
