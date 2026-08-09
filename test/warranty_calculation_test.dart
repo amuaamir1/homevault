@@ -74,6 +74,27 @@ void main() {
       expect(restored.warrantyExpiryDate, DateTime(2028, 8, 7));
     });
 
+    test('month duration metadata survives JSON round trip', () {
+      final original = Appliance(
+        id: 'appliance-months',
+        name: 'Washing machine',
+        category: 'Laundry',
+        brand: 'Bosch',
+        purchaseDate: DateTime(2026, 8, 8),
+        warrantyExpiryDate: DateTime(2028, 2, 7),
+        warrantyDurationValue: 18,
+        warrantyDurationUnit: WarrantyDurationUnit.months,
+        createdAt: DateTime(2026, 8, 8),
+      );
+
+      final restored = Appliance.fromJson(original.toJson());
+
+      expect(restored.warrantyDurationValue, 18);
+      expect(restored.warrantyDurationUnit, WarrantyDurationUnit.months);
+      expect(restored.warrantyDurationLabel, '18 months');
+      expect(restored.calculatedWarrantyExpiryDate, DateTime(2028, 2, 7));
+    });
+
     test('legacy warranty records remain compatible', () {
       final restored = Appliance.fromJson({
         'id': 'legacy-1',

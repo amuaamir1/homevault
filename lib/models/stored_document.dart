@@ -175,7 +175,16 @@ class StoredDocument {
     if (localDocument != null &&
         localDocument.id == id &&
         localDocument.isAvailableOnDevice) {
-      return copyWith(localPath: localDocument.localPath);
+      final cloudPath = cloudStoragePath.trim();
+      final localCloudPath = localDocument.cloudStoragePath.trim();
+      final sameCloudObject =
+          cloudPath.isEmpty ||
+          localCloudPath.isEmpty ||
+          cloudPath == localCloudPath;
+
+      if (sameCloudObject) {
+        return copyWith(localPath: localDocument.localPath);
+      }
     }
     return copyWith(localPath: '');
   }

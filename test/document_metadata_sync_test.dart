@@ -72,9 +72,29 @@ void main() {
       expect(merged.localPath, isEmpty);
       expect(merged.isAvailableOnDevice, isFalse);
     });
+
+    test('drops stale local cache when the cloud file was replaced', () {
+      final cloudDocument = StoredDocument(
+        id: 'manual-1',
+        fileName: 'manual.pdf',
+        localPath: '',
+        sizeBytes: 4096,
+        attachedAt: DateTime(2026, 8, 8),
+        cloudStoragePath: 'users/u/appliances/a/documents/manual-1/new.pdf',
+      );
+      final localDocument = cloudDocument.copyWith(
+        localPath: '/device/b/old-manual.pdf',
+        cloudStoragePath: 'users/u/appliances/a/documents/manual-1/old.pdf',
+      );
+
+      final merged = cloudDocument.withLocalAvailabilityFrom(localDocument);
+
+      expect(merged.localPath, isEmpty);
+      expect(merged.isAvailableOnDevice, isFalse);
+    });
   });
 
-  testWidgets('cloud-only document shows download availability', (
+  testWidgets('cloud-only document keeps sync details out of normal UI', (
     tester,
   ) async {
     final document = StoredDocument(
@@ -104,9 +124,11 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('Available in cloud'), findsOneWidget);
+    expect(find.textContaining('Available in cloud'), findsNothing);
+    expect(find.textContaining('Cloud upload pending'), findsNothing);
+    expect(find.textContaining('On this device & cloud'), findsNothing);
 
-    expect(find.byTooltip('Download and open'), findsOneWidget);
+    expect(find.byTooltip('Open document'), findsOneWidget);
   });
 
   testWidgets('document without local or cloud file shows unavailable', (

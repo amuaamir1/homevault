@@ -7,8 +7,8 @@ enum WarrantyDurationUnit { months, years }
 
 extension WarrantyDurationUnitLabel on WarrantyDurationUnit {
   String get label => switch (this) {
-    WarrantyDurationUnit.months => 'Months',
-    WarrantyDurationUnit.years => 'Years',
+    WarrantyDurationUnit.months => 'Month',
+    WarrantyDurationUnit.years => 'Year',
   };
 
   String labelFor(int value) => switch (this) {

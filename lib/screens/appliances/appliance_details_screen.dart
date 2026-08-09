@@ -76,7 +76,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'This file has not been uploaded to cloud storage and is not available on this device.',
+              'This document file is unavailable. Edit the appliance and choose the file again.',
             ),
           ),
         );
@@ -86,7 +86,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Downloading document from HomeVault cloud...'),
+          content: Text('Preparing document...'),
           duration: Duration(seconds: 30),
         ),
       );
@@ -105,7 +105,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
         if (!context.mounted) return;
         messenger.showSnackBar(
           const SnackBar(
-            content: Text('The cloud document could not be downloaded.'),
+            content: Text('The document could not be prepared right now.'),
           ),
         );
         return;
@@ -121,40 +121,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('The document could not be opened on this device.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _retryCloudUpload(
-    BuildContext context,
-    StoredDocument document,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Uploading document to HomeVault cloud...'),
-        duration: Duration(seconds: 30),
-      ),
-    );
-
-    try {
-      await AppScope.read(context).uploadDocument(applianceId, document.id);
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Document uploaded to cloud storage.')),
-      );
-    } on CloudDocumentStorageException catch (error) {
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      messenger.hideCurrentSnackBar();
-      if (!context.mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('The cloud upload could not be completed.'),
         ),
       );
     }
@@ -563,8 +529,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   subtitle: 'Invoice attachment',
                   onOpen: () =>
                       _openDocument(context, appliance.invoiceDocument!),
-                  onRetryUpload: () =>
-                      _retryCloudUpload(context, appliance.invoiceDocument!),
                 ),
               ] else
                 const Padding(
@@ -686,8 +650,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   subtitle: 'Warranty attachment',
                   onOpen: () =>
                       _openDocument(context, appliance.warrantyDocument!),
-                  onRetryUpload: () =>
-                      _retryCloudUpload(context, appliance.warrantyDocument!),
                 ),
               ] else
                 const Padding(
@@ -749,7 +711,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       title: document.displayTitle,
                       subtitle: document.type.label,
                       onOpen: () => _openDocument(context, document),
-                      onRetryUpload: () => _retryCloudUpload(context, document),
                     ),
                   )
                   .toList(),
