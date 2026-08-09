@@ -20,7 +20,7 @@ extension ServiceStatusDetails on ServiceStatus {
   String get label => switch (this) {
     ServiceStatus.scheduled => 'Scheduled',
     ServiceStatus.open => 'Open',
-    ServiceStatus.inProgress => 'In progress',
+    ServiceStatus.inProgress => 'Open',
     ServiceStatus.completed => 'Completed',
     ServiceStatus.cancelled => 'Cancelled',
   };
@@ -109,6 +109,39 @@ class ServiceRecord {
       List.unmodifiable([?receiptDocument, ?reportDocument]);
 
   bool get hasDocuments => documents.isNotEmpty;
+
+  /// Returns the service status that should be presented for [now].
+  ///
+  /// A scheduled service automatically becomes Open at the start of its
+  /// service date and remains Open until the user marks it Completed or
+  /// Cancelled. Legacy in-progress records are also treated as Open.
+  ServiceStatus effectiveStatus(DateTime now) {
+    return resolveStatus(status: status, serviceDate: serviceDate, now: now);
+  }
+
+  static ServiceStatus resolveStatus({
+    required ServiceStatus status,
+    required DateTime serviceDate,
+    required DateTime now,
+  }) {
+    if (status == ServiceStatus.inProgress) {
+      return ServiceStatus.open;
+    }
+    if (status != ServiceStatus.scheduled) {
+      return status;
+    }
+
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduledDay = DateTime(
+      serviceDate.year,
+      serviceDate.month,
+      serviceDate.day,
+    );
+
+    return scheduledDay.isAfter(today)
+        ? ServiceStatus.scheduled
+        : ServiceStatus.open;
+  }
 
   int? get serviceIntervalMonths {
     final value = serviceIntervalValue;

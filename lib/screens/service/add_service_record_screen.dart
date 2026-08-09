@@ -74,7 +74,8 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     _nextServiceDate = record?.nextServiceDate;
     _serviceIntervalUnit =
         record?.serviceIntervalUnit ?? ServiceIntervalUnit.months;
-    _status = record?.status ?? ServiceStatus.completed;
+    _status =
+        record?.effectiveStatus(DateTime.now()) ?? ServiceStatus.completed;
     _reminderEnabled = record?.reminderEnabled ?? false;
     final reminderDays = record?.reminderDaysBefore ?? 7;
     _reminderDaysBefore = _reminderOptions.contains(reminderDays)
@@ -147,6 +148,13 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
       } else {
         _serviceDate = selected;
         _recalculateNextServiceDate();
+        if (_status == ServiceStatus.scheduled) {
+          _status = ServiceRecord.resolveStatus(
+            status: _status,
+            serviceDate: _serviceDate,
+            now: DateTime.now(),
+          );
+        }
       }
     });
   }
@@ -347,7 +355,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     }
 
     final existing = widget.record;
-    final record = ServiceRecord(
+    var record = ServiceRecord(
       id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
       serviceDate: _serviceDate,
       createdAt: existing?.createdAt ?? DateTime.now(),
@@ -379,6 +387,11 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
         reference: _ticketController.text.trim(),
       ),
     );
+
+    final effectiveStatus = record.effectiveStatus(DateTime.now());
+    if (effectiveStatus != record.status) {
+      record = record.copyWith(status: effectiveStatus);
+    }
 
     _submitted = true;
     Navigator.of(context).pop(
@@ -445,6 +458,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
                 prefixIcon: Icon(Icons.flag_outlined),
               ),
               items: ServiceStatus.values
+                  .where((status) => status != ServiceStatus.inProgress)
                   .map(
                     (status) => DropdownMenuItem(
                       value: status,
@@ -455,8 +469,12 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
               onChanged: (value) {
                 if (value == null) return;
                 setState(() {
-                  _status = value;
-                  if (value == ServiceStatus.cancelled) {
+                  _status = ServiceRecord.resolveStatus(
+                    status: value,
+                    serviceDate: _serviceDate,
+                    now: DateTime.now(),
+                  );
+                  if (_status == ServiceStatus.cancelled) {
                     _reminderEnabled = false;
                   }
                 });

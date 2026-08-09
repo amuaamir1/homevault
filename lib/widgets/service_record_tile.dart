@@ -7,6 +7,7 @@ class ServiceRecordTile extends StatelessWidget {
     super.key,
     required this.record,
     this.applianceName,
+    this.now,
     this.onTap,
     this.onEdit,
     this.onDelete,
@@ -14,6 +15,7 @@ class ServiceRecordTile extends StatelessWidget {
 
   final ServiceRecord record;
   final String? applianceName;
+  final DateTime? now;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -28,12 +30,16 @@ class ServiceRecordTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = record.provider.trim();
     final problem = record.problemDescription.trim();
-    final subtitleLines = <String>[
-      if (applianceName != null && applianceName!.trim().isNotEmpty)
-        applianceName!,
-      if (provider.isNotEmpty) provider,
-      if (problem.isNotEmpty) problem,
-      record.status == ServiceStatus.completed
+    final appliance = applianceName?.trim() ?? '';
+    final effectiveStatus = record.effectiveStatus(now ?? DateTime.now());
+    final title = record.ticketNumber.trim().isEmpty
+        ? effectiveStatus.label
+        : '${effectiveStatus.label} • ${record.ticketNumber.trim()}';
+
+    final details = <String>[
+      if (provider.isNotEmpty) 'Provider: $provider',
+      if (problem.isNotEmpty) 'Issue: $problem',
+      effectiveStatus == ServiceStatus.completed
           ? 'Last serviced: ${_date(record.serviceDate)}'
           : 'Service date: ${_date(record.serviceDate)}',
       if (record.serviceFrequencyLabel != null)
@@ -43,46 +49,79 @@ class ServiceRecordTile extends StatelessWidget {
     ];
 
     return Card(
-      child: ListTile(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: onTap ?? onEdit,
-        isThreeLine: true,
-        leading: CircleAvatar(child: Icon(_iconForStatus(record.status))),
-        title: Text(
-          record.ticketNumber.trim().isEmpty
-              ? record.status.label
-              : '${record.status.label} • ${record.ticketNumber}',
-        ),
-        subtitle: Text(
-          subtitleLines.join('\n'),
-          maxLines: 6,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: PopupMenuButton<String>(
-          tooltip: 'Service record options',
-          onSelected: (value) {
-            if (value == 'edit') onEdit?.call();
-            if (value == 'delete') onDelete?.call();
-          },
-          itemBuilder: (context) => [
-            if (onEdit != null)
-              const PopupMenuItem(
-                value: 'edit',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.edit_outlined),
-                  title: Text('Edit'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(child: Icon(_iconForStatus(effectiveStatus))),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (appliance.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        appliance,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (details.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      for (var index = 0; index < details.length; index++) ...[
+                        Text(
+                          details[index],
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        if (index != details.length - 1)
+                          const SizedBox(height: 2),
+                      ],
+                    ],
+                  ],
                 ),
               ),
-            if (onDelete != null)
-              const PopupMenuItem(
-                value: 'delete',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_outline),
-                  title: Text('Delete'),
-                ),
+              PopupMenuButton<String>(
+                tooltip: 'Service record options',
+                onSelected: (value) {
+                  if (value == 'edit') onEdit?.call();
+                  if (value == 'delete') onDelete?.call();
+                },
+                itemBuilder: (context) => [
+                  if (onEdit != null)
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit'),
+                      ),
+                    ),
+                  if (onDelete != null)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                      ),
+                    ),
+                ],
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -784,7 +784,9 @@ class ApplianceStore extends ChangeNotifier {
 
     for (final document in staleDocuments) {
       try {
-        await _cloudDocumentStorage.delete(document);
+        await _cloudDocumentStorage
+            .delete(document)
+            .timeout(const Duration(seconds: 8));
       } catch (error, stack) {
         await CrashReportingService.recordNonFatal(
           error,
@@ -899,8 +901,13 @@ class ApplianceStore extends ChangeNotifier {
       );
       _appliances = persisted;
       notifyListeners();
-      await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
-      await _syncRemindersSafely();
+      // The restored structured data is already safely persisted at this
+      // point. Cloud-file cleanup and local reminder rebuilding are
+      // maintenance tasks and must not keep the restore dialog spinning.
+      unawaited(
+        _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted),
+      );
+      unawaited(_syncRemindersSafely());
       unawaited(retryCloudDocumentSync());
     });
   }
@@ -935,7 +942,9 @@ class ApplianceStore extends ChangeNotifier {
       final persisted = await _persistAppliances(updated);
       _appliances = persisted;
       notifyListeners();
-      await _syncRemindersSafely();
+      // Reminder rebuilding is best-effort post-restore work. Do not block
+      // merge completion if the platform notification plugin is slow.
+      unawaited(_syncRemindersSafely());
       unawaited(retryCloudDocumentSync());
       return imported.length;
     });
@@ -995,7 +1004,9 @@ class ApplianceStore extends ChangeNotifier {
 
   Future<void> _syncRemindersSafely() async {
     try {
-      await _reminderScheduler.syncAll(_appliances);
+      await _reminderScheduler
+          .syncAll(_appliances)
+          .timeout(const Duration(seconds: 5));
     } catch (error, stack) {
       await CrashReportingService.recordNonFatal(
         error,
@@ -1007,7 +1018,9 @@ class ApplianceStore extends ChangeNotifier {
 
   Future<void> _scheduleReminderSafely(Appliance appliance) async {
     try {
-      await _reminderScheduler.scheduleFor(appliance);
+      await _reminderScheduler
+          .scheduleFor(appliance)
+          .timeout(const Duration(seconds: 5));
     } catch (error, stack) {
       await CrashReportingService.recordNonFatal(
         error,
@@ -1019,7 +1032,9 @@ class ApplianceStore extends ChangeNotifier {
 
   Future<void> _cancelReminderSafely(String applianceId) async {
     try {
-      await _reminderScheduler.cancelFor(applianceId);
+      await _reminderScheduler
+          .cancelFor(applianceId)
+          .timeout(const Duration(seconds: 5));
     } catch (error, stack) {
       await CrashReportingService.recordNonFatal(
         error,
