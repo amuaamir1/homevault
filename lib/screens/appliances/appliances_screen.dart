@@ -6,6 +6,24 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/warranty_status_chip.dart';
 import 'appliance_details_screen.dart';
 
+enum _ApplianceSort {
+  nameAscending,
+  nameDescending,
+  newestAdded,
+  oldestAdded,
+  warrantyEndingSoon,
+}
+
+extension _ApplianceSortLabel on _ApplianceSort {
+  String get label => switch (this) {
+    _ApplianceSort.nameAscending => 'Name A–Z',
+    _ApplianceSort.nameDescending => 'Name Z–A',
+    _ApplianceSort.newestAdded => 'Newest added',
+    _ApplianceSort.oldestAdded => 'Oldest added',
+    _ApplianceSort.warrantyEndingSoon => 'Warranty ending soon',
+  };
+}
+
 class AppliancesScreen extends StatefulWidget {
   const AppliancesScreen({super.key, required this.onAddAppliance});
 
@@ -29,29 +47,54 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
   ];
 
   final Set<String> _expandedCategories = {};
+  final TextEditingController _searchController = TextEditingController();
+
   String _query = '';
+  String? _categoryFilter;
+  WarrantyStatus? _warrantyFilter;
+  _ApplianceSort _sort = _ApplianceSort.nameAscending;
+
+  bool get _hasFilters => _categoryFilter != null || _warrantyFilter != null;
+
+  int get _activeFilterCount =>
+      (_categoryFilter == null ? 0 : 1) + (_warrantyFilter == null ? 0 : 1);
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final store = AppScope.of(context);
-    final query = _query.trim().toLowerCase();
+    final allAppliances = store.appliances.toList(growable: false);
+    final now = DateTime.now();
+    final availableCategories = _sortedCategories(
+      allAppliances
+          .map((appliance) => _normalizedCategory(appliance.category))
+          .toSet(),
+    );
 
-    final appliances = store.appliances
-        .where((appliance) {
-          if (query.isEmpty) {
-            return true;
-          }
+    final appliances = allAppliances
+        .where((appliance) => _matchesSearch(appliance))
+        .where(
+          (appliance) =>
+              _categoryFilter == null ||
+              _normalizedCategory(appliance.category) == _categoryFilter,
+        )
+        .where(
+          (appliance) =>
+              _warrantyFilter == null ||
+              appliance.warrantyStatusAt(now) == _warrantyFilter,
+        )
+        .toList(growable: true);
 
-          return appliance.name.toLowerCase().contains(query) ||
-              appliance.brand.toLowerCase().contains(query) ||
-              appliance.category.toLowerCase().contains(query) ||
-              appliance.modelNumber.toLowerCase().contains(query) ||
-              appliance.serialNumber.toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+    _sortAppliances(appliances, now);
 
     final groupedAppliances = _groupAppliances(appliances);
     final categories = _sortedCategories(groupedAppliances.keys);
+    final isNarrowed = _query.trim().isNotEmpty || _hasFilters;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Appliances')),
@@ -65,42 +108,130 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
               child: SearchBar(
+                key: const ValueKey('applianceSearchField'),
+                controller: _searchController,
                 hintText: 'Search appliances',
                 leading: const Icon(Icons.search),
                 trailing: [
                   if (_query.isNotEmpty)
                     IconButton(
                       tooltip: 'Clear search',
-                      onPressed: () => setState(() => _query = ''),
+                      onPressed: _clearSearch,
                       icon: const Icon(Icons.close),
                     ),
                 ],
                 onChanged: (value) => setState(() => _query = value),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('applianceFilterButton'),
+                      onPressed: () =>
+                          _showFilters(context, availableCategories),
+                      icon: const Icon(Icons.tune, size: 20),
+                      label: Text(
+                        _activeFilterCount == 0
+                            ? 'Filters'
+                            : 'Filters ($_activeFilterCount)',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: PopupMenuButton<_ApplianceSort>(
+                      key: const ValueKey('applianceSortButton'),
+                      tooltip: 'Sort appliances',
+                      initialValue: _sort,
+                      onSelected: (value) => setState(() => _sort = value),
+                      itemBuilder: (context) => [
+                        for (final option in _ApplianceSort.values)
+                          PopupMenuItem(
+                            value: option,
+                            child: Row(
+                              children: [
+                                if (option == _sort) ...[
+                                  const Icon(Icons.check, size: 18),
+                                  const SizedBox(width: 8),
+                                ] else
+                                  const SizedBox(width: 26),
+                                Flexible(child: Text(option.label)),
+                              ],
+                            ),
+                          ),
+                      ],
+                      child: _ApplianceToolbarButton(
+                        icon: Icons.swap_vert,
+                        label: _sort.label,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_hasFilters)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (_categoryFilter != null)
+                        InputChip(
+                          key: const ValueKey('activeCategoryFilterChip'),
+                          label: Text(_categoryFilter!),
+                          onDeleted: () =>
+                              setState(() => _categoryFilter = null),
+                        ),
+                      if (_warrantyFilter != null)
+                        InputChip(
+                          key: const ValueKey('activeWarrantyFilterChip'),
+                          label: Text(_warrantyStatusLabel(_warrantyFilter!)),
+                          onDeleted: () =>
+                              setState(() => _warrantyFilter = null),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             Expanded(
               child: appliances.isEmpty
                   ? EmptyState(
-                      icon: query.isEmpty
+                      icon: allAppliances.isEmpty
                           ? Icons.home_repair_service_outlined
                           : Icons.search_off,
-                      title: query.isEmpty
+                      title: allAppliances.isEmpty
                           ? 'No appliances yet'
                           : 'No matching appliances',
-                      message: query.isEmpty
+                      message: allAppliances.isEmpty
                           ? 'Add an appliance to keep its warranty, invoice reference, and support details together.'
-                          : 'Try another name, brand, model, serial number, or category.',
-                      actionLabel: query.isEmpty ? 'Add appliance' : null,
-                      onAction: query.isEmpty ? widget.onAddAppliance : null,
+                          : 'Try another search or clear one of the active filters.',
+                      actionLabel: allAppliances.isEmpty
+                          ? 'Add appliance'
+                          : isNarrowed
+                          ? 'Clear search & filters'
+                          : null,
+                      onAction: allAppliances.isEmpty
+                          ? widget.onAddAppliance
+                          : isNarrowed
+                          ? _clearSearchAndFilters
+                          : null,
                     )
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
                       children: [
                         _ApplianceSummary(
                           applianceCount: appliances.length,
+                          totalCount: allAppliances.length,
                           categoryCount: categories.length,
+                          isFiltered: isNarrowed,
                         ),
                         const SizedBox(height: 12),
                         for (final category in categories) ...[
@@ -108,7 +239,7 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
                             category: category,
                             appliances: groupedAppliances[category]!,
                             initiallyExpanded:
-                                query.isNotEmpty ||
+                                isNarrowed ||
                                 _expandedCategories.contains(category),
                             onExpansionChanged: (expanded) {
                               setState(() {
@@ -131,26 +262,268 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
     );
   }
 
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _query = '');
+  }
+
+  Future<void> _clearSearchAndFilters() async {
+    _searchController.clear();
+    setState(() {
+      _query = '';
+      _categoryFilter = null;
+      _warrantyFilter = null;
+    });
+  }
+
+  bool _matchesSearch(Appliance appliance) {
+    final normalizedQuery = _query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return true;
+
+    final searchableValues = <String>[
+      appliance.name,
+      appliance.brand,
+      appliance.category,
+      appliance.modelNumber,
+      appliance.serialNumber,
+      appliance.supportProvider,
+      appliance.supportPhone,
+      appliance.supportEmail,
+      appliance.supportWebsite,
+      appliance.invoiceReference,
+      appliance.warrantyProvider,
+      appliance.warrantyReference,
+      appliance.extendedWarrantyProvider,
+      appliance.extendedWarrantyReference,
+      appliance.warrantyClaimNumber,
+      appliance.notes,
+      ...appliance.allDocuments.expand(
+        (document) => [
+          document.displayTitle,
+          document.fileName,
+          document.reference,
+        ],
+      ),
+      ...appliance.serviceRecords.expand(
+        (record) => [
+          record.provider,
+          record.technicianName,
+          record.ticketNumber,
+          record.problemDescription,
+        ],
+      ),
+    ];
+
+    final searchableText = searchableValues
+        .where((value) => value.trim().isNotEmpty)
+        .join(' ')
+        .toLowerCase();
+
+    final terms = normalizedQuery
+        .split(RegExp(r'\s+'))
+        .where((term) => term.isNotEmpty);
+
+    return terms.every(searchableText.contains);
+  }
+
   Map<String, List<Appliance>> _groupAppliances(List<Appliance> appliances) {
     final grouped = <String, List<Appliance>>{};
 
     for (final appliance in appliances) {
-      final category = appliance.category.trim().isEmpty
-          ? 'Other'
-          : appliance.category.trim();
-
+      final category = _normalizedCategory(appliance.category);
       grouped.putIfAbsent(category, () => []).add(appliance);
-    }
-
-    for (final categoryAppliances in grouped.values) {
-      categoryAppliances.sort(
-        (first, second) =>
-            first.name.toLowerCase().compareTo(second.name.toLowerCase()),
-      );
     }
 
     return grouped;
   }
+
+  String _normalizedCategory(String category) {
+    final trimmed = category.trim();
+    return trimmed.isEmpty ? 'Other' : trimmed;
+  }
+
+  void _sortAppliances(List<Appliance> appliances, DateTime now) {
+    appliances.sort((first, second) {
+      final comparison = switch (_sort) {
+        _ApplianceSort.nameAscending => _compareNames(first, second),
+        _ApplianceSort.nameDescending => _compareNames(second, first),
+        _ApplianceSort.newestAdded => second.createdAt.compareTo(
+          first.createdAt,
+        ),
+        _ApplianceSort.oldestAdded => first.createdAt.compareTo(
+          second.createdAt,
+        ),
+        _ApplianceSort.warrantyEndingSoon => _compareWarrantyEndingSoon(
+          first,
+          second,
+          now,
+        ),
+      };
+
+      return comparison == 0 ? _compareNames(first, second) : comparison;
+    });
+  }
+
+  int _compareNames(Appliance first, Appliance second) =>
+      first.name.toLowerCase().compareTo(second.name.toLowerCase());
+
+  int _compareWarrantyEndingSoon(
+    Appliance first,
+    Appliance second,
+    DateTime now,
+  ) {
+    final firstExpiry = first.effectiveWarrantyExpiryDate;
+    final secondExpiry = second.effectiveWarrantyExpiryDate;
+
+    final firstRank = _warrantySortRank(firstExpiry, now);
+    final secondRank = _warrantySortRank(secondExpiry, now);
+    final rankComparison = firstRank.compareTo(secondRank);
+    if (rankComparison != 0) return rankComparison;
+
+    if (firstExpiry == null && secondExpiry == null) return 0;
+    if (firstExpiry == null) return 1;
+    if (secondExpiry == null) return -1;
+
+    if (firstRank == 0) {
+      return firstExpiry.compareTo(secondExpiry);
+    }
+
+    return secondExpiry.compareTo(firstExpiry);
+  }
+
+  int _warrantySortRank(DateTime? expiry, DateTime now) {
+    if (expiry == null) return 2;
+
+    final today = DateTime(now.year, now.month, now.day);
+    final expiryDate = DateTime(expiry.year, expiry.month, expiry.day);
+    return expiryDate.isBefore(today) ? 1 : 0;
+  }
+
+  Future<void> _showFilters(
+    BuildContext context,
+    List<String> availableCategories,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void update(VoidCallback change) {
+              setState(change);
+              setSheetState(() {});
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  4,
+                  20,
+                  20 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Filter appliances',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('applianceCategoryFilter'),
+                      initialValue: _categoryFilter ?? '',
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      isExpanded: true,
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('All categories'),
+                        ),
+                        for (final category in availableCategories)
+                          DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        update(() {
+                          _categoryFilter = value == null || value.isEmpty
+                              ? null
+                              : value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Warranty status',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          key: const ValueKey('warrantyFilter-all'),
+                          label: const Text('All'),
+                          selected: _warrantyFilter == null,
+                          onSelected: (_) =>
+                              update(() => _warrantyFilter = null),
+                        ),
+                        for (final status in WarrantyStatus.values)
+                          ChoiceChip(
+                            key: ValueKey('warrantyFilter-${status.name}'),
+                            label: Text(_warrantyStatusLabel(status)),
+                            selected: _warrantyFilter == status,
+                            onSelected: (_) =>
+                                update(() => _warrantyFilter = status),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        TextButton(
+                          key: const ValueKey('resetApplianceFiltersButton'),
+                          onPressed: _hasFilters
+                              ? () => update(() {
+                                  _categoryFilter = null;
+                                  _warrantyFilter = null;
+                                })
+                              : null,
+                          child: const Text('Reset'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          key: const ValueKey('doneApplianceFiltersButton'),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Done'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _warrantyStatusLabel(WarrantyStatus status) => switch (status) {
+    WarrantyStatus.active => 'Active',
+    WarrantyStatus.expiringSoon => 'Expiring soon',
+    WarrantyStatus.expired => 'Expired',
+    WarrantyStatus.notProvided => 'No warranty date',
+  };
 
   List<String> _sortedCategories(Iterable<String> categories) {
     final categoryList = categories.toList();
@@ -178,17 +551,58 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
   }
 }
 
-class _ApplianceSummary extends StatelessWidget {
-  const _ApplianceSummary({
-    required this.applianceCount,
-    required this.categoryCount,
-  });
+class _ApplianceToolbarButton extends StatelessWidget {
+  const _ApplianceToolbarButton({required this.icon, required this.label});
 
-  final int applianceCount;
-  final int categoryCount;
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplianceSummary extends StatelessWidget {
+  const _ApplianceSummary({
+    required this.applianceCount,
+    required this.totalCount,
+    required this.categoryCount,
+    required this.isFiltered,
+  });
+
+  final int applianceCount;
+  final int totalCount;
+  final int categoryCount;
+  final bool isFiltered;
+
+  @override
+  Widget build(BuildContext context) {
+    final countLabel = isFiltered && applianceCount != totalCount
+        ? '$applianceCount of $totalCount appliances'
+        : '$applianceCount appliance${applianceCount == 1 ? '' : 's'}';
+
     return Row(
       children: [
         Icon(
@@ -198,8 +612,8 @@ class _ApplianceSummary extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            '$applianceCount appliance${applianceCount == 1 ? '' : 's'} '
-            'across $categoryCount categor${categoryCount == 1 ? 'y' : 'ies'}',
+            '$countLabel across $categoryCount '
+            'categor${categoryCount == 1 ? 'y' : 'ies'}',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
@@ -228,7 +642,12 @@ class _CategorySection extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        key: PageStorageKey<String>('appliance-category-$category'),
+        // ExpansionTile keeps its own state. The key must change when a
+        // search/filter switches a category from collapsed to forced-open;
+        // otherwise `initiallyExpanded` is ignored after the first build.
+        key: PageStorageKey<String>(
+          'appliance-category-$category-${initiallyExpanded ? 'expanded' : 'collapsed'}',
+        ),
         initiallyExpanded: initiallyExpanded,
         onExpansionChanged: onExpansionChanged,
         leading: CircleAvatar(child: Icon(_categoryIcon(category))),
