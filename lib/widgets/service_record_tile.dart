@@ -33,7 +33,11 @@ class ServiceRecordTile extends StatelessWidget {
         applianceName!,
       if (provider.isNotEmpty) provider,
       if (problem.isNotEmpty) problem,
-      'Service date: ${_date(record.serviceDate)}',
+      record.status == ServiceStatus.completed
+          ? 'Last serviced: ${_date(record.serviceDate)}'
+          : 'Service date: ${_date(record.serviceDate)}',
+      if (record.serviceFrequencyLabel != null)
+        'Service frequency: ${record.serviceFrequencyLabel}',
       if (record.nextServiceDate != null)
         'Next service: ${_date(record.nextServiceDate!)}',
     ];
@@ -50,7 +54,7 @@ class ServiceRecordTile extends StatelessWidget {
         ),
         subtitle: Text(
           subtitleLines.join('\n'),
-          maxLines: 4,
+          maxLines: 6,
           overflow: TextOverflow.ellipsis,
         ),
         trailing: PopupMenuButton<String>(

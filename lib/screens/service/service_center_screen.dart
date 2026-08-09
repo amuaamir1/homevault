@@ -123,12 +123,15 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
       ServiceFilter.scheduled => status == ServiceStatus.scheduled,
       ServiceFilter.completed => status == ServiceStatus.completed,
       ServiceFilter.cancelled => status == ServiceStatus.cancelled,
-      ServiceFilter.dueSoon => _isDueSoon(entry.record, now),
+      ServiceFilter.dueSoon => _isDueSoon(entry, now),
     };
   }
 
-  bool _isDueSoon(ServiceRecord record, DateTime now) {
-    final days = record.daysUntilNextService(now);
+  bool _isDueSoon(_ServiceEntry entry, DateTime now) {
+    if (entry.appliance.maintenanceScheduleRecord?.id != entry.record.id) {
+      return false;
+    }
+    final days = entry.record.daysUntilNextService(now);
     return days != null && days >= 0 && days <= 30;
   }
 

@@ -73,9 +73,9 @@ class ApplianceStore extends ChangeNotifier {
 
   int upcomingServiceCount({int days = 30, DateTime? now}) {
     final referenceDate = now ?? DateTime.now();
-    return _appliances.expand((appliance) => appliance.serviceRecords).where((
-      record,
-    ) {
+    return _appliances.where((appliance) {
+      final record = appliance.maintenanceScheduleRecord;
+      if (record == null) return false;
       final remaining = record.daysUntilNextService(referenceDate);
       return remaining != null && remaining >= 0 && remaining <= days;
     }).length;
