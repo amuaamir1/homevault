@@ -671,16 +671,14 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Total cost: ${_formatIndianCurrency(appliance.totalServiceCost)}/-',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
