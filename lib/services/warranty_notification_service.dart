@@ -193,8 +193,9 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
 
   Future<void> _scheduleCurrentReminders(Appliance appliance) async {
     await _scheduleWarrantyReminder(appliance);
-    for (final record in appliance.serviceRecords) {
-      await _scheduleServiceReminder(appliance, record);
+    final maintenanceRecord = appliance.maintenanceScheduleRecord;
+    if (maintenanceRecord != null) {
+      await _scheduleServiceReminder(appliance, maintenanceRecord);
     }
   }
 

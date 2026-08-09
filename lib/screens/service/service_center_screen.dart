@@ -9,23 +9,24 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/service_record_tile.dart';
 import 'add_service_record_screen.dart';
 
-enum ServiceFilter { all, active, scheduled, completed, cancelled, dueSoon }
+enum ServiceFilter { all, open, scheduled, dueSoon, completed, cancelled }
 
-enum ServiceSort { newest, oldest, nextService, highestCost }
+enum ServiceSort { statusPriority, newest, oldest, nextService, highestCost }
 
 extension ServiceFilterLabel on ServiceFilter {
   String get label => switch (this) {
     ServiceFilter.all => 'All',
-    ServiceFilter.active => 'Active',
+    ServiceFilter.open => 'Open',
     ServiceFilter.scheduled => 'Scheduled',
+    ServiceFilter.dueSoon => 'Due soon',
     ServiceFilter.completed => 'Completed',
     ServiceFilter.cancelled => 'Cancelled',
-    ServiceFilter.dueSoon => 'Due soon',
   };
 }
 
 extension ServiceSortLabel on ServiceSort {
   String get label => switch (this) {
+    ServiceSort.statusPriority => 'Service status',
     ServiceSort.newest => 'Newest service',
     ServiceSort.oldest => 'Oldest service',
     ServiceSort.nextService => 'Next service date',
@@ -37,24 +38,55 @@ class ServiceCenterScreen extends StatefulWidget {
   const ServiceCenterScreen({
     super.key,
     this.initialFilter = ServiceFilter.all,
+    this.now,
   });
 
   final ServiceFilter initialFilter;
+  final DateTime? now;
 
   @override
   State<ServiceCenterScreen> createState() => _ServiceCenterScreenState();
 }
 
 class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
+  static const _filterOrder = <ServiceFilter>[
+    ServiceFilter.all,
+    ServiceFilter.open,
+    ServiceFilter.scheduled,
+    ServiceFilter.dueSoon,
+    ServiceFilter.completed,
+    ServiceFilter.cancelled,
+  ];
+
   final _searchController = TextEditingController();
   late ServiceFilter _filter;
-  ServiceSort _sort = ServiceSort.newest;
+  ServiceSort _sort = ServiceSort.statusPriority;
+  bool _resolvedInitialDueSoonFilter = false;
 
   @override
   void initState() {
     super.initState();
     _filter = widget.initialFilter;
     _searchController.addListener(_refresh);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_resolvedInitialDueSoonFilter) return;
+    _resolvedInitialDueSoonFilter = true;
+
+    // The dashboard's "Service due" metric opens this screen with the
+    // Due-soon filter. If there is nothing due, showing an empty Service
+    // Center is misleading when service history already exists. Fall back to
+    // All so the user's records are visible immediately.
+    if (_filter == ServiceFilter.dueSoon) {
+      final store = AppScope.of(context);
+      if (store.totalServiceRecordCount > 0 &&
+          store.upcomingServiceCount(days: 30) == 0) {
+        _filter = ServiceFilter.all;
+      }
+    }
   }
 
   @override
@@ -69,7 +101,7 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
 
   List<_ServiceEntry> _entries(List<Appliance> appliances) {
     final query = _searchController.text.trim().toLowerCase();
-    final now = DateTime.now();
+    final now = widget.now ?? DateTime.now();
     final result = <_ServiceEntry>[];
 
     for (final appliance in appliances) {
@@ -87,7 +119,7 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
             record.problemDescription,
             record.workCompleted,
             record.partsReplaced,
-            record.status.label,
+            record.effectiveStatus(now).label,
           ].join(' ').toLowerCase();
           if (!searchable.contains(query)) continue;
         }
@@ -97,6 +129,7 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
 
     result.sort((a, b) {
       return switch (_sort) {
+        ServiceSort.statusPriority => _compareByStatusPriority(a, b, now),
         ServiceSort.newest => b.record.serviceDate.compareTo(
           a.record.serviceDate,
         ),
@@ -116,19 +149,23 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
   }
 
   bool _matchesFilter(_ServiceEntry entry, DateTime now) {
-    final status = entry.record.status;
+    final status = entry.record.effectiveStatus(now);
     return switch (_filter) {
       ServiceFilter.all => true,
-      ServiceFilter.active => status.isActive,
+      ServiceFilter.open =>
+        status == ServiceStatus.open || status == ServiceStatus.inProgress,
       ServiceFilter.scheduled => status == ServiceStatus.scheduled,
+      ServiceFilter.dueSoon => _isDueSoon(entry, now),
       ServiceFilter.completed => status == ServiceStatus.completed,
       ServiceFilter.cancelled => status == ServiceStatus.cancelled,
-      ServiceFilter.dueSoon => _isDueSoon(entry.record, now),
     };
   }
 
-  bool _isDueSoon(ServiceRecord record, DateTime now) {
-    final days = record.daysUntilNextService(now);
+  bool _isDueSoon(_ServiceEntry entry, DateTime now) {
+    if (entry.appliance.maintenanceScheduleRecord?.id != entry.record.id) {
+      return false;
+    }
+    final days = entry.record.daysUntilNextService(now);
     return days != null && days >= 0 && days <= 30;
   }
 
@@ -137,6 +174,59 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
     if (first == null) return 1;
     if (second == null) return -1;
     return first.compareTo(second);
+  }
+
+  int _compareByStatusPriority(
+    _ServiceEntry first,
+    _ServiceEntry second,
+    DateTime now,
+  ) {
+    final firstPriority = _statusPriority(first, now);
+    final secondPriority = _statusPriority(second, now);
+
+    final priorityComparison = firstPriority.compareTo(secondPriority);
+    if (priorityComparison != 0) return priorityComparison;
+
+    // Within the actionable groups, show the earliest service/due date first.
+    if (firstPriority == 0 || firstPriority == 1) {
+      return first.record.serviceDate.compareTo(second.record.serviceDate);
+    }
+    if (firstPriority == 2) {
+      return _compareNullableDates(
+        first.record.nextServiceDate,
+        second.record.nextServiceDate,
+      );
+    }
+
+    // For completed/cancelled history, keep the most recent record first.
+    return second.record.serviceDate.compareTo(first.record.serviceDate);
+  }
+
+  int _statusPriority(_ServiceEntry entry, DateTime now) {
+    final status = entry.record.effectiveStatus(now);
+
+    if (status == ServiceStatus.open || status == ServiceStatus.inProgress) {
+      return 0;
+    }
+    if (status == ServiceStatus.scheduled) {
+      return 1;
+    }
+    if (_isDueSoon(entry, now)) {
+      return 2;
+    }
+    if (status == ServiceStatus.completed) {
+      return 3;
+    }
+    if (status == ServiceStatus.cancelled) {
+      return 4;
+    }
+    return 3;
+  }
+
+  Future<void> _showAllRecords() async {
+    _searchController.clear();
+    if (!mounted) return;
+    setState(() => _filter = ServiceFilter.all);
   }
 
   Future<void> _addRecord(
@@ -356,10 +446,10 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                   height: 42,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: ServiceFilter.values.length,
+                    itemCount: _filterOrder.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
-                      final filter = ServiceFilter.values[index];
+                      final filter = _filterOrder[index];
                       return ChoiceChip(
                         label: Text(filter.label),
                         selected: _filter == filter,
@@ -380,23 +470,35 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                         : 'No matching service records',
                     message: store.appliances.isEmpty
                         ? 'Service history is linked to an appliance.'
-                        : 'Add a service record or change the search and filter.',
+                        : (_filter != ServiceFilter.all ||
+                              _searchController.text.trim().isNotEmpty)
+                        ? 'No records match the current search or filter.'
+                        : 'Add a service record to start building service history.',
                     actionLabel: store.appliances.isEmpty
                         ? null
+                        : (_filter != ServiceFilter.all ||
+                              _searchController.text.trim().isNotEmpty)
+                        ? 'Show all service records'
                         : 'Add service record',
                     onAction: store.appliances.isEmpty
                         ? null
+                        : (_filter != ServiceFilter.all ||
+                              _searchController.text.trim().isNotEmpty)
+                        ? _showAllRecords
                         : () => _addRecord(context, store.appliances),
                   )
-                : ListView.builder(
+                : ListView.separated(
                     key: const Key('serviceCenterList'),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                     itemCount: entries.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final entry = entries[index];
                       return ServiceRecordTile(
+                        key: ValueKey('serviceRecord-${entry.record.id}'),
                         record: entry.record,
                         applianceName: entry.appliance.name,
+                        now: widget.now,
                         onEdit: () => _editRecord(context, entry),
                         onDelete: () => _deleteRecord(context, entry),
                       );

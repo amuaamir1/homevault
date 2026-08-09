@@ -213,15 +213,34 @@ class Appliance {
     (total, record) => total + record.serviceCharge,
   );
 
-  DateTime? get nextServiceDate {
-    final dates = serviceRecords
-        .map((record) => record.nextServiceDate)
-        .whereType<DateTime>()
+  ServiceRecord? get latestCompletedServiceRecord {
+    final completed = serviceRecords
+        .where((record) => record.status == ServiceStatus.completed)
         .toList();
-    if (dates.isEmpty) return null;
-    dates.sort();
-    return dates.first;
+    if (completed.isEmpty) return null;
+    completed.sort((a, b) => b.serviceDate.compareTo(a.serviceDate));
+    return completed.first;
   }
+
+  ServiceRecord? get maintenanceScheduleRecord {
+    final scheduled = serviceRecords
+        .where(
+          (record) =>
+              record.status != ServiceStatus.cancelled &&
+              record.nextServiceDate != null,
+        )
+        .toList();
+    if (scheduled.isEmpty) return null;
+    scheduled.sort((a, b) => b.serviceDate.compareTo(a.serviceDate));
+    return scheduled.first;
+  }
+
+  DateTime? get lastServiceDate => latestCompletedServiceRecord?.serviceDate;
+
+  String get serviceFrequencyLabel =>
+      maintenanceScheduleRecord?.serviceFrequencyLabel ?? '';
+
+  DateTime? get nextServiceDate => maintenanceScheduleRecord?.nextServiceDate;
 
   ServiceRecord? serviceRecordById(String recordId) {
     for (final record in serviceRecords) {

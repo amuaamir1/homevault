@@ -2,11 +2,25 @@ import 'stored_document.dart';
 
 enum ServiceStatus { scheduled, open, inProgress, completed, cancelled }
 
+enum ServiceIntervalUnit { months, years }
+
+extension ServiceIntervalUnitDetails on ServiceIntervalUnit {
+  String get label => switch (this) {
+    ServiceIntervalUnit.months => 'Month',
+    ServiceIntervalUnit.years => 'Year',
+  };
+
+  String labelFor(int value) => switch (this) {
+    ServiceIntervalUnit.months => value == 1 ? 'month' : 'months',
+    ServiceIntervalUnit.years => value == 1 ? 'year' : 'years',
+  };
+}
+
 extension ServiceStatusDetails on ServiceStatus {
   String get label => switch (this) {
     ServiceStatus.scheduled => 'Scheduled',
     ServiceStatus.open => 'Open',
-    ServiceStatus.inProgress => 'In progress',
+    ServiceStatus.inProgress => 'Open',
     ServiceStatus.completed => 'Completed',
     ServiceStatus.cancelled => 'Cancelled',
   };
@@ -30,6 +44,8 @@ class ServiceRecord {
     this.partsReplaced = '',
     this.serviceCharge = 0,
     this.paymentMethod = '',
+    this.serviceIntervalValue,
+    this.serviceIntervalUnit = ServiceIntervalUnit.months,
     this.nextServiceDate,
     this.status = ServiceStatus.completed,
     this.notes = '',
@@ -56,6 +72,8 @@ class ServiceRecord {
       partsReplaced: json['partsReplaced'] as String? ?? '',
       serviceCharge: (json['serviceCharge'] as num?)?.toDouble() ?? 0,
       paymentMethod: json['paymentMethod'] as String? ?? '',
+      serviceIntervalValue: _positiveIntFromJson(json['serviceIntervalValue']),
+      serviceIntervalUnit: _intervalUnitFromJson(json['serviceIntervalUnit']),
       nextServiceDate: _dateFromJson(json['nextServiceDate']),
       status: _statusFromJson(json['status']),
       notes: json['notes'] as String? ?? '',
@@ -77,6 +95,8 @@ class ServiceRecord {
   final String partsReplaced;
   final double serviceCharge;
   final String paymentMethod;
+  final int? serviceIntervalValue;
+  final ServiceIntervalUnit serviceIntervalUnit;
   final DateTime? nextServiceDate;
   final ServiceStatus status;
   final String notes;
@@ -89,6 +109,83 @@ class ServiceRecord {
       List.unmodifiable([?receiptDocument, ?reportDocument]);
 
   bool get hasDocuments => documents.isNotEmpty;
+
+  /// Returns the service status that should be presented for [now].
+  ///
+  /// Open/Scheduled are date-driven:
+  /// - a future service date is Scheduled;
+  /// - on the service date, and afterwards, it is Open until the user marks
+  ///   it Completed or Cancelled.
+  ///
+  /// This also repairs older records that may have been persisted as Open
+  /// even after their service date was moved into the future. Legacy
+  /// in-progress records follow the same date-driven rule.
+  ServiceStatus effectiveStatus(DateTime now) {
+    return resolveStatus(status: status, serviceDate: serviceDate, now: now);
+  }
+
+  static ServiceStatus resolveStatus({
+    required ServiceStatus status,
+    required DateTime serviceDate,
+    required DateTime now,
+  }) {
+    if (status == ServiceStatus.completed ||
+        status == ServiceStatus.cancelled) {
+      return status;
+    }
+
+    final today = DateTime(now.year, now.month, now.day);
+    final serviceDay = DateTime(
+      serviceDate.year,
+      serviceDate.month,
+      serviceDate.day,
+    );
+
+    return serviceDay.isAfter(today)
+        ? ServiceStatus.scheduled
+        : ServiceStatus.open;
+  }
+
+  int? get serviceIntervalMonths {
+    final value = serviceIntervalValue;
+    if (value == null || value <= 0) return null;
+    return switch (serviceIntervalUnit) {
+      ServiceIntervalUnit.months => value,
+      ServiceIntervalUnit.years => value * 12,
+    };
+  }
+
+  String? get serviceFrequencyLabel {
+    final value = serviceIntervalValue;
+    if (value == null || value <= 0) return null;
+    return 'Every $value ${serviceIntervalUnit.labelFor(value)}';
+  }
+
+  DateTime? get calculatedNextServiceDate {
+    final months = serviceIntervalMonths;
+    if (months == null) return null;
+    return _addCalendarMonths(serviceDate, months);
+  }
+
+  static DateTime calculateNextServiceDate({
+    required DateTime serviceDate,
+    required int intervalValue,
+    required ServiceIntervalUnit intervalUnit,
+  }) {
+    if (intervalValue <= 0) {
+      throw ArgumentError.value(
+        intervalValue,
+        'intervalValue',
+        'Service interval must be greater than zero.',
+      );
+    }
+
+    final months = switch (intervalUnit) {
+      ServiceIntervalUnit.months => intervalValue,
+      ServiceIntervalUnit.years => intervalValue * 12,
+    };
+    return _addCalendarMonths(serviceDate, months);
+  }
 
   DateTime? reminderDateAt({int hour = 9}) {
     final nextDate = nextServiceDate;
@@ -127,6 +224,9 @@ class ServiceRecord {
     String? partsReplaced,
     double? serviceCharge,
     String? paymentMethod,
+    int? serviceIntervalValue,
+    bool clearServiceInterval = false,
+    ServiceIntervalUnit? serviceIntervalUnit,
     DateTime? nextServiceDate,
     bool clearNextServiceDate = false,
     ServiceStatus? status,
@@ -150,6 +250,10 @@ class ServiceRecord {
       partsReplaced: partsReplaced ?? this.partsReplaced,
       serviceCharge: serviceCharge ?? this.serviceCharge,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      serviceIntervalValue: clearServiceInterval
+          ? null
+          : serviceIntervalValue ?? this.serviceIntervalValue,
+      serviceIntervalUnit: serviceIntervalUnit ?? this.serviceIntervalUnit,
       nextServiceDate: clearNextServiceDate
           ? null
           : nextServiceDate ?? this.nextServiceDate,
@@ -206,6 +310,10 @@ class ServiceRecord {
       'partsReplaced': partsReplaced,
       'serviceCharge': serviceCharge,
       'paymentMethod': paymentMethod,
+      'serviceIntervalValue': serviceIntervalValue,
+      'serviceIntervalUnit': serviceIntervalValue == null
+          ? null
+          : serviceIntervalUnit.name,
       'nextServiceDate': nextServiceDate?.toIso8601String(),
       'status': status.name,
       'notes': notes,
@@ -229,6 +337,41 @@ class ServiceRecord {
       return StoredDocument.fromJson(Map<String, dynamic>.from(value));
     }
     return null;
+  }
+
+  static int? _positiveIntFromJson(Object? value) {
+    final parsed = value is int ? value : int.tryParse('$value');
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  static ServiceIntervalUnit _intervalUnitFromJson(Object? value) {
+    final name = value as String?;
+    return ServiceIntervalUnit.values.firstWhere(
+      (unit) => unit.name == name,
+      orElse: () => ServiceIntervalUnit.months,
+    );
+  }
+
+  static DateTime _addCalendarMonths(DateTime date, int months) {
+    final monthIndex = date.month - 1 + months;
+    final targetYear = date.year + monthIndex ~/ 12;
+    final targetMonth = monthIndex % 12 + 1;
+    final lastDayOfTargetMonth = DateTime(targetYear, targetMonth + 1, 0).day;
+    final targetDay = date.day <= lastDayOfTargetMonth
+        ? date.day
+        : lastDayOfTargetMonth;
+
+    return DateTime(
+      targetYear,
+      targetMonth,
+      targetDay,
+      date.hour,
+      date.minute,
+      date.second,
+      date.millisecond,
+      date.microsecond,
+    );
   }
 
   static ServiceStatus _statusFromJson(Object? value) {

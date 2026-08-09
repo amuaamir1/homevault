@@ -676,6 +676,16 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              if (appliance.lastServiceDate != null)
+                _DetailRow(
+                  label: 'Last serviced',
+                  value: _date(appliance.lastServiceDate),
+                ),
+              if (appliance.serviceFrequencyLabel.isNotEmpty)
+                _DetailRow(
+                  label: 'Service frequency',
+                  value: appliance.serviceFrequencyLabel,
+                ),
               if (appliance.nextServiceDate != null)
                 _DetailRow(
                   label: 'Next service',

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../auth/auth_scope.dart';
 import '../../models/appliance.dart';
 import '../../models/backup_models.dart';
+import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
@@ -92,13 +95,20 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         rethrow;
       }
 
-      await _backupService.cleanupUnreferencedDocuments(
-        store.appliances,
-        ownerUid: uid,
-        protectedFilePaths: prepared.createdFilePaths,
+      // The actual restore is complete once the appliance data has been
+      // persisted. Orphan-file cleanup is best-effort housekeeping and should
+      // never hold the user on a blocking restore spinner.
+      unawaited(
+        _cleanupAfterRestore(
+          store.appliances,
+          ownerUid: uid,
+          protectedFilePaths: prepared.createdFilePaths,
+        ),
       );
 
       if (!mounted) return;
+      // Remove the blocking overlay before presenting the completion dialog.
+      setState(() => _busyMessage = null);
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -119,6 +129,28 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         ),
       );
     });
+  }
+
+  Future<void> _cleanupAfterRestore(
+    Iterable<Appliance> appliances, {
+    String? ownerUid,
+    Iterable<String> protectedFilePaths = const [],
+  }) async {
+    try {
+      await _backupService
+          .cleanupUnreferencedDocuments(
+            appliances,
+            ownerUid: ownerUid,
+            protectedFilePaths: protectedFilePaths,
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Cleaning up local files after a HomeVault restore',
+      );
+    }
   }
 
   Future<RestoreMode?> _selectRestoreMode(BackupPreview preview) {

@@ -96,17 +96,19 @@ class HomeVaultReportService {
         if (record.status.isActive) {
           activeServiceRecords++;
         }
+      }
 
-        final serviceDays = record.daysUntilNextService(referenceDate);
-        if (serviceDays != null &&
-            serviceDays >= 0 &&
-            serviceDays <= 30 &&
-            record.status != ServiceStatus.cancelled) {
+      final maintenanceRecord = appliance.maintenanceScheduleRecord;
+      if (maintenanceRecord != null) {
+        final serviceDays = maintenanceRecord.daysUntilNextService(
+          referenceDate,
+        );
+        if (serviceDays != null && serviceDays >= 0 && serviceDays <= 30) {
           upcomingServices.add(
             UpcomingServiceSummary(
               applianceId: appliance.id,
               applianceName: appliance.name,
-              record: record,
+              record: maintenanceRecord,
               daysRemaining: serviceDays,
             ),
           );

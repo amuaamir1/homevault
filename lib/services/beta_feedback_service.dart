@@ -66,6 +66,7 @@ class BetaFeedbackService {
 
   Future<void> submit({
     required String uid,
+    required String userEmail,
     required BetaFeedback feedback,
   }) async {
     if (uid.trim().isEmpty) {
@@ -83,8 +84,9 @@ class BetaFeedbackService {
       final package = await PackageInfo.fromPlatform();
       final android = await _deviceInfo.androidInfo;
 
-      await _firestore.collection('users').doc(uid).collection('feedback').add({
+      await _firestore.collection('feedback').add({
         'uid': uid,
+        'userEmail': userEmail.trim(),
         'category': feedback.category.name,
         'message': feedback.message.trim(),
         'appVersion': package.version,
@@ -97,7 +99,11 @@ class BetaFeedbackService {
         'androidSdk': android.version.sdkInt,
         'screenshotFileName': feedback.screenshotFileName,
         'screenshotBase64': feedback.screenshotBase64,
+        'status': 'newFeedback',
+        'priority': 'normal',
+        'adminNote': '',
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (error) {
       if (error is FeedbackSubmissionException) rethrow;

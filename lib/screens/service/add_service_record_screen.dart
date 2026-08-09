@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/appliance.dart';
 import '../../models/service_form_result.dart';
@@ -39,11 +40,13 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
   late final TextEditingController _partsController;
   late final TextEditingController _chargeController;
   late final TextEditingController _paymentController;
+  late final TextEditingController _serviceIntervalController;
   late final TextEditingController _notesController;
 
   late String _applianceId;
   late DateTime _serviceDate;
   DateTime? _nextServiceDate;
+  late ServiceIntervalUnit _serviceIntervalUnit;
   late ServiceStatus _status;
   bool _reminderEnabled = false;
   int _reminderDaysBefore = 7;
@@ -69,7 +72,10 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
         : widget.appliances.first.id;
     _serviceDate = record?.serviceDate ?? DateTime.now();
     _nextServiceDate = record?.nextServiceDate;
-    _status = record?.status ?? ServiceStatus.completed;
+    _serviceIntervalUnit =
+        record?.serviceIntervalUnit ?? ServiceIntervalUnit.months;
+    _status =
+        record?.effectiveStatus(DateTime.now()) ?? ServiceStatus.completed;
     _reminderEnabled = record?.reminderEnabled ?? false;
     final reminderDays = record?.reminderDaysBefore ?? 7;
     _reminderDaysBefore = _reminderOptions.contains(reminderDays)
@@ -100,6 +106,9 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     _paymentController = TextEditingController(
       text: record?.paymentMethod ?? '',
     );
+    _serviceIntervalController = TextEditingController(
+      text: record?.serviceIntervalValue?.toString() ?? '',
+    );
     _notesController = TextEditingController(text: record?.notes ?? '');
   }
 
@@ -118,6 +127,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     _partsController.dispose();
     _chargeController.dispose();
     _paymentController.dispose();
+    _serviceIntervalController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -137,8 +147,36 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
         _nextServiceDate = selected;
       } else {
         _serviceDate = selected;
+        _recalculateNextServiceDate();
+        if (_status != ServiceStatus.completed &&
+            _status != ServiceStatus.cancelled) {
+          _status = ServiceRecord.resolveStatus(
+            status: _status,
+            serviceDate: _serviceDate,
+            now: DateTime.now(),
+          );
+        }
       }
     });
+  }
+
+  int? get _serviceIntervalValue {
+    final value = int.tryParse(_serviceIntervalController.text.trim());
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
+  bool get _hasServiceInterval => _serviceIntervalValue != null;
+
+  void _recalculateNextServiceDate() {
+    final intervalValue = _serviceIntervalValue;
+    if (intervalValue == null) return;
+
+    _nextServiceDate = ServiceRecord.calculateNextServiceDate(
+      serviceDate: _serviceDate,
+      intervalValue: intervalValue,
+      intervalUnit: _serviceIntervalUnit,
+    );
   }
 
   String _date(DateTime value) {
@@ -281,7 +319,14 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
-    final nextDate = _nextServiceDate;
+    final intervalValue = _serviceIntervalValue;
+    final nextDate = intervalValue == null
+        ? _nextServiceDate
+        : ServiceRecord.calculateNextServiceDate(
+            serviceDate: _serviceDate,
+            intervalValue: intervalValue,
+            intervalUnit: _serviceIntervalUnit,
+          );
     if (nextDate != null && nextDate.isBefore(_serviceDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -311,7 +356,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     }
 
     final existing = widget.record;
-    final record = ServiceRecord(
+    var record = ServiceRecord(
       id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
       serviceDate: _serviceDate,
       createdAt: existing?.createdAt ?? DateTime.now(),
@@ -323,7 +368,9 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
       partsReplaced: _partsController.text.trim(),
       serviceCharge: charge,
       paymentMethod: _paymentController.text.trim(),
-      nextServiceDate: _nextServiceDate,
+      serviceIntervalValue: intervalValue,
+      serviceIntervalUnit: _serviceIntervalUnit,
+      nextServiceDate: nextDate,
       status: _status,
       notes: _notesController.text.trim(),
       reminderEnabled: _status == ServiceStatus.cancelled
@@ -341,6 +388,11 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
         reference: _ticketController.text.trim(),
       ),
     );
+
+    final effectiveStatus = record.effectiveStatus(DateTime.now());
+    if (effectiveStatus != record.status) {
+      record = record.copyWith(status: effectiveStatus);
+    }
 
     _submitted = true;
     Navigator.of(context).pop(
@@ -390,7 +442,11 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.event_outlined),
-              title: const Text('Service date *'),
+              title: Text(
+                _status == ServiceStatus.completed
+                    ? 'Last service date *'
+                    : 'Service date *',
+              ),
               subtitle: Text(_date(_serviceDate)),
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: () => _selectDate(nextService: false),
@@ -403,6 +459,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
                 prefixIcon: Icon(Icons.flag_outlined),
               ),
               items: ServiceStatus.values
+                  .where((status) => status != ServiceStatus.inProgress)
                   .map(
                     (status) => DropdownMenuItem(
                       value: status,
@@ -413,8 +470,12 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
               onChanged: (value) {
                 if (value == null) return;
                 setState(() {
-                  _status = value;
-                  if (value == ServiceStatus.cancelled) {
+                  _status = ServiceRecord.resolveStatus(
+                    status: value,
+                    serviceDate: _serviceDate,
+                    now: DateTime.now(),
+                  );
+                  if (_status == ServiceStatus.cancelled) {
                     _reminderEnabled = false;
                   }
                 });
@@ -510,7 +571,99 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
               ),
               textInputAction: TextInputAction.next,
             ),
+            const SizedBox(height: 20),
+            Text(
+              'Maintenance schedule',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Set a recurring service interval and HomeVault will calculate the next service date automatically.',
+            ),
             const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextFormField(
+                    key: const ValueKey('serviceIntervalValueField'),
+                    controller: _serviceIntervalController,
+                    decoration: const InputDecoration(
+                      labelText: 'Service interval',
+                      hintText: 'Example: 6',
+                      prefixIcon: Icon(Icons.repeat_outlined),
+                    ),
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    onChanged: (_) {
+                      setState(() {
+                        if (_serviceIntervalValue == null) {
+                          _nextServiceDate = null;
+                          _reminderEnabled = false;
+                        } else {
+                          _recalculateNextServiceDate();
+                        }
+                      });
+                    },
+                    validator: (value) {
+                      final input = value?.trim() ?? '';
+                      if (input.isEmpty) return null;
+
+                      final interval = int.tryParse(input);
+                      if (interval == null || interval <= 0) {
+                        return 'Enter a value above 0.';
+                      }
+
+                      final maxInterval =
+                          _serviceIntervalUnit == ServiceIntervalUnit.years
+                          ? 20
+                          : 240;
+                      if (interval > maxInterval) {
+                        final unit =
+                            _serviceIntervalUnit == ServiceIntervalUnit.years
+                            ? 'years'
+                            : 'months';
+                        return 'Use $maxInterval $unit or less.';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<ServiceIntervalUnit>(
+                    key: const ValueKey('serviceIntervalUnitField'),
+                    initialValue: _serviceIntervalUnit,
+                    isExpanded: true,
+                    decoration: const InputDecoration(),
+                    items: ServiceIntervalUnit.values
+                        .map(
+                          (unit) => DropdownMenuItem(
+                            value: unit,
+                            child: Text(unit.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (unit) {
+                      if (unit == null || unit == _serviceIntervalUnit) return;
+                      setState(() {
+                        _serviceIntervalUnit = unit;
+                        _recalculateNextServiceDate();
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.next_plan_outlined),
@@ -518,28 +671,35 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
               subtitle: Text(
                 _nextServiceDate == null
                     ? 'Not scheduled'
+                    : _hasServiceInterval
+                    ? '${_date(_nextServiceDate!)} • Calculated automatically'
                     : _date(_nextServiceDate!),
               ),
-              trailing: Wrap(
-                children: [
-                  if (_nextServiceDate != null)
-                    IconButton(
-                      tooltip: 'Clear date',
-                      onPressed: () {
-                        setState(() {
-                          _nextServiceDate = null;
-                          _reminderEnabled = false;
-                        });
-                      },
-                      icon: const Icon(Icons.clear),
+              trailing: _hasServiceInterval
+                  ? const Icon(
+                      Icons.auto_awesome_outlined,
+                      semanticLabel: 'Calculated automatically',
+                    )
+                  : Wrap(
+                      children: [
+                        if (_nextServiceDate != null)
+                          IconButton(
+                            tooltip: 'Clear date',
+                            onPressed: () {
+                              setState(() {
+                                _nextServiceDate = null;
+                                _reminderEnabled = false;
+                              });
+                            },
+                            icon: const Icon(Icons.clear),
+                          ),
+                        IconButton(
+                          tooltip: 'Choose date',
+                          onPressed: () => _selectDate(nextService: true),
+                          icon: const Icon(Icons.edit_calendar_outlined),
+                        ),
+                      ],
                     ),
-                  IconButton(
-                    tooltip: 'Choose date',
-                    onPressed: () => _selectDate(nextService: true),
-                    icon: const Icon(Icons.edit_calendar_outlined),
-                  ),
-                ],
-              ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
