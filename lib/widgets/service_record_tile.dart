@@ -126,7 +126,8 @@ class ServiceRecordTile extends StatelessWidget {
                         if (record.serviceCharge > 0)
                           _CompactLabel(
                             icon: Icons.currency_rupee,
-                            text: '${_formatIndianCurrency(record.serviceCharge)}/-',
+                            text:
+                                '${_formatIndianCurrency(record.serviceCharge)}/-',
                           ),
                       ],
                     ),
@@ -240,10 +241,7 @@ class _CompactLabel extends StatelessWidget {
           children: [
             Icon(icon, size: 14),
             const SizedBox(width: 4),
-            Text(
-              text,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
+            Text(text, style: Theme.of(context).textTheme.labelMedium),
           ],
         ),
       ),
