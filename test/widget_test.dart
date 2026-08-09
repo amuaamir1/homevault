@@ -326,7 +326,7 @@ void main() {
       matching: find.text('Service center'),
     );
     expect(serviceCenterTitle, findsOneWidget);
-    expect(find.text('Service records'), findsOneWidget);
+    expect(find.text('Records'), findsOneWidget);
 
     final serviceList = find.byKey(const Key('serviceCenterList'));
     expect(serviceList, findsOneWidget);
