@@ -112,9 +112,14 @@ class ServiceRecord {
 
   /// Returns the service status that should be presented for [now].
   ///
-  /// A scheduled service automatically becomes Open at the start of its
-  /// service date and remains Open until the user marks it Completed or
-  /// Cancelled. Legacy in-progress records are also treated as Open.
+  /// Open/Scheduled are date-driven:
+  /// - a future service date is Scheduled;
+  /// - on the service date, and afterwards, it is Open until the user marks
+  ///   it Completed or Cancelled.
+  ///
+  /// This also repairs older records that may have been persisted as Open
+  /// even after their service date was moved into the future. Legacy
+  /// in-progress records follow the same date-driven rule.
   ServiceStatus effectiveStatus(DateTime now) {
     return resolveStatus(status: status, serviceDate: serviceDate, now: now);
   }
@@ -124,21 +129,19 @@ class ServiceRecord {
     required DateTime serviceDate,
     required DateTime now,
   }) {
-    if (status == ServiceStatus.inProgress) {
-      return ServiceStatus.open;
-    }
-    if (status != ServiceStatus.scheduled) {
+    if (status == ServiceStatus.completed ||
+        status == ServiceStatus.cancelled) {
       return status;
     }
 
     final today = DateTime(now.year, now.month, now.day);
-    final scheduledDay = DateTime(
+    final serviceDay = DateTime(
       serviceDate.year,
       serviceDate.month,
       serviceDate.day,
     );
 
-    return scheduledDay.isAfter(today)
+    return serviceDay.isAfter(today)
         ? ServiceStatus.scheduled
         : ServiceStatus.open;
   }

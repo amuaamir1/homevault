@@ -43,13 +43,14 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!_formKey.currentState!.validate() || _isSubmitting) return;
 
-    final uid = AuthScope.read(context).user?.uid;
-    if (uid == null) return;
+    final user = AuthScope.read(context).user;
+    if (user == null) return;
 
     setState(() => _isSubmitting = true);
     try {
       await _service.submit(
-        uid: uid,
+        uid: user.uid,
+        userEmail: user.email,
         feedback: BetaFeedback(
           category: _category,
           message: _messageController.text,

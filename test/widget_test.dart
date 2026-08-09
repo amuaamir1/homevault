@@ -421,7 +421,15 @@ void main() {
 
     await _pumpHomeVault(tester, store);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Reports'));
+    // Invoke the button callback directly instead of synthesizing a pointer
+    // tap. Navigating away disposes several dashboard Tooltip widgets while
+    // the test binding is still routing the PointerUpEvent, which can make
+    // RawTooltip try to create a second ticker and fail the test even though
+    // Reports navigation itself is correct.
+    final reportsButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Reports'),
+    );
+    reportsButton.onPressed!.call();
     await tester.pumpAndSettle();
 
     expect(find.text('Reports & insights'), findsOneWidget);

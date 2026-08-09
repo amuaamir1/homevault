@@ -367,14 +367,14 @@ void main() {
         ),
         ServiceRecord(
           id: 'open-record',
-          serviceDate: DateTime(2026, 8, 21),
+          serviceDate: DateTime(2026, 8, 9),
           createdAt: DateTime(2026, 8, 1),
           ticketNumber: 'OPEN-1',
           status: ServiceStatus.open,
         ),
         ServiceRecord(
           id: 'progress-record',
-          serviceDate: DateTime(2026, 8, 22),
+          serviceDate: DateTime(2026, 8, 8),
           createdAt: DateTime(2026, 8, 1),
           ticketNumber: 'PROGRESS-1',
           status: ServiceStatus.inProgress,
@@ -392,7 +392,9 @@ void main() {
     await tester.pumpWidget(
       AppScope(
         applianceStore: store,
-        child: const MaterialApp(home: ServiceCenterScreen()),
+        child: MaterialApp(
+          home: ServiceCenterScreen(now: DateTime(2026, 8, 9, 12)),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -414,6 +416,17 @@ void main() {
 
   group('Scheduled service rollover', () {
     final referenceDate = DateTime(2026, 8, 9, 8, 30);
+
+    test('future service persisted as Open is repaired to Scheduled', () {
+      final record = ServiceRecord(
+        id: 'future-open',
+        serviceDate: DateTime(2026, 8, 10),
+        createdAt: DateTime(2026, 8, 1),
+        status: ServiceStatus.open,
+      );
+
+      expect(record.effectiveStatus(referenceDate), ServiceStatus.scheduled);
+    });
 
     test('future scheduled service remains Scheduled', () {
       final record = ServiceRecord(
@@ -493,7 +506,7 @@ void main() {
           serviceDate: DateTime(2026, 8, 10),
           createdAt: DateTime(2026, 8, 1),
           ticketNumber: 'FUTURE-1',
-          status: ServiceStatus.scheduled,
+          status: ServiceStatus.open,
         ),
       ],
       createdAt: DateTime(2026, 1, 1),

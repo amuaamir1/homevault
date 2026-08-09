@@ -8,6 +8,8 @@ import '../../security/app_lock_scope.dart';
 import '../../state/app_scope.dart';
 import '../backup/backup_restore_screen.dart';
 import '../feedback/beta_feedback_screen.dart';
+import '../feedback/feedback_dashboard_screen.dart';
+import '../../services/feedback_admin_service.dart';
 import '../profile/profile_screen.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
@@ -191,6 +193,9 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
                 const Divider(height: 1),
+                _FeedbackDashboardAdminTile(
+                  uid: AuthScope.of(context).user?.uid ?? '',
+                ),
                 ListTile(
                   leading: const Icon(Icons.notifications_outlined),
                   title: const Text('Warranty reminders'),
@@ -387,4 +392,80 @@ class _SyncStatusDetails {
   final IconData icon;
   final String badgeLabel;
   final String statusText;
+}
+
+class _FeedbackDashboardAdminTile extends StatefulWidget {
+  const _FeedbackDashboardAdminTile({required this.uid});
+
+  final String uid;
+
+  @override
+  State<_FeedbackDashboardAdminTile> createState() =>
+      _FeedbackDashboardAdminTileState();
+}
+
+class _FeedbackDashboardAdminTileState
+    extends State<_FeedbackDashboardAdminTile> {
+  late Future<bool> _adminCheck;
+
+  @override
+  void initState() {
+    super.initState();
+    _adminCheck = _check();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FeedbackDashboardAdminTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) _adminCheck = _check();
+  }
+
+  Future<bool> _check() async {
+    if (widget.uid.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      return await FirebaseFeedbackAdminRepository().isAdmin(widget.uid);
+    } catch (_) {
+      // The admin dashboard is an optional Settings feature. Widget tests and
+      // other non-Firebase app shells may build Settings without initializing
+      // the default Firebase app. In that case, simply hide the admin tile
+      // instead of allowing the optional admin check to break unrelated UI.
+      return false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.uid.trim().isEmpty) return const SizedBox.shrink();
+
+    return FutureBuilder<bool>(
+      future: _adminCheck,
+      builder: (context, snapshot) {
+        if (snapshot.data != true) return const SizedBox.shrink();
+        return Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.dashboard_customize_outlined),
+              title: const Text('Feedback dashboard'),
+              subtitle: const Text(
+                'Review, prioritise, and resolve feedback from all users.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) =>
+                        FeedbackDashboardScreen(adminUid: widget.uid),
+                  ),
+                );
+              },
+            ),
+            const Divider(height: 1),
+          ],
+        );
+      },
+    );
+  }
 }

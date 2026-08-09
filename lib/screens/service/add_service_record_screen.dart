@@ -148,7 +148,8 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
       } else {
         _serviceDate = selected;
         _recalculateNextServiceDate();
-        if (_status == ServiceStatus.scheduled) {
+        if (_status != ServiceStatus.completed &&
+            _status != ServiceStatus.cancelled) {
           _status = ServiceRecord.resolveStatus(
             status: _status,
             serviceDate: _serviceDate,

@@ -6,6 +6,53 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    function validFeedbackPayload(userId) {
+      return request.resource.data.uid == userId
+        && request.resource.data.category in [
+          'bug',
+          'featureRequest',
+          'performance',
+          'authentication',
+          'documents',
+          'other'
+        ]
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 5000
+        && (
+          request.resource.data.screenshotBase64 == null
+          || (
+            request.resource.data.screenshotBase64 is string
+            && request.resource.data.screenshotBase64.size() <= 700000
+          )
+        );
+    }
+
+    match /admins/{adminId} {
+      // A signed-in user may only check whether their own UID is registered as
+      // a HomeVault administrator. Admin membership is managed from the
+      // Firebase Console/Admin SDK, never by the mobile app.
+      allow read: if signedInAs(adminId);
+      allow create, update, delete: if false;
+    }
+
+    // Central feedback collection used by current HomeVault versions.
+    match /feedback/{feedbackId} {
+      allow create: if request.auth != null
+        && validFeedbackPayload(request.auth.uid)
+        && request.resource.data.status == 'newFeedback'
+        && request.resource.data.priority == 'normal'
+        && request.resource.data.adminNote == '';
+
+      allow read, update, delete: if isAdmin();
+    }
+
     match /users/{userId} {
       allow read, create, update, delete: if signedInAs(userId);
 
@@ -20,29 +67,14 @@ service cloud.firestore {
         allow read, create, update, delete: if signedInAs(userId);
       }
 
+      // Backward compatibility for older app builds that submitted feedback
+      // under users/{uid}/feedback. The central admin dashboard reads these
+      // with a collection-group query so existing feedback is not lost.
       match /feedback/{feedbackId} {
         allow create: if signedInAs(userId)
-          && request.resource.data.uid == userId
-          && request.resource.data.category in [
-            'bug',
-            'featureRequest',
-            'performance',
-            'authentication',
-            'documents',
-            'other'
-          ]
-          && request.resource.data.message is string
-          && request.resource.data.message.size() >= 10
-          && request.resource.data.message.size() <= 5000
-          && (
-            request.resource.data.screenshotBase64 == null
-            || (
-              request.resource.data.screenshotBase64 is string
-              && request.resource.data.screenshotBase64.size() <= 700000
-            )
-          );
+          && validFeedbackPayload(userId);
 
-        allow read, update, delete: if false;
+        allow read, update, delete: if isAdmin();
       }
     }
   }
