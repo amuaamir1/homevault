@@ -31,7 +31,7 @@ void main() {
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('OR CONTINUE WITH'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Apple'), findsOneWidget);
+    expect(find.text('Continue with Apple'), findsNothing);
     expect(find.text("Don't have an account yet?"), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Create your HomeVault account'), findsNothing);
@@ -67,7 +67,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Apple'), findsOneWidget);
+    expect(find.text('Continue with Apple'), findsNothing);
     expect(find.text('Already have an account?'), findsOneWidget);
   });
 }
