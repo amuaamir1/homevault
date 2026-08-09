@@ -80,14 +80,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  Future<void> _signInWithApple() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    await _runAction(
-      _AuthAction.apple,
-      () => AuthScope.read(context).signInWithApple(),
-    );
-  }
-
   Future<void> _runAction(
     _AuthAction action,
     Future<bool> Function() operation,
@@ -250,17 +242,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                         ? null
                                         : _signInWithGoogle,
                                   ),
-                                  const SizedBox(height: 12),
-                                  _SocialSignInButton(
-                                    key: const Key('appleSignInButton'),
-                                    label: 'Continue with Apple',
-                                    icon: const Icon(Icons.apple, size: 24),
-                                    isLoading:
-                                        _activeAction == _AuthAction.apple,
-                                    onPressed: auth.isBusy
-                                        ? null
-                                        : _signInWithApple,
-                                  ),
                                   const SizedBox(height: 24),
                                   _AuthModePrompt(
                                     isRegistering: _isRegistering,
@@ -383,7 +364,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Register with email, Google, or Apple.',
+            'Register with email or Google.',
             style: Theme.of(
               context,
             ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
@@ -469,7 +450,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
-enum _AuthAction { emailSignIn, emailRegister, google, apple }
+enum _AuthAction { emailSignIn, emailRegister, google }
 
 class _HomeVaultHeader extends StatelessWidget {
   const _HomeVaultHeader({required this.compact});
