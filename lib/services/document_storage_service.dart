@@ -35,9 +35,7 @@ class DocumentStorageService {
     );
   }
 
-  Future<StoredDocument?> pickAndStorePhoto({
-    required String applianceId,
-  }) {
+  Future<StoredDocument?> pickAndStorePhoto({required String applianceId}) {
     return _pickAndStore(
       applianceId: applianceId,
       documentFolder: DocumentType.appliancePhoto.storageFolder,

@@ -351,10 +351,7 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     return 'Warranty$providerText expires on ${_date(expiryDate)}.';
   }
 
-  static String _amcNotificationBody(
-    Appliance appliance,
-    DateTime expiryDate,
-  ) {
+  static String _amcNotificationBody(Appliance appliance, DateTime expiryDate) {
     final provider = appliance.amcProvider.trim();
     final providerText = provider.isEmpty ? '' : ' with $provider';
     return 'AMC$providerText expires on ${_date(expiryDate)}.';

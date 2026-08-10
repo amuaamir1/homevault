@@ -551,15 +551,17 @@ class ApplianceDetailsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          [
-                            appliance.brand,
-                            appliance.modelNumber,
-                          ].where((value) => value.trim().isNotEmpty).join(' • '),
+                          [appliance.brand, appliance.modelNumber]
+                              .where((value) => value.trim().isNotEmpty)
+                              .join(' • '),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -572,12 +574,19 @@ class ApplianceDetailsScreen extends StatelessWidget {
                           runSpacing: 8,
                           children: [
                             WarrantyStatusChip(
-                              status: appliance.warrantyStatusAt(DateTime.now()),
+                              status: appliance.warrantyStatusAt(
+                                DateTime.now(),
+                              ),
                             ),
                             if (appliance.hasAmc)
                               Chip(
-                                avatar: const Icon(Icons.handyman_outlined, size: 17),
-                                label: Text('AMC • ${_amcStatusText(appliance)}'),
+                                avatar: const Icon(
+                                  Icons.handyman_outlined,
+                                  size: 17,
+                                ),
+                                label: Text(
+                                  'AMC • ${_amcStatusText(appliance)}',
+                                ),
                                 visualDensity: VisualDensity.compact,
                               ),
                           ],
@@ -644,10 +653,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 icon: Icons.verified_outlined,
                 title: 'Manufacturer warranty',
               ),
-              _DetailRow(
-                label: 'Provider',
-                value: appliance.warrantyProvider,
-              ),
+              _DetailRow(label: 'Provider', value: appliance.warrantyProvider),
               _DetailRow(
                 label: 'Reference',
                 value: appliance.warrantyReference,
@@ -785,16 +791,14 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Total cost: ${_formatIndianCurrency(appliance.totalServiceCost)}/-',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -903,7 +907,8 @@ class ApplianceDetailsScreen extends StatelessWidget {
                             FilledButton.tonalIcon(
                               onPressed: () => _runSupportAction(
                                 context,
-                                () => supportActions.call(appliance.supportPhone),
+                                () =>
+                                    supportActions.call(appliance.supportPhone),
                               ),
                               icon: const Icon(Icons.phone_outlined),
                               label: const Text('Call'),
@@ -970,7 +975,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _AppliancePhoto extends StatelessWidget {
@@ -1040,9 +1044,9 @@ class _MetricTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 2),
             Text(
@@ -1076,9 +1080,9 @@ class _CoverageHeading extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
         ],
@@ -1117,10 +1121,7 @@ class _DetailsSection extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;
