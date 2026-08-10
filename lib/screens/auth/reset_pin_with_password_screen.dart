@@ -23,13 +23,7 @@ class _ResetPinWithPasswordScreenState
     super.dispose();
   }
 
-  Future<void> _continue() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (!_formKey.currentState!.validate()) return;
-
-    final verified = await AuthScope.read(
-      context,
-    ).reauthenticateWithPassword(_passwordController.text);
+  Future<void> _resetAfterVerification(bool verified) async {
     if (!mounted || !verified) return;
 
     await AppLockScope.read(context).resetPinForAccountRecovery();
@@ -37,9 +31,34 @@ class _ResetPinWithPasswordScreenState
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  Future<void> _verifyPassword() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_formKey.currentState!.validate()) return;
+
+    final verified = await AuthScope.read(
+      context,
+    ).reauthenticateWithPassword(_passwordController.text);
+    await _resetAfterVerification(verified);
+  }
+
+  Future<void> _verifyGoogle() async {
+    final verified = await AuthScope.read(context).reauthenticateWithGoogle();
+    await _resetAfterVerification(verified);
+  }
+
+  Future<void> _verifyApple() async {
+    final verified = await AuthScope.read(context).reauthenticateWithApple();
+    await _resetAfterVerification(verified);
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
+    final supportsPassword = auth.hasPasswordProvider;
+    final supportsGoogle = auth.hasGoogleProvider;
+    final supportsApple = auth.hasAppleProvider;
+    final hasSupportedProvider =
+        supportsPassword || supportsGoogle || supportsApple;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Reset HomeVault PIN')),
@@ -70,49 +89,87 @@ class _ResetPinWithPasswordScreenState
                     Text(auth.user?.email ?? '', textAlign: TextAlign.center),
                     const SizedBox(height: 8),
                     const Text(
-                      'Enter your HomeVault account password to create a new local PIN.',
+                      'Verify using one of your sign-in methods. HomeVault will '
+                      'then ask you to create a new local PIN.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _passwordController,
-                      autofocus: true,
-                      obscureText: _hidePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: InputDecoration(
-                        labelText: 'Account password',
-                        prefixIcon: const Icon(Icons.password_outlined),
-                        errorText: auth.errorMessage,
-                        suffixIcon: IconButton(
-                          onPressed: () =>
-                              setState(() => _hidePassword = !_hidePassword),
-                          icon: Icon(
-                            _hidePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                    if (supportsPassword) ...[
+                      TextFormField(
+                        controller: _passwordController,
+                        autofocus: true,
+                        obscureText: _hidePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        decoration: InputDecoration(
+                          labelText: 'Account password',
+                          prefixIcon: const Icon(Icons.password_outlined),
+                          suffixIcon: IconButton(
+                            onPressed: () =>
+                                setState(() => _hidePassword = !_hidePassword),
+                            icon: Icon(
+                              _hidePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                        validator: (value) => (value ?? '').isEmpty
+                            ? 'Enter your account password.'
+                            : null,
+                        onChanged: (_) => auth.clearMessages(),
+                        onFieldSubmitted: (_) => _verifyPassword(),
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.icon(
+                        onPressed: auth.isBusy ? null : _verifyPassword,
+                        icon: const Icon(Icons.verified_user_outlined),
+                        label: const Text('Verify with password'),
+                      ),
+                    ],
+                    if (supportsGoogle) ...[
+                      if (supportsPassword) const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: auth.isBusy ? null : _verifyGoogle,
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: const Text('Verify with Google'),
+                      ),
+                    ],
+                    if (supportsApple) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: auth.isBusy ? null : _verifyApple,
+                        icon: const Icon(Icons.apple),
+                        label: const Text('Verify with Apple'),
+                      ),
+                    ],
+                    if (!hasSupportedProvider) ...[
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'HomeVault could not identify a supported sign-in '
+                            'method for this account. Sign out, sign in again, '
+                            'and retry PIN recovery.',
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
-                      validator: (value) => (value ?? '').isEmpty
-                          ? 'Enter your account password.'
-                          : null,
-                      onChanged: (_) => auth.clearMessages(),
-                      onFieldSubmitted: (_) => _continue(),
-                    ),
-                    const SizedBox(height: 18),
-                    FilledButton.icon(
-                      onPressed: auth.isBusy ? null : _continue,
-                      icon: auth.isBusy
-                          ? const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.verified_user_outlined),
-                      label: Text(
-                        auth.isBusy ? 'Verifying...' : 'Verify and reset PIN',
+                    ],
+                    if (auth.errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        auth.errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
-                    ),
+                    ],
+                    if (auth.isBusy) ...[
+                      const SizedBox(height: 16),
+                      const Center(child: CircularProgressIndicator()),
+                    ],
                   ],
                 ),
               ),

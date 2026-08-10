@@ -42,7 +42,18 @@ abstract class EmailAuthService {
   Future<void> signOut();
 }
 
-class FirebaseEmailAuthService implements EmailAuthService {
+abstract interface class SensitiveAuthOperations {
+  Set<String> get currentProviderIds;
+
+  Future<void> reauthenticateWithGoogle();
+
+  Future<void> reauthenticateWithApple();
+
+  Future<void> deleteCurrentUser();
+}
+
+class FirebaseEmailAuthService
+    implements EmailAuthService, SensitiveAuthOperations {
   FirebaseEmailAuthService({
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
@@ -52,6 +63,14 @@ class FirebaseEmailAuthService implements EmailAuthService {
   final FirebaseAuth _firebaseAuth;
   final GoogleSignIn _googleSignIn;
   Future<void>? _googleInitialization;
+
+  @override
+  Set<String> get currentProviderIds =>
+      _firebaseAuth.currentUser?.providerData
+          .map((provider) => provider.providerId)
+          .where((providerId) => providerId.trim().isNotEmpty)
+          .toSet() ??
+      <String>{};
 
   @override
   AuthenticatedUser? get currentUser => _mapUser(_firebaseAuth.currentUser);
@@ -244,6 +263,40 @@ class FirebaseEmailAuthService implements EmailAuthService {
 
     await linkedUser.sendEmailVerification();
     return _mapRequiredUser(linkedUser);
+  }
+
+  @override
+  Future<void> reauthenticateWithGoogle() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw StateError('No Firebase user is signed in.');
+
+    await _ensureGoogleInitialized();
+    final googleAccount = await _googleSignIn.authenticate();
+    final googleAuthentication = googleAccount.authentication;
+    final idToken = googleAuthentication.idToken;
+    if (idToken == null || idToken.trim().isEmpty) {
+      throw FirebaseAuthException(
+        code: 'missing-google-id-token',
+        message: 'Google did not return an ID token.',
+      );
+    }
+
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  @override
+  Future<void> reauthenticateWithApple() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw StateError('No Firebase user is signed in.');
+    await user.reauthenticateWithProvider(AppleAuthProvider());
+  }
+
+  @override
+  Future<void> deleteCurrentUser() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw StateError('No Firebase user is signed in.');
+    await user.delete();
   }
 
   @override

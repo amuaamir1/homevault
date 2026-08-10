@@ -50,7 +50,9 @@ service cloud.firestore {
         && request.resource.data.priority == 'normal'
         && request.resource.data.adminNote == '';
 
-      allow read, update, delete: if isAdmin();
+      allow read, delete: if isAdmin()
+        || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin();
     }
 
     match /users/{userId} {
@@ -67,6 +69,10 @@ service cloud.firestore {
         allow read, create, update, delete: if signedInAs(userId);
       }
 
+      match /backups/{backupId} {
+        allow read, create, update, delete: if signedInAs(userId);
+      }
+
       // Backward compatibility for older app builds that submitted feedback
       // under users/{uid}/feedback. The central admin dashboard reads these
       // with a collection-group query so existing feedback is not lost.
@@ -74,7 +80,8 @@ service cloud.firestore {
         allow create: if signedInAs(userId)
           && validFeedbackPayload(userId);
 
-        allow read, update, delete: if isAdmin();
+        allow read, delete: if signedInAs(userId) || isAdmin();
+        allow update: if isAdmin();
       }
     }
   }
