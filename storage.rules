@@ -12,6 +12,16 @@ service firebase.storage {
         || request.resource.contentType == 'image/png';
     }
 
+    match /users/{userId}/{allPaths=**} {
+      allow read, delete: if signedInAs(userId);
+    }
+
+    match /users/{userId}/backups/{backupId}/{fileName} {
+      allow create, update: if signedInAs(userId)
+        && request.resource.size <= 250 * 1024 * 1024
+        && request.resource.contentType == 'application/zip';
+    }
+
     match /users/{userId}/appliances/{applianceId}/documents/{documentId}/{fileName} {
       allow read: if signedInAs(userId);
 

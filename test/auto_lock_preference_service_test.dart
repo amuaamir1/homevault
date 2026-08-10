@@ -28,4 +28,14 @@ void main() {
     service.bindUser('user-a');
     expect(await service.load(), AutoLockOption.fiveMinutes);
   });
+  test('auto-lock preference can be cleared for account deletion', () async {
+    final service = AutoLockPreferenceService();
+    service.bindUser('user-a');
+
+    await service.save(AutoLockOption.fifteenMinutes);
+    expect(await service.load(), AutoLockOption.fifteenMinutes);
+
+    await service.clear();
+    expect(await service.load(), AutoLockOption.twoMinutes);
+  });
 }

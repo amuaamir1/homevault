@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/auto_lock_preference_service.dart';
 import '../../security/pin_security_service.dart';
+import '../auth/reset_pin_with_password_screen.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -113,6 +114,22 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showChangePin(context),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.lock_reset_outlined),
+                    title: const Text('Reset forgotten PIN'),
+                    subtitle: const Text(
+                      'Verify your HomeVault account, then create a new PIN.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ResetPinWithPasswordScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                   ListTile(

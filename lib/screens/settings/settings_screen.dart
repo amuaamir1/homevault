@@ -14,6 +14,7 @@ import '../profile/profile_screen.dart';
 import '../service/service_center_screen.dart';
 import '../warranty/warranty_screen.dart';
 import 'security_settings_screen.dart';
+import 'account_deletion_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -232,9 +233,34 @@ class SettingsScreen extends StatelessWidget {
                   leading: const Icon(Icons.logout),
                   title: const Text('Sign out'),
                   subtitle: const Text(
-                    'Sign in again using email and password.',
+                    'Sign in again using your HomeVault account.',
                   ),
                   onTap: () => _signOut(context),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_forever_outlined,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  title: Text(
+                    'Delete account',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Permanently remove your HomeVault account and stored data.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AccountDeletionScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

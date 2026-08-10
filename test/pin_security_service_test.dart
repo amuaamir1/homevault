@@ -76,4 +76,17 @@ void main() {
     expect(await service.hasPin(), isFalse);
     expect(await service.hasCompletedPinSetup(), isTrue);
   });
+  test(
+    'PIN data can be cleared completely when an account is deleted',
+    () async {
+      final service = PinSecurityService();
+      await service.bindUser('firebase-user-a');
+      await service.createPin('2468');
+
+      await service.clearPin(markSetupComplete: false);
+
+      expect(await service.hasPin(), isFalse);
+      expect(await service.hasCompletedPinSetup(), isFalse);
+    },
+  );
 }

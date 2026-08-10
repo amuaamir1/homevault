@@ -58,4 +58,8 @@ class AutoLockPreferenceService {
   Future<void> save(AutoLockOption option) {
     return _storage.write(key: _key, value: option.name);
   }
+
+  Future<void> clear() {
+    return _storage.delete(key: _key);
+  }
 }

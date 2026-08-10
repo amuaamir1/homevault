@@ -47,6 +47,20 @@ class AuthController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get statusMessage => _statusMessage;
 
+  Set<String> get providerIds {
+    final service = _service;
+    if (service == null || service is! SensitiveAuthOperations) {
+      return const <String>{};
+    }
+
+    final sensitiveService = service as SensitiveAuthOperations;
+    return Set<String>.unmodifiable(sensitiveService.currentProviderIds);
+  }
+
+  bool get hasPasswordProvider => providerIds.contains('password');
+  bool get hasGoogleProvider => providerIds.contains('google.com');
+  bool get hasAppleProvider => providerIds.contains('apple.com');
+
   Future<void> initialize() async {
     if (_isTestController) return;
 
@@ -205,6 +219,56 @@ class AuthController extends ChangeNotifier {
         email: email,
         password: password,
       ),
+    );
+  }
+
+  Future<bool> reauthenticateWithGoogle() async {
+    final service = _service;
+    if (service is! SensitiveAuthOperations) {
+      _setError('Google verification is not available in this build.');
+      return false;
+    }
+
+    final sensitiveService = service as SensitiveAuthOperations;
+    return _run(
+      reason: 'Reauthenticating with Google for a sensitive action',
+      fallback: 'Google verification failed. Please try again.',
+      operation: sensitiveService.reauthenticateWithGoogle,
+    );
+  }
+
+  Future<bool> reauthenticateWithApple() async {
+    final service = _service;
+    if (service is! SensitiveAuthOperations) {
+      _setError('Apple verification is not available in this build.');
+      return false;
+    }
+
+    final sensitiveService = service as SensitiveAuthOperations;
+    return _run(
+      reason: 'Reauthenticating with Apple for a sensitive action',
+      fallback: 'Apple verification failed. Please try again.',
+      operation: sensitiveService.reauthenticateWithApple,
+    );
+  }
+
+  Future<bool> deleteCurrentAccount() async {
+    final service = _service;
+    if (service is! SensitiveAuthOperations) {
+      _setError('Account deletion is not available in this build.');
+      return false;
+    }
+
+    final sensitiveService = service as SensitiveAuthOperations;
+    return _run(
+      reason: 'Deleting the Firebase Authentication account',
+      fallback:
+          'Your sign-in account could not be deleted. Please verify your account again and retry.',
+      operation: () async {
+        await sensitiveService.deleteCurrentUser();
+        _user = null;
+        _unlockAfterAccountSignIn = false;
+      },
     );
   }
 
