@@ -258,7 +258,10 @@ class HomeVaultExportService {
             _pdfRow('Reference', appliance.warrantyReference),
             _pdfRow('Extended provider', appliance.extendedWarrantyProvider),
             _pdfRow('Extended reference', appliance.extendedWarrantyReference),
-            _pdfRow('Extended start', _date(appliance.extendedWarrantyStartDate)),
+            _pdfRow(
+              'Extended start',
+              _date(appliance.extendedWarrantyStartDate),
+            ),
             _pdfRow('Extended cost', _currency(appliance.extendedWarrantyCost)),
             _pdfRow('Claim number', appliance.warrantyClaimNumber),
             _pdfRow('Claim status', appliance.warrantyClaimStatus.label),

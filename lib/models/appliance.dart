@@ -157,7 +157,8 @@ class Appliance {
       extendedWarrantyExpiryDate: _dateFromJson(
         json['extendedWarrantyExpiryDate'],
       ),
-      extendedWarrantyCost: (json['extendedWarrantyCost'] as num?)?.toDouble() ?? 0,
+      extendedWarrantyCost:
+          (json['extendedWarrantyCost'] as num?)?.toDouble() ?? 0,
       extendedWarrantyDocument: extendedWarrantyDocument,
       amcProvider: json['amcProvider'] as String? ?? '',
       amcReference: json['amcReference'] as String? ?? '',
@@ -276,10 +277,8 @@ class Appliance {
   /// Every file associated with this appliance, including the appliance photo.
   /// Use [allDocuments] for the Document Vault so the appliance photo is not
   /// counted as a user document.
-  List<StoredDocument> get allAttachments => List.unmodifiable([
-    ?appliancePhotoDocument,
-    ...allDocuments,
-  ]);
+  List<StoredDocument> get allAttachments =>
+      List.unmodifiable([?appliancePhotoDocument, ...allDocuments]);
 
   int get documentCount => allDocuments.length;
 
@@ -563,8 +562,7 @@ class Appliance {
       extendedWarrantyDocument: extendedWarrantyDocument?.id == documentId
           ? null
           : extendedWarrantyDocument,
-      setExtendedWarrantyDocument:
-          extendedWarrantyDocument?.id == documentId,
+      setExtendedWarrantyDocument: extendedWarrantyDocument?.id == documentId,
       amcDocument: amcDocument?.id == documentId ? null : amcDocument,
       setAmcDocument: amcDocument?.id == documentId,
       additionalDocuments: additionalDocuments

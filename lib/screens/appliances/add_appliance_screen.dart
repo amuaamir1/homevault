@@ -207,7 +207,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _originalDocumentPaths = {
       if (appliance?.appliancePhotoDocument != null)
         appliance!.appliancePhotoDocument!.localPath,
-      if (appliance?.invoiceDocument != null) appliance!.invoiceDocument!.localPath,
+      if (appliance?.invoiceDocument != null)
+        appliance!.invoiceDocument!.localPath,
       if (appliance?.warrantyDocument != null)
         appliance!.warrantyDocument!.localPath,
       if (appliance?.extendedWarrantyDocument != null)
@@ -286,7 +287,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
           ? ''
           : appliance.amcUsedServices.toString(),
     );
-    _amcNotesController = TextEditingController(text: appliance?.amcNotes ?? '');
+    _amcNotesController = TextEditingController(
+      text: appliance?.amcNotes ?? '',
+    );
     _warrantyClaimNumberController = TextEditingController(
       text: appliance?.warrantyClaimNumber ?? '',
     );
@@ -529,7 +532,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The appliance photo could not be added.')),
+        const SnackBar(
+          content: Text('The appliance photo could not be added.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isPickingPhoto = false);
@@ -593,7 +598,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The AMC contract could not be attached.')),
+        const SnackBar(
+          content: Text('The AMC contract could not be attached.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isPickingAmc = false);
@@ -741,12 +748,13 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       return;
     }
 
-    final extendedWarrantyCost = _moneyValue(
-      _extendedWarrantyCostController,
-    );
+    final extendedWarrantyCost = _moneyValue(_extendedWarrantyCostController);
     if (_extendedWarrantyCostController.text.trim().isNotEmpty &&
         (double.tryParse(
-                  _extendedWarrantyCostController.text.trim().replaceAll(',', ''),
+                  _extendedWarrantyCostController.text.trim().replaceAll(
+                    ',',
+                    '',
+                  ),
                 ) ==
                 null ||
             extendedWarrantyCost < 0)) {
@@ -772,7 +780,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         amcStartDate != null &&
         amcExpiryDate.isBefore(amcStartDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AMC expiry cannot be before its start date.')),
+        const SnackBar(
+          content: Text('AMC expiry cannot be before its start date.'),
+        ),
       );
       return;
     }
@@ -782,9 +792,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         (double.tryParse(_amcCostController.text.trim().replaceAll(',', '')) ==
                 null ||
             amcCost < 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid AMC cost.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a valid AMC cost.')));
       return;
     }
 
@@ -804,7 +814,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     if (_amcUsedServicesController.text.trim().isNotEmpty &&
         int.tryParse(_amcUsedServicesController.text.trim()) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid number of AMC services used.')),
+        const SnackBar(
+          content: Text('Enter a valid number of AMC services used.'),
+        ),
       );
       return;
     }
@@ -1315,7 +1327,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 onTap: () => _selectDate(
                   selection: _DateSelection.extendedWarrantyStart,
                 ),
-                onClear: () => setState(() => _extendedWarrantyStartDate = null),
+                onClear: () =>
+                    setState(() => _extendedWarrantyStartDate = null),
               ),
               const SizedBox(height: 12),
               _DateField(
@@ -1335,7 +1348,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                   hintText: 'Example: 2499',
                   prefixIcon: Icon(Icons.currency_rupee_outlined),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textInputAction: TextInputAction.next,
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -1433,7 +1448,9 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                   hintText: 'Example: 3600',
                   prefixIcon: Icon(Icons.currency_rupee_outlined),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textInputAction: TextInputAction.next,
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -1480,7 +1497,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               const SizedBox(height: 12),
               DocumentAttachmentField(
                 title: 'AMC contract',
-                description: 'Upload the AMC agreement, receipt, or certificate.',
+                description:
+                    'Upload the AMC agreement, receipt, or certificate.',
                 icon: Icons.assignment_outlined,
                 document: _amcDocument,
                 isLoading: _isPickingAmc,
@@ -1530,7 +1548,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 controller: _amcNotesController,
                 decoration: const InputDecoration(
                   labelText: 'AMC notes',
-                  hintText: 'Coverage, exclusions, visit limits, renewal details',
+                  hintText:
+                      'Coverage, exclusions, visit limits, renewal details',
                   alignLabelWithHint: true,
                   prefixIcon: Icon(Icons.notes_outlined),
                 ),
@@ -1838,7 +1857,9 @@ class _AppliancePhotoField extends StatelessWidget {
                         icon: isLoading
                             ? const SizedBox.square(
                                 dimension: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Icon(
                                 document == null

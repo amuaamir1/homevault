@@ -89,33 +89,33 @@ void main() {
     expect(restored.hasExtendedWarranty, isTrue);
   });
 
-  test('photo is synced/backed up as an attachment but not counted as a document', () {
-    final appliance = Appliance(
-      id: 'photo-count',
-      name: 'Refrigerator',
-      category: 'Kitchen Appliance',
-      brand: 'Samsung',
-      appliancePhotoDocument: _document(
-        id: 'photo-1',
-        type: DocumentType.appliancePhoto,
-        fileName: 'fridge.png',
-      ),
-      invoiceDocument: _document(
-        id: 'invoice-1',
-        type: DocumentType.invoice,
-        fileName: 'invoice.pdf',
-      ),
-      createdAt: DateTime(2026, 8, 10),
-    );
+  test(
+    'photo is synced/backed up as an attachment but not counted as a document',
+    () {
+      final appliance = Appliance(
+        id: 'photo-count',
+        name: 'Refrigerator',
+        category: 'Kitchen Appliance',
+        brand: 'Samsung',
+        appliancePhotoDocument: _document(
+          id: 'photo-1',
+          type: DocumentType.appliancePhoto,
+          fileName: 'fridge.png',
+        ),
+        invoiceDocument: _document(
+          id: 'invoice-1',
+          type: DocumentType.invoice,
+          fileName: 'invoice.pdf',
+        ),
+        createdAt: DateTime(2026, 8, 10),
+      );
 
-    expect(appliance.documentCount, 1);
-    expect(appliance.allDocuments.single.type, DocumentType.invoice);
-    expect(appliance.allAttachments, hasLength(2));
-    expect(
-      appliance.allAttachments.first.type,
-      DocumentType.appliancePhoto,
-    );
-  });
+      expect(appliance.documentCount, 1);
+      expect(appliance.allDocuments.single.type, DocumentType.invoice);
+      expect(appliance.allAttachments, hasLength(2));
+      expect(appliance.allAttachments.first.type, DocumentType.appliancePhoto);
+    },
+  );
 
   test('AMC reminder date and notification id are stable', () {
     final appliance = Appliance(
@@ -145,116 +145,121 @@ void main() {
     expect(first, isNot(warranty));
   });
 
-  test('replacing and removing the appliance photo uses attachment helpers', () {
-    final photo = _document(
-      id: 'photo-old',
-      type: DocumentType.appliancePhoto,
-      fileName: 'old.jpg',
-    );
-    final replacement = _document(
-      id: 'photo-new',
-      type: DocumentType.appliancePhoto,
-      fileName: 'new.jpg',
-    );
-    final appliance = Appliance(
-      id: 'photo-edit',
-      name: 'TV',
-      category: 'Television',
-      brand: 'Sony',
-      appliancePhotoDocument: photo,
-      createdAt: DateTime(2026, 8, 10),
-    );
-
-    final replaced = appliance.replaceDocument(photo.id, replacement);
-    expect(replaced.appliancePhotoDocument?.id, 'photo-new');
-    expect(
-      replaced.appliancePhotoDocument?.type,
-      DocumentType.appliancePhoto,
-    );
-
-    final removed = replaced.withoutDocument('photo-new');
-    expect(removed.appliancePhotoDocument, isNull);
-    expect(removed.allAttachments, isEmpty);
-  });
-
-  test('P2 photo and coverage documents are included in backup restore', () async {
-    final sourceDirectory = await Directory.systemTemp.createTemp(
-      'homevault_p2_source_',
-    );
-    final restoreDirectory = await Directory.systemTemp.createTemp(
-      'homevault_p2_restore_',
-    );
-
-    try {
-      Future<StoredDocument> fileDocument(
-        String name,
-        DocumentType type,
-        List<int> bytes,
-      ) async {
-        final file = File('${sourceDirectory.path}/$name');
-        await file.writeAsBytes(bytes);
-        return StoredDocument(
-          id: name,
-          type: type,
-          title: type.label,
-          fileName: name,
-          localPath: file.path,
-          sizeBytes: bytes.length,
-          attachedAt: DateTime(2026, 8, 10),
-        );
-      }
-
-      final photo = await fileDocument(
-        'photo.jpg',
-        DocumentType.appliancePhoto,
-        [1, 2, 3],
+  test(
+    'replacing and removing the appliance photo uses attachment helpers',
+    () {
+      final photo = _document(
+        id: 'photo-old',
+        type: DocumentType.appliancePhoto,
+        fileName: 'old.jpg',
       );
-      final extended = await fileDocument(
-        'extended.pdf',
-        DocumentType.extendedWarranty,
-        [4, 5, 6],
+      final replacement = _document(
+        id: 'photo-new',
+        type: DocumentType.appliancePhoto,
+        fileName: 'new.jpg',
       );
-      final amc = await fileDocument(
-        'amc.pdf',
-        DocumentType.amcContract,
-        [7, 8, 9],
-      );
-
       final appliance = Appliance(
-        id: 'backup-p2',
-        name: 'P2 AC',
-        category: 'Air Conditioner',
-        brand: 'Daikin',
+        id: 'photo-edit',
+        name: 'TV',
+        category: 'Television',
+        brand: 'Sony',
         appliancePhotoDocument: photo,
-        extendedWarrantyDocument: extended,
-        amcDocument: amc,
         createdAt: DateTime(2026, 8, 10),
       );
 
-      final service = HomeVaultBackupService(
-        documentsDirectoryProvider: () async => restoreDirectory,
-      );
-      final archive = await service.buildBackup([appliance]);
-      final selection = service.inspectBackupBytes(
-        archive.bytes,
-        fileName: 'p2-backup.zip',
-      );
-      final restored = await service.prepareRestore(
-        selection: selection,
-        existingAppliances: const [],
-        mode: RestoreMode.replace,
+      final replaced = appliance.replaceDocument(photo.id, replacement);
+      expect(replaced.appliancePhotoDocument?.id, 'photo-new');
+      expect(
+        replaced.appliancePhotoDocument?.type,
+        DocumentType.appliancePhoto,
       );
 
-      expect(selection.preview.documentCount, 3);
-      expect(restored.restoredDocuments, 3);
-      expect(restored.missingDocuments, 0);
-      expect(restored.appliances.single.appliancePhotoDocument, isNotNull);
-      expect(restored.appliances.single.extendedWarrantyDocument, isNotNull);
-      expect(restored.appliances.single.amcDocument, isNotNull);
-    } finally {
-      await sourceDirectory.delete(recursive: true);
-      await restoreDirectory.delete(recursive: true);
-    }
-  });
+      final removed = replaced.withoutDocument('photo-new');
+      expect(removed.appliancePhotoDocument, isNull);
+      expect(removed.allAttachments, isEmpty);
+    },
+  );
 
+  test(
+    'P2 photo and coverage documents are included in backup restore',
+    () async {
+      final sourceDirectory = await Directory.systemTemp.createTemp(
+        'homevault_p2_source_',
+      );
+      final restoreDirectory = await Directory.systemTemp.createTemp(
+        'homevault_p2_restore_',
+      );
+
+      try {
+        Future<StoredDocument> fileDocument(
+          String name,
+          DocumentType type,
+          List<int> bytes,
+        ) async {
+          final file = File('${sourceDirectory.path}/$name');
+          await file.writeAsBytes(bytes);
+          return StoredDocument(
+            id: name,
+            type: type,
+            title: type.label,
+            fileName: name,
+            localPath: file.path,
+            sizeBytes: bytes.length,
+            attachedAt: DateTime(2026, 8, 10),
+          );
+        }
+
+        final photo = await fileDocument(
+          'photo.jpg',
+          DocumentType.appliancePhoto,
+          [1, 2, 3],
+        );
+        final extended = await fileDocument(
+          'extended.pdf',
+          DocumentType.extendedWarranty,
+          [4, 5, 6],
+        );
+        final amc = await fileDocument('amc.pdf', DocumentType.amcContract, [
+          7,
+          8,
+          9,
+        ]);
+
+        final appliance = Appliance(
+          id: 'backup-p2',
+          name: 'P2 AC',
+          category: 'Air Conditioner',
+          brand: 'Daikin',
+          appliancePhotoDocument: photo,
+          extendedWarrantyDocument: extended,
+          amcDocument: amc,
+          createdAt: DateTime(2026, 8, 10),
+        );
+
+        final service = HomeVaultBackupService(
+          documentsDirectoryProvider: () async => restoreDirectory,
+        );
+        final archive = await service.buildBackup([appliance]);
+        final selection = service.inspectBackupBytes(
+          archive.bytes,
+          fileName: 'p2-backup.zip',
+        );
+        final restored = await service.prepareRestore(
+          selection: selection,
+          existingAppliances: const [],
+          mode: RestoreMode.replace,
+        );
+
+        expect(selection.preview.documentCount, 3);
+        expect(restored.restoredDocuments, 3);
+        expect(restored.missingDocuments, 0);
+        expect(restored.appliances.single.appliancePhotoDocument, isNotNull);
+        expect(restored.appliances.single.extendedWarrantyDocument, isNotNull);
+        expect(restored.appliances.single.amcDocument, isNotNull);
+      } finally {
+        await sourceDirectory.delete(recursive: true);
+        await restoreDirectory.delete(recursive: true);
+      }
+    },
+  );
 }
