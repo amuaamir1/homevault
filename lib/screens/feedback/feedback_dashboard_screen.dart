@@ -83,16 +83,22 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
                 },
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
                     _Summary(items: allItems),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     TextField(
                       controller: _searchController,
                       onChanged: (value) => setState(() => _query = value),
                       decoration: InputDecoration(
                         hintText: 'Search feedback',
-                        prefixIcon: const Icon(Icons.search),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
                         suffixIcon: _query.trim().isEmpty
                             ? null
                             : IconButton(
@@ -105,7 +111,7 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
                               ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     _Filters(
                       status: _statusFilter,
                       category: _categoryFilter,
@@ -118,7 +124,7 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
                           setState(() => _priorityFilter = value),
                       onClear: _hasFilters ? _clearFilters : null,
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
                     _ResultsHeader(
                       visibleCount: items.length,
                       totalCount: allItems.length,
@@ -307,24 +313,13 @@ class _Summary extends StatelessWidget {
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 760 ? 4 : 2;
-        final aspectRatio = constraints.maxWidth < 420 ? 1.85 : 2.25;
-
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: metrics.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: aspectRatio,
-          ),
-          itemBuilder: (context, index) => _Metric(data: metrics[index]),
-        );
-      },
+    return Row(
+      children: [
+        for (var index = 0; index < metrics.length; index++) ...[
+          if (index > 0) const SizedBox(width: 6),
+          Expanded(child: _Metric(data: metrics[index])),
+        ],
+      ],
     );
   }
 }
@@ -353,42 +348,36 @@ class _Metric extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: colors.primaryContainer.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                data.icon,
-                size: 20,
-                color: colors.onPrimaryContainer,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  data.icon,
+                  size: 16,
+                  color: colors.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${data.value}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${data.value}',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    data.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+            const SizedBox(height: 2),
+            Text(
+              data.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontSize: 10,
               ),
             ),
           ],
@@ -419,123 +408,101 @@ class _Filters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    InputDecoration decoration(String label) => InputDecoration(
+      labelText: label,
+      isDense: true,
+      contentPadding: const EdgeInsets.fromLTRB(9, 9, 5, 9),
+    );
+
+    final statusField = DropdownButtonFormField<FeedbackWorkflowStatus?>(
+      key: ValueKey('feedback-status-${status?.name ?? 'all'}'),
+      initialValue: status,
+      isExpanded: true,
+      iconSize: 18,
+      decoration: decoration('Status'),
+      items: [
+        const DropdownMenuItem<FeedbackWorkflowStatus?>(
+          value: null,
+          child: Text('All', overflow: TextOverflow.ellipsis),
+        ),
+        ...FeedbackWorkflowStatus.values.map(
+          (value) => DropdownMenuItem<FeedbackWorkflowStatus?>(
+            value: value,
+            child: Text(value.label, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: onStatusChanged,
+    );
+
+    final categoryField = DropdownButtonFormField<FeedbackCategory?>(
+      key: ValueKey('feedback-category-${category?.name ?? 'all'}'),
+      initialValue: category,
+      isExpanded: true,
+      iconSize: 18,
+      decoration: decoration('Category'),
+      items: [
+        const DropdownMenuItem<FeedbackCategory?>(
+          value: null,
+          child: Text('All', overflow: TextOverflow.ellipsis),
+        ),
+        ...FeedbackCategory.values.map(
+          (value) => DropdownMenuItem<FeedbackCategory?>(
+            value: value,
+            child: Text(value.label, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: onCategoryChanged,
+    );
+
+    final priorityField = DropdownButtonFormField<FeedbackPriority?>(
+      key: ValueKey('feedback-priority-${priority?.name ?? 'all'}'),
+      initialValue: priority,
+      isExpanded: true,
+      iconSize: 18,
+      decoration: decoration('Priority'),
+      items: [
+        const DropdownMenuItem<FeedbackPriority?>(
+          value: null,
+          child: Text('All', overflow: TextOverflow.ellipsis),
+        ),
+        ...FeedbackPriority.values.map(
+          (value) => DropdownMenuItem<FeedbackPriority?>(
+            value: value,
+            child: Text(value.label, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: onPriorityChanged,
+    );
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Text(
-                  'Filters',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            Expanded(child: statusField),
+            const SizedBox(width: 6),
+            Expanded(child: categoryField),
+            const SizedBox(width: 6),
+            Expanded(child: priorityField),
+            if (onClear != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Clear filters',
+                onPressed: onClear,
+                icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 34,
+                  height: 34,
                 ),
-                const Spacer(),
-                if (onClear != null)
-                  TextButton(onPressed: onClear, child: const Text('Clear')),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text('Status', style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: status == null,
-                  onSelected: (_) => onStatusChanged(null),
-                ),
-                ...FeedbackWorkflowStatus.values.map(
-                  (value) => ChoiceChip(
-                    label: Text(value.label),
-                    selected: status == value,
-                    onSelected: (_) => onStatusChanged(value),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final stackFilters = constraints.maxWidth < 640;
-
-                final categoryField =
-                    DropdownButtonFormField<FeedbackCategory?>(
-                      key: ValueKey(
-                        'feedback-category-${category?.name ?? 'all'}',
-                      ),
-                      initialValue: category,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: [
-                        const DropdownMenuItem<FeedbackCategory?>(
-                          value: null,
-                          child: Text('All categories'),
-                        ),
-                        ...FeedbackCategory.values.map(
-                          (value) => DropdownMenuItem<FeedbackCategory?>(
-                            value: value,
-                            child: Text(
-                              value.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: onCategoryChanged,
-                    );
-
-                final priorityField =
-                    DropdownButtonFormField<FeedbackPriority?>(
-                      key: ValueKey(
-                        'feedback-priority-${priority?.name ?? 'all'}',
-                      ),
-                      initialValue: priority,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Priority'),
-                      items: [
-                        const DropdownMenuItem<FeedbackPriority?>(
-                          value: null,
-                          child: Text('All priorities'),
-                        ),
-                        ...FeedbackPriority.values.map(
-                          (value) => DropdownMenuItem<FeedbackPriority?>(
-                            value: value,
-                            child: Text(
-                              value.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                      onChanged: onPriorityChanged,
-                    );
-
-                if (stackFilters) {
-                  return Column(
-                    children: [
-                      categoryField,
-                      const SizedBox(height: 10),
-                      priorityField,
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    Expanded(child: categoryField),
-                    const SizedBox(width: 10),
-                    Expanded(child: priorityField),
-                  ],
-                );
-              },
-            ),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ],
         ),
       ),
