@@ -1120,12 +1120,10 @@ class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
-    this.emptyText = 'Not provided',
   });
 
   final String label;
   final String value;
-  final String emptyText;
 
   @override
   Widget build(BuildContext context) {
@@ -1145,7 +1143,7 @@ class _DetailRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value.trim().isEmpty ? emptyText : value,
+              value.trim().isEmpty ? 'Not provided' : value,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
