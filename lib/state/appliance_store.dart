@@ -685,7 +685,7 @@ class ApplianceStore extends ChangeNotifier {
       final current = applianceById(applianceId);
       if (current == null) continue;
 
-      final pendingUploadIds = current.allDocuments
+      final pendingUploadIds = current.allAttachments
           .where((document) => document.needsCloudUpload)
           .map((document) => document.id)
           .toList(growable: false);
@@ -719,7 +719,7 @@ class ApplianceStore extends ChangeNotifier {
       final current = applianceById(applianceId);
       if (current == null) continue;
 
-      final pendingDownloadIds = current.allDocuments
+      final pendingDownloadIds = current.allAttachments
           .where(
             (document) =>
                 !document.isAvailableOnDevice && document.isAvailableInCloud,
@@ -753,7 +753,7 @@ class ApplianceStore extends ChangeNotifier {
   }
 
   StoredDocument? _documentById(Appliance appliance, String documentId) {
-    for (final document in appliance.allDocuments) {
+    for (final document in appliance.allAttachments) {
       if (document.id == documentId) {
         return document;
       }
@@ -768,13 +768,13 @@ class ApplianceStore extends ChangeNotifier {
     if (!_cloudDocumentStorage.isAvailable) return;
 
     final currentPaths = current
-        .expand((appliance) => appliance.allDocuments)
+        .expand((appliance) => appliance.allAttachments)
         .map((document) => document.cloudStoragePath.trim())
         .where((value) => value.isNotEmpty)
         .toSet();
 
     final staleDocuments = previous
-        .expand((appliance) => appliance.allDocuments)
+        .expand((appliance) => appliance.allAttachments)
         .where(
           (document) =>
               document.isAvailableInCloud &&

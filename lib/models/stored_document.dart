@@ -1,6 +1,9 @@
 enum DocumentType {
+  appliancePhoto,
   invoice,
   warrantyCard,
+  extendedWarranty,
+  amcContract,
   userManual,
   serviceReceipt,
   serviceReport,
@@ -11,10 +14,16 @@ enum DocumentType {
 extension DocumentTypeDetails on DocumentType {
   String get label {
     switch (this) {
+      case DocumentType.appliancePhoto:
+        return 'Appliance photo';
       case DocumentType.invoice:
         return 'Invoice';
       case DocumentType.warrantyCard:
         return 'Warranty card';
+      case DocumentType.extendedWarranty:
+        return 'Extended warranty';
+      case DocumentType.amcContract:
+        return 'AMC contract';
       case DocumentType.userManual:
         return 'User manual';
       case DocumentType.serviceReceipt:
@@ -30,10 +39,16 @@ extension DocumentTypeDetails on DocumentType {
 
   String get storageFolder {
     switch (this) {
+      case DocumentType.appliancePhoto:
+        return 'photos';
       case DocumentType.invoice:
         return 'invoices';
       case DocumentType.warrantyCard:
         return 'warranty';
+      case DocumentType.extendedWarranty:
+        return 'extended_warranty';
+      case DocumentType.amcContract:
+        return 'amc';
       case DocumentType.userManual:
         return 'manuals';
       case DocumentType.serviceReceipt:

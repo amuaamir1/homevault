@@ -47,6 +47,12 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
       'Alerts before scheduled appliance maintenance.';
 
   static const _servicePayloadPrefix = 'service|';
+  static const _amcPayloadPrefix = 'amc|';
+
+  static const _amcChannelId = 'amc_reminders';
+  static const _amcChannelName = 'AMC reminders';
+  static const _amcChannelDescription =
+      'Alerts before appliance annual maintenance contracts expire.';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -193,6 +199,7 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
 
   Future<void> _scheduleCurrentReminders(Appliance appliance) async {
     await _scheduleWarrantyReminder(appliance);
+    await _scheduleAmcReminder(appliance);
     final maintenanceRecord = appliance.maintenanceScheduleRecord;
     if (maintenanceRecord != null) {
       await _scheduleServiceReminder(appliance, maintenanceRecord);
@@ -216,6 +223,26 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
       notificationDetails: _warrantyNotificationDetails,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: appliance.id,
+    );
+  }
+
+  Future<void> _scheduleAmcReminder(Appliance appliance) async {
+    final reminderDate = appliance.amcReminderDateAt();
+    final expiryDate = appliance.amcExpiryDate;
+    if (reminderDate == null || expiryDate == null) return;
+
+    final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
+    final now = tz.TZDateTime.now(tz.local);
+    if (!scheduledDate.isAfter(now)) return;
+
+    await _plugin.zonedSchedule(
+      id: amcNotificationIdFor(appliance.id),
+      title: '${appliance.name} AMC expires soon',
+      body: _amcNotificationBody(appliance, expiryDate),
+      scheduledDate: scheduledDate,
+      notificationDetails: _amcNotificationDetails,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: '$_amcPayloadPrefix${appliance.id}',
     );
   }
 
@@ -267,6 +294,18 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
         iOS: DarwinNotificationDetails(),
       );
 
+  static const NotificationDetails _amcNotificationDetails =
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _amcChannelId,
+          _amcChannelName,
+          channelDescription: _amcChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+
   static const NotificationDetails _serviceNotificationDetails =
       NotificationDetails(
         android: AndroidNotificationDetails(
@@ -281,6 +320,10 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
 
   static int notificationIdFor(String applianceId) {
     return _stableNotificationId('warranty|$applianceId');
+  }
+
+  static int amcNotificationIdFor(String applianceId) {
+    return _stableNotificationId('amc|$applianceId');
   }
 
   static int serviceNotificationIdFor(
@@ -308,6 +351,15 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     return 'Warranty$providerText expires on ${_date(expiryDate)}.';
   }
 
+  static String _amcNotificationBody(
+    Appliance appliance,
+    DateTime expiryDate,
+  ) {
+    final provider = appliance.amcProvider.trim();
+    final providerText = provider.isEmpty ? '' : ' with $provider';
+    return 'AMC$providerText expires on ${_date(expiryDate)}.';
+  }
+
   static String _serviceNotificationBody(
     ServiceRecord record,
     DateTime nextServiceDate,
@@ -326,10 +378,19 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
   static String? _applianceIdFromPayload(String? payload) {
     final value = payload?.trim();
     if (value == null || value.isEmpty) return null;
-    if (!value.startsWith(_servicePayloadPrefix)) return value;
 
-    final parts = value.split('|');
-    if (parts.length < 3 || parts[1].trim().isEmpty) return null;
-    return parts[1].trim();
+    if (value.startsWith(_servicePayloadPrefix)) {
+      final parts = value.split('|');
+      if (parts.length < 3 || parts[1].trim().isEmpty) return null;
+      return parts[1].trim();
+    }
+
+    if (value.startsWith(_amcPayloadPrefix)) {
+      final parts = value.split('|');
+      if (parts.length < 2 || parts[1].trim().isEmpty) return null;
+      return parts[1].trim();
+    }
+
+    return value;
   }
 }

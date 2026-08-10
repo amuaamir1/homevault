@@ -9,7 +9,9 @@ import '../security/security_scope_key.dart';
 
 class DocumentStorageService {
   static const int maximumFileSizeBytes = 15 * 1024 * 1024;
+  static const int maximumPhotoSizeBytes = 10 * 1024 * 1024;
   static const List<String> allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+  static const List<String> allowedPhotoExtensions = ['jpg', 'jpeg', 'png'];
   static const String _legacyOwnerMarkerName = '.homevault_owner';
 
   static String? _ownerScope;
@@ -24,10 +26,39 @@ class DocumentStorageService {
   Future<StoredDocument?> pickAndStore({
     required String applianceId,
     required String documentFolder,
+  }) {
+    return _pickAndStore(
+      applianceId: applianceId,
+      documentFolder: documentFolder,
+      extensions: allowedExtensions,
+      maximumBytes: maximumFileSizeBytes,
+    );
+  }
+
+  Future<StoredDocument?> pickAndStorePhoto({
+    required String applianceId,
+  }) {
+    return _pickAndStore(
+      applianceId: applianceId,
+      documentFolder: DocumentType.appliancePhoto.storageFolder,
+      extensions: allowedPhotoExtensions,
+      maximumBytes: maximumPhotoSizeBytes,
+      type: DocumentType.appliancePhoto,
+      title: 'Appliance photo',
+    );
+  }
+
+  Future<StoredDocument?> _pickAndStore({
+    required String applianceId,
+    required String documentFolder,
+    required List<String> extensions,
+    required int maximumBytes,
+    DocumentType type = DocumentType.other,
+    String title = '',
   }) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: allowedExtensions,
+      allowedExtensions: extensions,
       allowMultiple: false,
       withData: false,
     );
@@ -44,9 +75,10 @@ class DocumentStorageService {
       );
     }
 
-    if (selectedFile.size > maximumFileSizeBytes) {
-      throw const DocumentStorageException(
-        'The selected file is larger than 15 MB.',
+    if (selectedFile.size > maximumBytes) {
+      final limitMb = maximumBytes ~/ (1024 * 1024);
+      throw DocumentStorageException(
+        'The selected file is larger than $limitMb MB.',
       );
     }
 
@@ -71,6 +103,8 @@ class DocumentStorageService {
     final copiedFileSize = await copiedFile.length();
 
     return StoredDocument(
+      type: type,
+      title: title,
       fileName: selectedFile.name,
       localPath: copiedFile.path,
       sizeBytes: copiedFileSize,
