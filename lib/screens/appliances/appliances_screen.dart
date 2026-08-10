@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/appliance.dart';
@@ -295,6 +297,10 @@ class _AppliancesScreenState extends State<AppliancesScreen> {
       appliance.warrantyReference,
       appliance.extendedWarrantyProvider,
       appliance.extendedWarrantyReference,
+      appliance.amcProvider,
+      appliance.amcReference,
+      appliance.amcPhone,
+      appliance.amcNotes,
       appliance.warrantyClaimNumber,
       appliance.notes,
       ...appliance.allDocuments.expand(
@@ -704,6 +710,46 @@ class _CategorySection extends StatelessWidget {
   }
 }
 
+class _ApplianceListPhoto extends StatelessWidget {
+  const _ApplianceListPhoto({required this.appliance, required this.fallback});
+
+  final Appliance appliance;
+  final String fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = appliance.appliancePhotoDocument?.localPath.trim() ?? '';
+    if (path.isEmpty) {
+      return CircleAvatar(
+        radius: 21,
+        child: Text(
+          fallback,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: 21,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: ClipOval(
+        child: Image.file(
+          File(path),
+          width: 42,
+          height: 42,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Center(
+            child: Text(
+              fallback,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ApplianceListTile extends StatelessWidget {
   const _ApplianceListTile({required this.appliance});
 
@@ -718,12 +764,9 @@ class _ApplianceListTile extends StatelessWidget {
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      leading: CircleAvatar(
-        radius: 21,
-        child: Text(
-          _initial(appliance.name),
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+      leading: _ApplianceListPhoto(
+        appliance: appliance,
+        fallback: _initial(appliance.name),
       ),
       title: Text(
         appliance.name,

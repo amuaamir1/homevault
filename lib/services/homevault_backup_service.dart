@@ -295,6 +295,18 @@ class HomeVaultBackupService {
         final applianceJson = _deepJsonCopy(candidate);
         final applianceId = '${applianceJson['id']}';
 
+        final photoResult = await _restoreDocumentMap(
+          _mapOrNull(applianceJson['appliancePhotoDocument']),
+          applianceId: applianceId,
+          decodedFiles: decoded.files,
+          applianceRoot: restoreApplianceRoot,
+          restoreStamp: restoreStamp,
+          createdFilePaths: createdFilePaths,
+        );
+        applianceJson['appliancePhotoDocument'] = photoResult.documentJson;
+        restoredDocuments += photoResult.restoredCount;
+        missingDocuments += photoResult.missingCount;
+
         final invoiceResult = await _restoreDocumentMap(
           _mapOrNull(applianceJson['invoiceDocument']),
           applianceId: applianceId,
@@ -318,6 +330,31 @@ class HomeVaultBackupService {
         applianceJson['warrantyDocument'] = warrantyResult.documentJson;
         restoredDocuments += warrantyResult.restoredCount;
         missingDocuments += warrantyResult.missingCount;
+
+        final extendedWarrantyResult = await _restoreDocumentMap(
+          _mapOrNull(applianceJson['extendedWarrantyDocument']),
+          applianceId: applianceId,
+          decodedFiles: decoded.files,
+          applianceRoot: restoreApplianceRoot,
+          restoreStamp: restoreStamp,
+          createdFilePaths: createdFilePaths,
+        );
+        applianceJson['extendedWarrantyDocument'] =
+            extendedWarrantyResult.documentJson;
+        restoredDocuments += extendedWarrantyResult.restoredCount;
+        missingDocuments += extendedWarrantyResult.missingCount;
+
+        final amcResult = await _restoreDocumentMap(
+          _mapOrNull(applianceJson['amcDocument']),
+          applianceId: applianceId,
+          decodedFiles: decoded.files,
+          applianceRoot: restoreApplianceRoot,
+          restoreStamp: restoreStamp,
+          createdFilePaths: createdFilePaths,
+        );
+        applianceJson['amcDocument'] = amcResult.documentJson;
+        restoredDocuments += amcResult.restoredCount;
+        missingDocuments += amcResult.missingCount;
 
         final restoredAdditional = <Map<String, dynamic>>[];
         final additional = applianceJson['additionalDocuments'];
@@ -437,7 +474,7 @@ class HomeVaultBackupService {
 
     final referenced = <String>{
       ...appliances
-          .expand((appliance) => appliance.allDocuments)
+          .expand((appliance) => appliance.allAttachments)
           .where((document) => document.localPath.trim().isNotEmpty)
           .map(
             (document) =>
@@ -491,6 +528,11 @@ class HomeVaultBackupService {
   ) async {
     final json = Map<String, dynamic>.from(appliance.toJson());
 
+    json['appliancePhotoDocument'] = await _prepareDocumentForBackup(
+      appliance.appliancePhotoDocument,
+      appliance: appliance,
+      state: state,
+    );
     json['invoiceDocument'] = await _prepareDocumentForBackup(
       appliance.invoiceDocument,
       appliance: appliance,
@@ -498,6 +540,16 @@ class HomeVaultBackupService {
     );
     json['warrantyDocument'] = await _prepareDocumentForBackup(
       appliance.warrantyDocument,
+      appliance: appliance,
+      state: state,
+    );
+    json['extendedWarrantyDocument'] = await _prepareDocumentForBackup(
+      appliance.extendedWarrantyDocument,
+      appliance: appliance,
+      state: state,
+    );
+    json['amcDocument'] = await _prepareDocumentForBackup(
+      appliance.amcDocument,
       appliance: appliance,
       state: state,
     );
@@ -667,10 +719,16 @@ class HomeVaultBackupService {
   }
 
   Iterable<Map<String, dynamic>> _documentMaps(Map appliance) sync* {
+    final photo = _mapOrNull(appliance['appliancePhotoDocument']);
+    if (photo != null) yield photo;
     final invoice = _mapOrNull(appliance['invoiceDocument']);
     if (invoice != null) yield invoice;
     final warranty = _mapOrNull(appliance['warrantyDocument']);
     if (warranty != null) yield warranty;
+    final extendedWarranty = _mapOrNull(appliance['extendedWarrantyDocument']);
+    if (extendedWarranty != null) yield extendedWarranty;
+    final amc = _mapOrNull(appliance['amcDocument']);
+    if (amc != null) yield amc;
 
     final additional = appliance['additionalDocuments'];
     if (additional is List) {

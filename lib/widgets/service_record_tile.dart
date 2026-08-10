@@ -30,23 +30,14 @@ class ServiceRecordTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = record.provider.trim();
     final problem = record.problemDescription.trim();
+    final workCompleted = record.workCompleted.trim();
+    final partsReplaced = record.partsReplaced.trim();
     final appliance = applianceName?.trim() ?? '';
+    final ticket = record.ticketNumber.trim();
     final effectiveStatus = record.effectiveStatus(now ?? DateTime.now());
-    final title = record.ticketNumber.trim().isEmpty
+    final title = ticket.isEmpty
         ? effectiveStatus.label
-        : '${effectiveStatus.label} • ${record.ticketNumber.trim()}';
-
-    final details = <String>[
-      if (provider.isNotEmpty) 'Provider: $provider',
-      if (problem.isNotEmpty) 'Issue: $problem',
-      effectiveStatus == ServiceStatus.completed
-          ? 'Last serviced: ${_date(record.serviceDate)}'
-          : 'Service date: ${_date(record.serviceDate)}',
-      if (record.serviceFrequencyLabel != null)
-        'Service frequency: ${record.serviceFrequencyLabel}',
-      if (record.nextServiceDate != null)
-        'Next service: ${_date(record.nextServiceDate!)}',
-    ];
+        : '${effectiveStatus.label} • $ticket';
 
     return Card(
       margin: EdgeInsets.zero,
@@ -67,59 +58,111 @@ class ServiceRecordTile extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     if (appliance.isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         appliance,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
-                    if (details.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      for (var index = 0; index < details.length; index++) ...[
-                        Text(
-                          details[index],
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        if (index != details.length - 1)
-                          const SizedBox(height: 2),
-                      ],
+                    if (provider.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _DetailLine(
+                        icon: Icons.storefront_outlined,
+                        label: 'Provider',
+                        value: provider,
+                      ),
                     ],
+                    if (problem.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _DetailLine(
+                        icon: Icons.report_problem_outlined,
+                        label: 'Issue',
+                        value: problem,
+                      ),
+                    ],
+                    if (workCompleted.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _DetailLine(
+                        icon: Icons.handyman_outlined,
+                        label: 'Work done',
+                        value: workCompleted,
+                      ),
+                    ],
+                    if (partsReplaced.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _DetailLine(
+                        icon: Icons.settings_suggest_outlined,
+                        label: 'Parts',
+                        value: partsReplaced,
+                      ),
+                    ],
+                    const SizedBox(height: 9),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _CompactLabel(
+                          icon: Icons.event_outlined,
+                          text: effectiveStatus == ServiceStatus.completed
+                              ? 'Last serviced ${_date(record.serviceDate)}'
+                              : 'Service ${_date(record.serviceDate)}',
+                        ),
+                        if (record.serviceFrequencyLabel != null)
+                          _CompactLabel(
+                            icon: Icons.autorenew_outlined,
+                            text: record.serviceFrequencyLabel!,
+                          ),
+                        if (record.nextServiceDate != null)
+                          _CompactLabel(
+                            icon: Icons.event_repeat_outlined,
+                            text: 'Next ${_date(record.nextServiceDate!)}',
+                          ),
+                        if (record.serviceCharge > 0)
+                          _CompactLabel(
+                            icon: Icons.currency_rupee,
+                            text:
+                                '${_formatIndianCurrency(record.serviceCharge)}/-',
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                tooltip: 'Service record options',
-                onSelected: (value) {
-                  if (value == 'edit') onEdit?.call();
-                  if (value == 'delete') onDelete?.call();
-                },
-                itemBuilder: (context) => [
-                  if (onEdit != null)
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Edit'),
+              if (onEdit != null || onDelete != null)
+                PopupMenuButton<String>(
+                  tooltip: 'Service record options',
+                  padding: EdgeInsets.zero,
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit?.call();
+                    if (value == 'delete') onDelete?.call();
+                  },
+                  itemBuilder: (context) => [
+                    if (onEdit != null)
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Edit'),
+                        ),
                       ),
-                    ),
-                  if (onDelete != null)
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Delete'),
+                    if (onDelete != null)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Delete'),
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -136,4 +179,92 @@ class ServiceRecordTile extends StatelessWidget {
       ServiceStatus.cancelled => Icons.cancel_outlined,
     };
   }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 16),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactLabel extends StatelessWidget {
+  const _CompactLabel({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14),
+            const SizedBox(width: 4),
+            Text(text, style: Theme.of(context).textTheme.labelMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatIndianCurrency(double value) {
+  final rounded = value.round();
+  final negative = rounded < 0;
+  final digits = rounded.abs().toString();
+  if (digits.length <= 3) {
+    return '${negative ? '-' : ''}₹$digits';
+  }
+
+  final lastThree = digits.substring(digits.length - 3);
+  var leading = digits.substring(0, digits.length - 3);
+  final groups = <String>[];
+  while (leading.length > 2) {
+    groups.insert(0, leading.substring(leading.length - 2));
+    leading = leading.substring(0, leading.length - 2);
+  }
+  if (leading.isNotEmpty) groups.insert(0, leading);
+
+  return '${negative ? '-' : ''}₹${groups.join(',')},$lastThree';
 }

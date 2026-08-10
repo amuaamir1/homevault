@@ -257,6 +257,12 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
                 items: DocumentType.values
+                    .where(
+                      (type) =>
+                          type != DocumentType.appliancePhoto &&
+                          type != DocumentType.extendedWarranty &&
+                          type != DocumentType.amcContract,
+                    )
                     .map(
                       (type) => DropdownMenuItem(
                         value: type,

@@ -402,24 +402,24 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                   children: [
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Service records',
+                        label: 'Records',
                         value: '${store.totalServiceRecordCount}',
                         icon: Icons.build_circle_outlined,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Due in 30 days',
+                        label: 'Due 30 days',
                         value: '$dueSoon',
                         icon: Icons.event_available_outlined,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _SummaryCard(
                         label: 'Total cost',
-                        value: totalCost.toStringAsFixed(0),
+                        value: '${_formatIndianCurrency(totalCost)}/-',
                         icon: Icons.payments_outlined,
                       ),
                     ),
@@ -442,20 +442,24 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  height: 42,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _filterOrder.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final filter = _filterOrder[index];
-                      return ChoiceChip(
-                        label: Text(filter.label),
-                        selected: _filter == filter,
-                        onSelected: (_) => setState(() => _filter = filter),
-                      );
-                    },
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < _filterOrder.length;
+                        index++
+                      ) ...[
+                        if (index > 0) const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text(_filterOrder[index].label),
+                          selected: _filter == _filterOrder[index],
+                          onSelected: (_) =>
+                              setState(() => _filter = _filterOrder[index]),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -511,6 +515,26 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
   }
 }
 
+String _formatIndianCurrency(double value) {
+  final rounded = value.round();
+  final negative = rounded < 0;
+  final digits = rounded.abs().toString();
+  if (digits.length <= 3) {
+    return '${negative ? '-' : ''}₹$digits';
+  }
+
+  final lastThree = digits.substring(digits.length - 3);
+  var leading = digits.substring(0, digits.length - 3);
+  final groups = <String>[];
+  while (leading.length > 2) {
+    groups.insert(0, leading.substring(leading.length - 2));
+    leading = leading.substring(0, leading.length - 2);
+  }
+  if (leading.isNotEmpty) groups.insert(0, leading);
+
+  return '${negative ? '-' : ''}₹${groups.join(',')},$lastThree';
+}
+
 class _ServiceEntry {
   const _ServiceEntry({required this.appliance, required this.record});
 
@@ -534,21 +558,30 @@ class _SummaryCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            Icon(icon, size: 20),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 24,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             ),
+            const SizedBox(height: 2),
             Text(
               label,
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall,
             ),

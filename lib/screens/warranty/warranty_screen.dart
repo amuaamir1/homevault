@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../models/appliance.dart';
-import '../../services/warranty_notification_service.dart';
 import '../../state/app_scope.dart';
 import '../../state/appliance_store.dart';
 import '../../theme/app_colors.dart';
@@ -26,97 +25,11 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
   late WarrantyFilter _filter;
   WarrantySort _sort = WarrantySort.expirySoonest;
   String _query = '';
-  bool? _notificationsEnabled;
-  int _pendingReminderCount = 0;
-  bool _checkingNotifications = true;
-  bool _requestingPermission = false;
-  bool _sendingTestNotification = false;
 
   @override
   void initState() {
     super.initState();
     _filter = widget.initialFilter;
-    _loadNotificationStatus();
-  }
-
-  Future<void> _loadNotificationStatus() async {
-    try {
-      final service = WarrantyNotificationService.instance;
-      final enabled = await service.notificationsEnabled();
-      final pending = await service.pendingReminderCount();
-      if (!mounted) return;
-      setState(() {
-        _notificationsEnabled = enabled;
-        _pendingReminderCount = pending;
-        _checkingNotifications = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _checkingNotifications = false);
-    }
-  }
-
-  Future<void> _enableNotifications() async {
-    setState(() => _requestingPermission = true);
-    try {
-      final granted = await WarrantyNotificationService.instance
-          .requestPermission();
-      if (granted && mounted) {
-        await AppScope.read(context).rescheduleWarrantyReminders();
-      }
-      await _loadNotificationStatus();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            granted
-                ? 'HomeVault notifications are enabled.'
-                : 'Notification permission was not granted.',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Notification permission could not be updated.'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _requestingPermission = false);
-      }
-    }
-  }
-
-  Future<void> _sendTestNotification() async {
-    setState(() => _sendingTestNotification = true);
-    try {
-      final store = AppScope.read(context);
-      final appliance = store.appliances.isEmpty
-          ? null
-          : store.appliances.first;
-      await WarrantyNotificationService.instance.showTestNotification(
-        appliance: appliance,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Test notification sent.')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The test notification could not be sent.'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _sendingTestNotification = false);
-      }
-    }
   }
 
   @override
@@ -180,27 +93,23 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async {
-            await store.refresh();
-            await _loadNotificationStatus();
-          },
+          onRefresh: store.refresh,
           child: ListView(
             key: const Key('warrantyCenterList'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
-              _NotificationCard(
-                isChecking: _checkingNotifications,
-                isEnabled: _notificationsEnabled,
-                pendingCount: _pendingReminderCount,
-                isRequesting: _requestingPermission,
-                isSendingTest: _sendingTestNotification,
-                onEnable: _enableNotifications,
-                onSendTest: _sendTestNotification,
+              _WarrantySummary(
+                store: store,
+                now: now,
+                selectedFilter: _filter,
+                onSelected: (filter) {
+                  setState(() {
+                    _filter = _filter == filter ? WarrantyFilter.all : filter;
+                  });
+                },
               ),
-              const SizedBox(height: 16),
-              _WarrantySummary(store: store, now: now),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               SearchBar(
                 hintText: 'Search appliance, brand, provider, or claim',
                 leading: const Icon(Icons.search),
@@ -214,25 +123,7 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
                 ],
                 onChanged: (value) => setState(() => _query = value),
               ),
-              const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: WarrantyFilter.values
-                      .map(
-                        (filter) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(_filterLabel(filter)),
-                            selected: _filter == filter,
-                            onSelected: (_) => setState(() => _filter = filter),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               if (appliances.isEmpty)
                 EmptyState(
                   icon: normalizedQuery.isEmpty
@@ -288,114 +179,20 @@ class _WarrantyScreenState extends State<WarrantyScreen> {
     if (bExpiry == null) return -1;
     return aExpiry.compareTo(bExpiry);
   }
-
-  String _filterLabel(WarrantyFilter filter) => switch (filter) {
-    WarrantyFilter.all => 'All',
-    WarrantyFilter.active => 'Active',
-    WarrantyFilter.expiringSoon => 'Expiring soon',
-    WarrantyFilter.expired => 'Expired',
-    WarrantyFilter.notProvided => 'No date',
-  };
-}
-
-class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({
-    required this.isChecking,
-    required this.isEnabled,
-    required this.pendingCount,
-    required this.isRequesting,
-    required this.isSendingTest,
-    required this.onEnable,
-    required this.onSendTest,
-  });
-
-  final bool isChecking;
-  final bool? isEnabled;
-  final int pendingCount;
-  final bool isRequesting;
-  final bool isSendingTest;
-  final Future<void> Function() onEnable;
-  final Future<void> Function() onSendTest;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = isEnabled == true;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              child: Icon(
-                enabled
-                    ? Icons.notifications_active_outlined
-                    : Icons.notifications_off_outlined,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Warranty and maintenance reminders',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isChecking
-                        ? 'Checking notification permission...'
-                        : enabled
-                        ? '$pendingCount reminder${pendingCount == 1 ? '' : 's'} currently scheduled across warranties and maintenance.'
-                        : 'Enable notifications to receive warranty expiry alerts.',
-                  ),
-                  if (!isChecking) ...[
-                    const SizedBox(height: 10),
-                    if (!enabled)
-                      FilledButton.tonalIcon(
-                        onPressed: isRequesting ? null : onEnable,
-                        icon: isRequesting
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.notifications_outlined),
-                        label: const Text('Enable notifications'),
-                      )
-                    else
-                      FilledButton.tonalIcon(
-                        onPressed: isSendingTest ? null : onSendTest,
-                        icon: isSendingTest
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.send_outlined),
-                        label: const Text('Send test notification'),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _WarrantySummary extends StatelessWidget {
-  const _WarrantySummary({required this.store, required this.now});
+  const _WarrantySummary({
+    required this.store,
+    required this.now,
+    required this.selectedFilter,
+    required this.onSelected,
+  });
 
   final ApplianceStore store;
   final DateTime now;
+  final WarrantyFilter selectedFilter;
+  final ValueChanged<WarrantyFilter> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -404,66 +201,134 @@ class _WarrantySummary extends StatelessWidget {
         'Active',
         store.warrantyCount(WarrantyStatus.active, now: now),
         AppColors.success,
+        WarrantyFilter.active,
+        const ValueKey('warrantySummaryActive'),
       ),
       (
         'Expiring',
         store.warrantyCount(WarrantyStatus.expiringSoon, now: now),
         AppColors.warning,
+        WarrantyFilter.expiringSoon,
+        const ValueKey('warrantySummaryExpiring'),
       ),
       (
         'Expired',
         store.warrantyCount(WarrantyStatus.expired, now: now),
         AppColors.danger,
+        WarrantyFilter.expired,
+        const ValueKey('warrantySummaryExpired'),
       ),
       (
         'No date',
         store.warrantyCount(WarrantyStatus.notProvided, now: now),
         AppColors.textSecondary,
+        WarrantyFilter.notProvided,
+        const ValueKey('warrantySummaryNoDate'),
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 2.2,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: items
+            .map((item) {
+              final selected = selectedFilter == item.$4;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _WarrantyStatPill(
+                  key: item.$5,
+                  label: item.$1,
+                  count: item.$2,
+                  color: item.$3,
+                  selected: selected,
+                  onTap: () => onSelected(item.$4),
+                ),
+              );
+            })
+            .toList(growable: false),
       ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
+    );
+  }
+}
+
+class _WarrantyStatPill extends StatelessWidget {
+  const _WarrantyStatPill({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label warranties: $count',
+      child: Material(
+        color: selected
+            ? color.withValues(alpha: 0.14)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: selected
+                ? color.withValues(alpha: 0.5)
+                : colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: item.$3.withValues(alpha: 0.12),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  height: 24,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                   child: Text(
-                    '${item.$2}',
+                    '$count',
                     style: TextStyle(
-                      color: item.$3,
+                      color: color,
                       fontWeight: FontWeight.w800,
+                      fontSize: 12,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item.$1,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                    fontSize: 13,
                   ),
                 ),
+                if (selected) ...[
+                  const SizedBox(width: 5),
+                  Icon(Icons.check, size: 15, color: color),
+                ],
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
