@@ -93,7 +93,9 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
                       decoration: InputDecoration(
                         hintText: 'Search feedback',
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                         prefixIcon: const Icon(Icons.search, size: 20),
                         prefixIconConstraints: const BoxConstraints(
                           minWidth: 44,
@@ -356,11 +358,7 @@ class _Metric extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  data.icon,
-                  size: 16,
-                  color: colors.primary,
-                ),
+                Icon(data.icon, size: 16, color: colors.primary),
                 const SizedBox(width: 4),
                 Text(
                   '${data.value}',
@@ -376,9 +374,9 @@ class _Metric extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontSize: 10,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(fontSize: 10),
             ),
           ],
         ),
