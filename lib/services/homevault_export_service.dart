@@ -67,7 +67,9 @@ class HomeVaultExportService {
         'Model number',
         'Warranty duration',
         'Standard warranty expiry',
+        'Extended warranty start',
         'Extended warranty expiry',
+        'Extended warranty cost',
         'Effective expiry',
         'Days remaining',
         'Warranty status',
@@ -75,6 +77,15 @@ class HomeVaultExportService {
         'Warranty reference',
         'Extended provider',
         'Extended reference',
+        'AMC provider',
+        'AMC reference',
+        'AMC phone',
+        'AMC start',
+        'AMC expiry',
+        'AMC cost',
+        'AMC services included',
+        'AMC services used',
+        'AMC renewal reminder',
         'Claim number',
         'Claim status',
         'Reminder enabled',
@@ -87,7 +98,11 @@ class HomeVaultExportService {
           appliance.modelNumber,
           appliance.warrantyDurationLabel,
           _date(appliance.warrantyExpiryDate),
+          _date(appliance.extendedWarrantyStartDate),
           _date(appliance.extendedWarrantyExpiryDate),
+          appliance.extendedWarrantyCost == 0
+              ? ''
+              : appliance.extendedWarrantyCost.toStringAsFixed(2),
           _date(appliance.effectiveWarrantyExpiryDate),
           appliance.warrantyDaysRemainingAt(now) ?? '',
           _warrantyStatusLabel(appliance.warrantyStatusAt(now)),
@@ -95,6 +110,17 @@ class HomeVaultExportService {
           appliance.warrantyReference,
           appliance.extendedWarrantyProvider,
           appliance.extendedWarrantyReference,
+          appliance.amcProvider,
+          appliance.amcReference,
+          appliance.amcPhone,
+          _date(appliance.amcStartDate),
+          _date(appliance.amcExpiryDate),
+          appliance.amcCost == 0 ? '' : appliance.amcCost.toStringAsFixed(2),
+          appliance.amcIncludedServices ?? '',
+          appliance.amcUsedServices,
+          appliance.amcReminderEnabled
+              ? '${appliance.amcReminderDaysBefore} days before'
+              : 'Disabled',
           appliance.warrantyClaimNumber,
           appliance.warrantyClaimStatus.label,
           appliance.warrantyReminderEnabled ? 'Yes' : 'No',
@@ -232,11 +258,34 @@ class HomeVaultExportService {
             _pdfRow('Reference', appliance.warrantyReference),
             _pdfRow('Extended provider', appliance.extendedWarrantyProvider),
             _pdfRow('Extended reference', appliance.extendedWarrantyReference),
+            _pdfRow('Extended start', _date(appliance.extendedWarrantyStartDate)),
+            _pdfRow('Extended cost', _currency(appliance.extendedWarrantyCost)),
             _pdfRow('Claim number', appliance.warrantyClaimNumber),
             _pdfRow('Claim status', appliance.warrantyClaimStatus.label),
             _pdfRow('Terms', appliance.warrantyTerms),
             _pdfRow('Coverage notes', appliance.warrantyCoverageNotes),
           ]),
+          if (appliance.hasAmc)
+            _pdfSection('AMC / maintenance contract', [
+              _pdfRow('Provider', appliance.amcProvider),
+              _pdfRow('Reference', appliance.amcReference),
+              _pdfRow('Phone', appliance.amcPhone),
+              _pdfRow('Start date', _date(appliance.amcStartDate)),
+              _pdfRow('Expiry / renewal', _date(appliance.amcExpiryDate)),
+              _pdfRow('Cost', _currency(appliance.amcCost)),
+              _pdfRow(
+                'Services included',
+                appliance.amcIncludedServices?.toString() ?? '',
+              ),
+              _pdfRow('Services used', appliance.amcUsedServices.toString()),
+              _pdfRow(
+                'Renewal reminder',
+                appliance.amcReminderEnabled
+                    ? '${appliance.amcReminderDaysBefore} days before expiry'
+                    : 'Disabled',
+              ),
+              _pdfRow('Notes', appliance.amcNotes),
+            ]),
           _pdfSection('Support', [
             _pdfRow('Provider', appliance.supportProvider),
             _pdfRow('Phone', appliance.supportPhone),
@@ -401,6 +450,12 @@ class HomeVaultExportService {
   String _safeFilePart(String value) {
     final safe = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     return safe.isEmpty ? 'Appliance' : safe;
+  }
+
+  String _currency(double value) {
+    if (value <= 0) return '';
+    final rounded = value.round();
+    return 'INR $rounded';
   }
 
   String _pdfSafe(String value) {

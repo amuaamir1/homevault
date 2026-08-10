@@ -46,6 +46,7 @@ class Appliance {
     required this.createdAt,
     this.modelNumber = '',
     this.serialNumber = '',
+    this.appliancePhotoDocument,
     this.purchaseDate,
     this.warrantyExpiryDate,
     this.warrantyDurationValue,
@@ -62,7 +63,22 @@ class Appliance {
     this.warrantyCoverageNotes = '',
     this.extendedWarrantyProvider = '',
     this.extendedWarrantyReference = '',
+    this.extendedWarrantyStartDate,
     this.extendedWarrantyExpiryDate,
+    this.extendedWarrantyCost = 0,
+    this.extendedWarrantyDocument,
+    this.amcProvider = '',
+    this.amcReference = '',
+    this.amcPhone = '',
+    this.amcStartDate,
+    this.amcExpiryDate,
+    this.amcCost = 0,
+    this.amcIncludedServices,
+    this.amcUsedServices = 0,
+    this.amcReminderEnabled = false,
+    this.amcReminderDaysBefore = 30,
+    this.amcDocument,
+    this.amcNotes = '',
     this.warrantyClaimNumber = '',
     this.warrantyClaimStatus = WarrantyClaimStatus.none,
     this.warrantyMarkedExpired = false,
@@ -79,6 +95,11 @@ class Appliance {
        serviceRecords = List.unmodifiable(serviceRecords);
 
   factory Appliance.fromJson(Map<String, dynamic> json) {
+    final appliancePhotoDocument = _upgradeLegacyDocument(
+      _documentFromJson(json['appliancePhotoDocument']),
+      type: DocumentType.appliancePhoto,
+      fallbackTitle: 'Appliance photo',
+    );
     final invoiceDocument = _upgradeLegacyDocument(
       _documentFromJson(json['invoiceDocument']),
       type: DocumentType.invoice,
@@ -88,6 +109,16 @@ class Appliance {
       _documentFromJson(json['warrantyDocument']),
       type: DocumentType.warrantyCard,
       fallbackTitle: 'Warranty card',
+    );
+    final extendedWarrantyDocument = _upgradeLegacyDocument(
+      _documentFromJson(json['extendedWarrantyDocument']),
+      type: DocumentType.extendedWarranty,
+      fallbackTitle: 'Extended warranty',
+    );
+    final amcDocument = _upgradeLegacyDocument(
+      _documentFromJson(json['amcDocument']),
+      type: DocumentType.amcContract,
+      fallbackTitle: 'AMC contract',
     );
     final additionalJson = json['additionalDocuments'];
     final serviceJson = json['serviceRecords'];
@@ -99,6 +130,7 @@ class Appliance {
       brand: json['brand'] as String? ?? '',
       modelNumber: json['modelNumber'] as String? ?? '',
       serialNumber: json['serialNumber'] as String? ?? '',
+      appliancePhotoDocument: appliancePhotoDocument,
       purchaseDate: _dateFromJson(json['purchaseDate']),
       warrantyExpiryDate: _dateFromJson(json['warrantyExpiryDate']),
       warrantyDurationValue: _positiveIntFromJson(
@@ -119,9 +151,28 @@ class Appliance {
           json['extendedWarrantyProvider'] as String? ?? '',
       extendedWarrantyReference:
           json['extendedWarrantyReference'] as String? ?? '',
+      extendedWarrantyStartDate: _dateFromJson(
+        json['extendedWarrantyStartDate'],
+      ),
       extendedWarrantyExpiryDate: _dateFromJson(
         json['extendedWarrantyExpiryDate'],
       ),
+      extendedWarrantyCost: (json['extendedWarrantyCost'] as num?)?.toDouble() ?? 0,
+      extendedWarrantyDocument: extendedWarrantyDocument,
+      amcProvider: json['amcProvider'] as String? ?? '',
+      amcReference: json['amcReference'] as String? ?? '',
+      amcPhone: json['amcPhone'] as String? ?? '',
+      amcStartDate: _dateFromJson(json['amcStartDate']),
+      amcExpiryDate: _dateFromJson(json['amcExpiryDate']),
+      amcCost: (json['amcCost'] as num?)?.toDouble() ?? 0,
+      amcIncludedServices: _positiveIntFromJson(json['amcIncludedServices']),
+      amcUsedServices: _nonNegativeIntFromJson(json['amcUsedServices']),
+      amcReminderEnabled: json['amcReminderEnabled'] as bool? ?? false,
+      amcReminderDaysBefore: _reminderDaysFromJson(
+        json['amcReminderDaysBefore'],
+      ),
+      amcDocument: amcDocument,
+      amcNotes: json['amcNotes'] as String? ?? '',
       warrantyClaimNumber: json['warrantyClaimNumber'] as String? ?? '',
       warrantyClaimStatus: _claimStatusFromJson(json['warrantyClaimStatus']),
       warrantyMarkedExpired: json['warrantyMarkedExpired'] as bool? ?? false,
@@ -166,6 +217,7 @@ class Appliance {
   final String brand;
   final String modelNumber;
   final String serialNumber;
+  final StoredDocument? appliancePhotoDocument;
   final DateTime? purchaseDate;
   final DateTime? warrantyExpiryDate;
   final int? warrantyDurationValue;
@@ -182,7 +234,22 @@ class Appliance {
   final String warrantyCoverageNotes;
   final String extendedWarrantyProvider;
   final String extendedWarrantyReference;
+  final DateTime? extendedWarrantyStartDate;
   final DateTime? extendedWarrantyExpiryDate;
+  final double extendedWarrantyCost;
+  final StoredDocument? extendedWarrantyDocument;
+  final String amcProvider;
+  final String amcReference;
+  final String amcPhone;
+  final DateTime? amcStartDate;
+  final DateTime? amcExpiryDate;
+  final double amcCost;
+  final int? amcIncludedServices;
+  final int amcUsedServices;
+  final bool amcReminderEnabled;
+  final int amcReminderDaysBefore;
+  final StoredDocument? amcDocument;
+  final String amcNotes;
   final String warrantyClaimNumber;
   final WarrantyClaimStatus warrantyClaimStatus;
   final bool warrantyMarkedExpired;
@@ -200,8 +267,18 @@ class Appliance {
   List<StoredDocument> get allDocuments => List.unmodifiable([
     ?invoiceDocument,
     ?warrantyDocument,
+    ?extendedWarrantyDocument,
+    ?amcDocument,
     ...additionalDocuments,
     ...serviceRecords.expand((record) => record.documents),
+  ]);
+
+  /// Every file associated with this appliance, including the appliance photo.
+  /// Use [allDocuments] for the Document Vault so the appliance photo is not
+  /// counted as a user document.
+  List<StoredDocument> get allAttachments => List.unmodifiable([
+    ?appliancePhotoDocument,
+    ...allDocuments,
   ]);
 
   int get documentCount => allDocuments.length;
@@ -312,9 +389,50 @@ class Appliance {
   }
 
   bool get hasExtendedWarranty =>
+      extendedWarrantyStartDate != null ||
       extendedWarrantyExpiryDate != null ||
       extendedWarrantyProvider.trim().isNotEmpty ||
-      extendedWarrantyReference.trim().isNotEmpty;
+      extendedWarrantyReference.trim().isNotEmpty ||
+      extendedWarrantyCost > 0 ||
+      extendedWarrantyDocument != null;
+
+  bool get hasAmc =>
+      amcStartDate != null ||
+      amcExpiryDate != null ||
+      amcProvider.trim().isNotEmpty ||
+      amcReference.trim().isNotEmpty ||
+      amcPhone.trim().isNotEmpty ||
+      amcCost > 0 ||
+      amcIncludedServices != null ||
+      amcUsedServices > 0 ||
+      amcDocument != null ||
+      amcNotes.trim().isNotEmpty;
+
+  int? get amcRemainingServices {
+    final included = amcIncludedServices;
+    if (included == null) return null;
+    final remaining = included - amcUsedServices;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  int? amcDaysRemainingAt(DateTime now) {
+    final expiryDate = amcExpiryDate;
+    if (expiryDate == null) return null;
+    final today = DateTime(now.year, now.month, now.day);
+    final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    return expiry.difference(today).inDays;
+  }
+
+  DateTime? amcReminderDateAt({int hour = 9}) {
+    final expiryDate = amcExpiryDate;
+    if (!amcReminderEnabled || expiryDate == null) return null;
+    return DateTime(
+      expiryDate.year,
+      expiryDate.month,
+      expiryDate.day,
+      hour,
+    ).subtract(Duration(days: amcReminderDaysBefore));
+  }
 
   int? warrantyDaysRemainingAt(DateTime now) {
     final expiryDate = effectiveWarrantyExpiryDate;
@@ -369,6 +487,14 @@ class Appliance {
   }
 
   Appliance replaceDocument(String documentId, StoredDocument replacement) {
+    if (appliancePhotoDocument?.id == documentId) {
+      return _rebuild(
+        appliancePhotoDocument: replacement.copyWith(
+          type: DocumentType.appliancePhoto,
+        ),
+        setAppliancePhotoDocument: true,
+      );
+    }
     if (invoiceDocument?.id == documentId) {
       return _rebuild(
         invoiceDocument: replacement.copyWith(type: DocumentType.invoice),
@@ -379,6 +505,20 @@ class Appliance {
       return _rebuild(
         warrantyDocument: replacement.copyWith(type: DocumentType.warrantyCard),
         setWarrantyDocument: true,
+      );
+    }
+    if (extendedWarrantyDocument?.id == documentId) {
+      return _rebuild(
+        extendedWarrantyDocument: replacement.copyWith(
+          type: DocumentType.extendedWarranty,
+        ),
+        setExtendedWarrantyDocument: true,
+      );
+    }
+    if (amcDocument?.id == documentId) {
+      return _rebuild(
+        amcDocument: replacement.copyWith(type: DocumentType.amcContract),
+        setAmcDocument: true,
       );
     }
 
@@ -408,6 +548,10 @@ class Appliance {
 
   Appliance withoutDocument(String documentId) {
     return _rebuild(
+      appliancePhotoDocument: appliancePhotoDocument?.id == documentId
+          ? null
+          : appliancePhotoDocument,
+      setAppliancePhotoDocument: appliancePhotoDocument?.id == documentId,
       invoiceDocument: invoiceDocument?.id == documentId
           ? null
           : invoiceDocument,
@@ -416,6 +560,13 @@ class Appliance {
           ? null
           : warrantyDocument,
       setWarrantyDocument: warrantyDocument?.id == documentId,
+      extendedWarrantyDocument: extendedWarrantyDocument?.id == documentId
+          ? null
+          : extendedWarrantyDocument,
+      setExtendedWarrantyDocument:
+          extendedWarrantyDocument?.id == documentId,
+      amcDocument: amcDocument?.id == documentId ? null : amcDocument,
+      setAmcDocument: amcDocument?.id == documentId,
       additionalDocuments: additionalDocuments
           .where((document) => document.id != documentId)
           .toList(growable: false),
@@ -426,10 +577,16 @@ class Appliance {
   }
 
   Appliance _rebuild({
+    StoredDocument? appliancePhotoDocument,
+    bool setAppliancePhotoDocument = false,
     StoredDocument? invoiceDocument,
     bool setInvoiceDocument = false,
     StoredDocument? warrantyDocument,
     bool setWarrantyDocument = false,
+    StoredDocument? extendedWarrantyDocument,
+    bool setExtendedWarrantyDocument = false,
+    StoredDocument? amcDocument,
+    bool setAmcDocument = false,
     List<StoredDocument>? additionalDocuments,
     List<ServiceRecord>? serviceRecords,
     int? cloudRevision,
@@ -442,6 +599,9 @@ class Appliance {
       brand: brand,
       modelNumber: modelNumber,
       serialNumber: serialNumber,
+      appliancePhotoDocument: setAppliancePhotoDocument
+          ? appliancePhotoDocument
+          : this.appliancePhotoDocument,
       purchaseDate: purchaseDate,
       warrantyExpiryDate: warrantyExpiryDate,
       warrantyDurationValue: warrantyDurationValue,
@@ -458,7 +618,24 @@ class Appliance {
       warrantyCoverageNotes: warrantyCoverageNotes,
       extendedWarrantyProvider: extendedWarrantyProvider,
       extendedWarrantyReference: extendedWarrantyReference,
+      extendedWarrantyStartDate: extendedWarrantyStartDate,
       extendedWarrantyExpiryDate: extendedWarrantyExpiryDate,
+      extendedWarrantyCost: extendedWarrantyCost,
+      extendedWarrantyDocument: setExtendedWarrantyDocument
+          ? extendedWarrantyDocument
+          : this.extendedWarrantyDocument,
+      amcProvider: amcProvider,
+      amcReference: amcReference,
+      amcPhone: amcPhone,
+      amcStartDate: amcStartDate,
+      amcExpiryDate: amcExpiryDate,
+      amcCost: amcCost,
+      amcIncludedServices: amcIncludedServices,
+      amcUsedServices: amcUsedServices,
+      amcReminderEnabled: amcReminderEnabled,
+      amcReminderDaysBefore: amcReminderDaysBefore,
+      amcDocument: setAmcDocument ? amcDocument : this.amcDocument,
+      amcNotes: amcNotes,
       warrantyClaimNumber: warrantyClaimNumber,
       warrantyClaimStatus: warrantyClaimStatus,
       warrantyMarkedExpired: warrantyMarkedExpired,
@@ -497,6 +674,7 @@ class Appliance {
       'brand': brand,
       'modelNumber': modelNumber,
       'serialNumber': serialNumber,
+      'appliancePhotoDocument': appliancePhotoDocument?.toJson(),
       'purchaseDate': purchaseDate?.toIso8601String(),
       'warrantyExpiryDate': warrantyExpiryDate?.toIso8601String(),
       'warrantyDurationValue': warrantyDurationValue,
@@ -513,8 +691,23 @@ class Appliance {
       'warrantyCoverageNotes': warrantyCoverageNotes,
       'extendedWarrantyProvider': extendedWarrantyProvider,
       'extendedWarrantyReference': extendedWarrantyReference,
+      'extendedWarrantyStartDate': extendedWarrantyStartDate?.toIso8601String(),
       'extendedWarrantyExpiryDate': extendedWarrantyExpiryDate
           ?.toIso8601String(),
+      'extendedWarrantyCost': extendedWarrantyCost,
+      'extendedWarrantyDocument': extendedWarrantyDocument?.toJson(),
+      'amcProvider': amcProvider,
+      'amcReference': amcReference,
+      'amcPhone': amcPhone,
+      'amcStartDate': amcStartDate?.toIso8601String(),
+      'amcExpiryDate': amcExpiryDate?.toIso8601String(),
+      'amcCost': amcCost,
+      'amcIncludedServices': amcIncludedServices,
+      'amcUsedServices': amcUsedServices,
+      'amcReminderEnabled': amcReminderEnabled,
+      'amcReminderDaysBefore': amcReminderDaysBefore,
+      'amcDocument': amcDocument?.toJson(),
+      'amcNotes': amcNotes,
       'warrantyClaimNumber': warrantyClaimNumber,
       'warrantyClaimStatus': warrantyClaimStatus.name,
       'warrantyMarkedExpired': warrantyMarkedExpired,
@@ -570,6 +763,12 @@ class Appliance {
   static int? _positiveIntFromJson(Object? value) {
     final parsed = value is int ? value : int.tryParse('$value');
     if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  static int _nonNegativeIntFromJson(Object? value) {
+    final parsed = value is int ? value : int.tryParse('$value');
+    if (parsed == null || parsed < 0) return 0;
     return parsed;
   }
 

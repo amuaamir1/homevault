@@ -31,7 +31,7 @@ class FirestoreApplianceRepository
        _localRepository = localRepository ?? FileApplianceRepository(),
        _identityService = identityService ?? CloudSyncIdentityService();
 
-  static const int _cloudSchemaVersion = 4;
+  static const int _cloudSchemaVersion = 5;
   static const Duration _writeWait = Duration(seconds: 5);
   static const Duration _startupReadWait = Duration(seconds: 2);
   static const Duration _retryWait = Duration(seconds: 8);
@@ -763,11 +763,20 @@ class FirestoreApplianceRepository
   Appliance _mergeLocalAttachments(Appliance cloud, Appliance? local) {
     final mergedJson = Map<String, dynamic>.from(cloud.toJson());
 
+    mergedJson['appliancePhotoDocument'] = cloud.appliancePhotoDocument
+        ?.withLocalAvailabilityFrom(local?.appliancePhotoDocument)
+        .toJson();
     mergedJson['invoiceDocument'] = cloud.invoiceDocument
         ?.withLocalAvailabilityFrom(local?.invoiceDocument)
         .toJson();
     mergedJson['warrantyDocument'] = cloud.warrantyDocument
         ?.withLocalAvailabilityFrom(local?.warrantyDocument)
+        .toJson();
+    mergedJson['extendedWarrantyDocument'] = cloud.extendedWarrantyDocument
+        ?.withLocalAvailabilityFrom(local?.extendedWarrantyDocument)
+        .toJson();
+    mergedJson['amcDocument'] = cloud.amcDocument
+        ?.withLocalAvailabilityFrom(local?.amcDocument)
         .toJson();
 
     final localAdditionalById = <String, StoredDocument>{
@@ -812,9 +821,14 @@ class FirestoreApplianceRepository
 
     // Attachment metadata includes the private Firebase Storage object path,
     // but localPath always remains device-specific.
+    data['appliancePhotoDocument'] = appliance.appliancePhotoDocument
+        ?.toCloudMetadataJson();
     data['invoiceDocument'] = appliance.invoiceDocument?.toCloudMetadataJson();
     data['warrantyDocument'] = appliance.warrantyDocument
         ?.toCloudMetadataJson();
+    data['extendedWarrantyDocument'] = appliance.extendedWarrantyDocument
+        ?.toCloudMetadataJson();
+    data['amcDocument'] = appliance.amcDocument?.toCloudMetadataJson();
     data['additionalDocuments'] = appliance.additionalDocuments
         .map((document) => document.toCloudMetadataJson())
         .toList(growable: false);

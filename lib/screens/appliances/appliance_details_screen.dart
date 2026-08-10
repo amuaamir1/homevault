@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
@@ -41,6 +43,29 @@ class ApplianceDetailsScreen extends StatelessWidget {
     }
     if (days == 0) return 'Expires today';
     return '$days day${days == 1 ? '' : 's'} remaining';
+  }
+
+  String _warrantyStatusText(Appliance appliance) {
+    return switch (appliance.warrantyStatusAt(DateTime.now())) {
+      WarrantyStatus.active => 'Active',
+      WarrantyStatus.expiringSoon => 'Expiring',
+      WarrantyStatus.expired => 'Expired',
+      WarrantyStatus.notProvided => 'No date',
+    };
+  }
+
+  String _amcStatusText(Appliance appliance) {
+    final days = appliance.amcDaysRemainingAt(DateTime.now());
+    if (days == null) return appliance.hasAmc ? 'No expiry date' : 'Not added';
+    if (days < 0) return 'Expired';
+    if (days == 0) return 'Expires today';
+    if (days <= 30) return 'Renews in $days days';
+    return 'Active';
+  }
+
+  String _money(double value) {
+    if (value <= 0) return 'Not provided';
+    return '${_formatIndianCurrency(value)}/-';
   }
 
   Future<void> _copy(BuildContext context, String label, String value) async {
@@ -428,6 +453,54 @@ class ApplianceDetailsScreen extends StatelessWidget {
     ];
     const supportActions = SupportActionService();
 
+    final documentTiles = <Widget>[
+      if (appliance.invoiceDocument != null)
+        StoredDocumentTile(
+          document: appliance.invoiceDocument!,
+          title: 'Invoice',
+          subtitle: appliance.invoiceReference.trim().isEmpty
+              ? 'Purchase invoice'
+              : appliance.invoiceReference,
+          onOpen: () => _openDocument(context, appliance.invoiceDocument!),
+        ),
+      if (appliance.warrantyDocument != null)
+        StoredDocumentTile(
+          document: appliance.warrantyDocument!,
+          title: 'Warranty card',
+          subtitle: appliance.warrantyReference.trim().isEmpty
+              ? 'Manufacturer warranty'
+              : appliance.warrantyReference,
+          onOpen: () => _openDocument(context, appliance.warrantyDocument!),
+        ),
+      if (appliance.extendedWarrantyDocument != null)
+        StoredDocumentTile(
+          document: appliance.extendedWarrantyDocument!,
+          title: 'Extended warranty',
+          subtitle: appliance.extendedWarrantyReference.trim().isEmpty
+              ? 'Extended coverage document'
+              : appliance.extendedWarrantyReference,
+          onOpen: () =>
+              _openDocument(context, appliance.extendedWarrantyDocument!),
+        ),
+      if (appliance.amcDocument != null)
+        StoredDocumentTile(
+          document: appliance.amcDocument!,
+          title: 'AMC contract',
+          subtitle: appliance.amcReference.trim().isEmpty
+              ? 'Maintenance contract'
+              : appliance.amcReference,
+          onOpen: () => _openDocument(context, appliance.amcDocument!),
+        ),
+      ...appliance.additionalDocuments.map(
+        (document) => StoredDocumentTile(
+          document: document,
+          title: document.displayTitle,
+          subtitle: document.type.label,
+          onOpen: () => _openDocument(context, document),
+        ),
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Appliance details'),
@@ -455,18 +528,15 @@ class ApplianceDetailsScreen extends StatelessWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const CircleAvatar(
-                    radius: 30,
-                    child: Icon(Icons.devices_other, size: 30),
-                  ),
+                  _AppliancePhoto(document: appliance.appliancePhotoDocument),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -474,14 +544,43 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           appliance.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          [
+                            appliance.brand,
+                            appliance.modelNumber,
+                          ].where((value) => value.trim().isNotEmpty).join(' • '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                         const SizedBox(height: 4),
-                        Text(appliance.category),
+                        Text(
+                          appliance.category,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                         const SizedBox(height: 10),
-                        WarrantyStatusChip(
-                          status: appliance.warrantyStatusAt(DateTime.now()),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            WarrantyStatusChip(
+                              status: appliance.warrantyStatusAt(DateTime.now()),
+                            ),
+                            if (appliance.hasAmc)
+                              Chip(
+                                avatar: const Icon(Icons.handyman_outlined, size: 17),
+                                label: Text('AMC • ${_amcStatusText(appliance)}'),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -489,6 +588,36 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.verified_outlined,
+                  value: _warrantyStatusText(appliance),
+                  label: 'Warranty',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.event_repeat_outlined,
+                  value: appliance.nextServiceDate == null
+                      ? 'Not set'
+                      : _date(appliance.nextServiceDate),
+                  label: 'Next service',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.folder_outlined,
+                  value: '${appliance.documentCount}',
+                  label: 'Documents',
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           _DetailsSection(
@@ -498,64 +627,40 @@ class ApplianceDetailsScreen extends StatelessWidget {
               _DetailRow(label: 'Model number', value: appliance.modelNumber),
               _DetailRow(label: 'Serial number', value: appliance.serialNumber),
               _DetailRow(
-                label: 'Purchase / invoice date',
+                label: 'Purchase date',
                 value: _date(appliance.purchaseDate),
               ),
-              if (appliance.warrantyDurationLabel.isNotEmpty)
-                _DetailRow(
-                  label: 'Warranty duration',
-                  value: appliance.warrantyDurationLabel,
-                ),
               _DetailRow(
-                label: 'Standard warranty',
-                value: _date(appliance.warrantyExpiryDate),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _DetailsSection(
-            title: 'Invoice',
-            children: [
-              _DetailRow(
-                label: 'Reference',
+                label: 'Invoice reference',
                 value: appliance.invoiceReference,
-                emptyText: 'No invoice reference added',
               ),
-              if (appliance.invoiceDocument != null) ...[
-                const Divider(height: 24),
-                StoredDocumentTile(
-                  document: appliance.invoiceDocument!,
-                  title: 'Open invoice',
-                  subtitle: 'Invoice attachment',
-                  onOpen: () =>
-                      _openDocument(context, appliance.invoiceDocument!),
-                ),
-              ] else
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: Text('No invoice file attached.'),
-                ),
             ],
           ),
           const SizedBox(height: 16),
           _DetailsSection(
-            title: 'Warranty management',
+            title: 'Warranty & coverage',
             children: [
+              const _CoverageHeading(
+                icon: Icons.verified_outlined,
+                title: 'Manufacturer warranty',
+              ),
               _DetailRow(
                 label: 'Provider',
                 value: appliance.warrantyProvider,
-                emptyText: 'No warranty provider added',
               ),
               _DetailRow(
                 label: 'Reference',
                 value: appliance.warrantyReference,
-                emptyText: 'No warranty card reference added',
               ),
               if (appliance.warrantyDurationLabel.isNotEmpty)
                 _DetailRow(
-                  label: 'Original duration',
+                  label: 'Duration',
                   value: appliance.warrantyDurationLabel,
                 ),
+              _DetailRow(
+                label: 'Standard expiry',
+                value: _date(appliance.warrantyExpiryDate),
+              ),
               _DetailRow(
                 label: 'Effective expiry',
                 value: _date(appliance.effectiveWarrantyExpiryDate),
@@ -571,15 +676,18 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   label: 'Coverage',
                   value: appliance.warrantyCoverageNotes,
                 ),
+              _DetailRow(
+                label: 'Reminder',
+                value: appliance.warrantyReminderEnabled
+                    ? '${appliance.warrantyReminderDaysBefore} days before expiry'
+                    : 'Disabled',
+              ),
               if (appliance.hasExtendedWarranty) ...[
-                const Divider(height: 24),
-                Text(
-                  'Extended warranty',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                const Divider(height: 28),
+                const _CoverageHeading(
+                  icon: Icons.add_moderator_outlined,
+                  title: 'Extended warranty',
                 ),
-                const SizedBox(height: 6),
                 _DetailRow(
                   label: 'Provider',
                   value: appliance.extendedWarrantyProvider,
@@ -589,20 +697,59 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   value: appliance.extendedWarrantyReference,
                 ),
                 _DetailRow(
+                  label: 'Start date',
+                  value: _date(appliance.extendedWarrantyStartDate),
+                ),
+                _DetailRow(
                   label: 'Expiry',
                   value: _date(appliance.extendedWarrantyExpiryDate),
                 ),
+                _DetailRow(
+                  label: 'Cost',
+                  value: _money(appliance.extendedWarrantyCost),
+                ),
+              ],
+              if (appliance.hasAmc) ...[
+                const Divider(height: 28),
+                const _CoverageHeading(
+                  icon: Icons.handyman_outlined,
+                  title: 'AMC / maintenance contract',
+                ),
+                _DetailRow(label: 'Status', value: _amcStatusText(appliance)),
+                _DetailRow(label: 'Provider', value: appliance.amcProvider),
+                _DetailRow(label: 'Reference', value: appliance.amcReference),
+                _DetailRow(label: 'Contact', value: appliance.amcPhone),
+                _DetailRow(
+                  label: 'Start date',
+                  value: _date(appliance.amcStartDate),
+                ),
+                _DetailRow(
+                  label: 'Expiry',
+                  value: _date(appliance.amcExpiryDate),
+                ),
+                _DetailRow(label: 'Cost', value: _money(appliance.amcCost)),
+                if (appliance.amcIncludedServices != null)
+                  _DetailRow(
+                    label: 'Service visits',
+                    value:
+                        '${appliance.amcUsedServices} used • ${appliance.amcRemainingServices} remaining of ${appliance.amcIncludedServices}',
+                  ),
+                _DetailRow(
+                  label: 'Renewal reminder',
+                  value: appliance.amcReminderEnabled
+                      ? '${appliance.amcReminderDaysBefore} days before expiry'
+                      : 'Disabled',
+                ),
+                if (appliance.amcNotes.trim().isNotEmpty)
+                  _DetailRow(label: 'Notes', value: appliance.amcNotes),
               ],
               if (appliance.warrantyClaimStatus != WarrantyClaimStatus.none ||
                   appliance.warrantyClaimNumber.trim().isNotEmpty) ...[
-                const Divider(height: 24),
-                Text(
-                  'Warranty claim',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                const Divider(height: 28),
+                const _CoverageHeading(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Warranty claim',
                 ),
-                const SizedBox(height: 6),
                 _DetailRow(
                   label: 'Claim number',
                   value: appliance.warrantyClaimNumber,
@@ -613,7 +760,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ),
               ],
               if (appliance.warrantyMarkedExpired) ...[
-                const Divider(height: 24),
+                const Divider(height: 28),
                 const ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.gpp_bad_outlined),
@@ -623,39 +770,6 @@ class ApplianceDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ],
-              const Divider(height: 24),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  appliance.warrantyReminderEnabled
-                      ? Icons.notifications_active_outlined
-                      : Icons.notifications_off_outlined,
-                ),
-                title: Text(
-                  appliance.warrantyReminderEnabled
-                      ? 'Reminder enabled'
-                      : 'Reminder disabled',
-                ),
-                subtitle: Text(
-                  appliance.warrantyReminderEnabled
-                      ? '${appliance.warrantyReminderDaysBefore} days before the effective expiry date'
-                      : 'Edit the appliance to enable a reminder.',
-                ),
-              ),
-              if (appliance.warrantyDocument != null) ...[
-                const Divider(height: 24),
-                StoredDocumentTile(
-                  document: appliance.warrantyDocument!,
-                  title: 'Open warranty card',
-                  subtitle: 'Warranty attachment',
-                  onOpen: () =>
-                      _openDocument(context, appliance.warrantyDocument!),
-                ),
-              ] else
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: Text('No warranty card file attached.'),
-                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -671,14 +785,16 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Total cost: ${_formatIndianCurrency(appliance.totalServiceCost)}/-',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
                     ),
@@ -728,22 +844,39 @@ class ApplianceDetailsScreen extends StatelessWidget {
                 ),
             ],
           ),
-          if (appliance.additionalDocuments.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _DetailsSection(
-              title: 'Additional documents',
-              children: appliance.additionalDocuments
-                  .map(
-                    (document) => StoredDocumentTile(
-                      document: document,
-                      title: document.displayTitle,
-                      subtitle: document.type.label,
-                      onOpen: () => _openDocument(context, document),
+          const SizedBox(height: 16),
+          _DetailsSection(
+            title: 'Documents',
+            children: documentTiles.isEmpty
+                ? [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Text('No appliance documents added yet.'),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _addDocument(context, appliance),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add'),
+                        ),
+                      ],
                     ),
-                  )
-                  .toList(),
-            ),
-          ],
+                  ]
+                : [
+                    ...documentTiles,
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => _addDocument(context, appliance),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add document'),
+                      ),
+                    ),
+                  ],
+          ),
           const SizedBox(height: 16),
           _DetailsSection(
             title: 'Customer support',
@@ -770,8 +903,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                             FilledButton.tonalIcon(
                               onPressed: () => _runSupportAction(
                                 context,
-                                () =>
-                                    supportActions.call(appliance.supportPhone),
+                                () => supportActions.call(appliance.supportPhone),
                               ),
                               icon: const Icon(Icons.phone_outlined),
                               label: const Text('Call'),
@@ -838,6 +970,121 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ),
     );
   }
+
+}
+
+class _AppliancePhoto extends StatelessWidget {
+  const _AppliancePhoto({required this.document});
+
+  final StoredDocument? document;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = document?.localPath.trim() ?? '';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        width: 104,
+        height: 104,
+        child: path.isEmpty
+            ? const _AppliancePhotoPlaceholder()
+            : Image.file(
+                File(path),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const _AppliancePhotoPlaceholder(),
+              ),
+      ),
+    );
+  }
+}
+
+class _AppliancePhotoPlaceholder extends StatelessWidget {
+  const _AppliancePhotoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(
+        Icons.devices_other,
+        size: 42,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+        child: Column(
+          children: [
+            Icon(icon, size: 19),
+            const SizedBox(height: 5),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoverageHeading extends StatelessWidget {
+  const _CoverageHeading({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 19),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailsSection extends StatelessWidget {
@@ -873,12 +1120,10 @@ class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
-    this.emptyText = 'Not provided',
   });
 
   final String label;
   final String value;
-  final String emptyText;
 
   @override
   Widget build(BuildContext context) {
@@ -898,7 +1143,7 @@ class _DetailRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value.trim().isEmpty ? emptyText : value,
+              value.trim().isEmpty ? 'Not provided' : value,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),

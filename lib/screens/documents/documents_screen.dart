@@ -287,8 +287,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                               setState(() => _selectedType = null),
                         ),
                         const SizedBox(width: 8),
-                        ...DocumentType.values.map(
-                          (type) => Padding(
+                        ...DocumentType.values
+                            .where((type) => type != DocumentType.appliancePhoto)
+                            .map(
+                              (type) => Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
                               label: Text(type.label),

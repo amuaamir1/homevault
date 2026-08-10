@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/appliance.dart';
@@ -208,8 +210,8 @@ class DashboardScreen extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Card(
                         child: ListTile(
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.devices_other),
+                          leading: _DashboardAppliancePhoto(
+                            appliance: appliance,
                           ),
                           title: Text(appliance.name),
                           subtitle: Text(
@@ -228,6 +230,33 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardAppliancePhoto extends StatelessWidget {
+  const _DashboardAppliancePhoto({required this.appliance});
+
+  final Appliance appliance;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = appliance.appliancePhotoDocument?.localPath.trim() ?? '';
+    if (path.isEmpty) {
+      return const CircleAvatar(child: Icon(Icons.devices_other));
+    }
+
+    return CircleAvatar(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: ClipOval(
+        child: Image.file(
+          File(path),
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const Icon(Icons.devices_other),
         ),
       ),
     );

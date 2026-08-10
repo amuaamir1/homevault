@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,6 +55,14 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late final TextEditingController _warrantyCoverageController;
   late final TextEditingController _extendedWarrantyProviderController;
   late final TextEditingController _extendedWarrantyReferenceController;
+  late final TextEditingController _extendedWarrantyCostController;
+  late final TextEditingController _amcProviderController;
+  late final TextEditingController _amcReferenceController;
+  late final TextEditingController _amcPhoneController;
+  late final TextEditingController _amcCostController;
+  late final TextEditingController _amcIncludedServicesController;
+  late final TextEditingController _amcUsedServicesController;
+  late final TextEditingController _amcNotesController;
   late final TextEditingController _warrantyClaimNumberController;
   late final TextEditingController _notesController;
   late final String _draftId;
@@ -65,17 +74,28 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   late String _category;
   DateTime? _purchaseDate;
   DateTime? _warrantyExpiryDate;
+  DateTime? _extendedWarrantyStartDate;
   DateTime? _extendedWarrantyExpiryDate;
+  DateTime? _amcStartDate;
+  DateTime? _amcExpiryDate;
   WarrantyDurationUnit _warrantyDurationUnit = WarrantyDurationUnit.years;
   bool _useManualWarrantyExpiry = false;
   WarrantyClaimStatus _warrantyClaimStatus = WarrantyClaimStatus.none;
   bool _warrantyMarkedExpired = false;
   bool _warrantyReminderEnabled = false;
   int _warrantyReminderDaysBefore = 30;
+  bool _amcReminderEnabled = false;
+  int _amcReminderDaysBefore = 30;
+  StoredDocument? _appliancePhotoDocument;
   StoredDocument? _invoiceDocument;
   StoredDocument? _warrantyDocument;
+  StoredDocument? _extendedWarrantyDocument;
+  StoredDocument? _amcDocument;
+  bool _isPickingPhoto = false;
   bool _isPickingInvoice = false;
   bool _isPickingWarranty = false;
+  bool _isPickingExtendedWarranty = false;
+  bool _isPickingAmc = false;
   bool _submitted = false;
 
   bool get _isEditing => widget.appliance != null;
@@ -120,6 +140,29 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     return digits;
   }
 
+  String _editableMoney(double value) {
+    if (value <= 0) return '';
+    return value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(2);
+  }
+
+  double _moneyValue(TextEditingController controller) {
+    return double.tryParse(controller.text.trim().replaceAll(',', '')) ?? 0;
+  }
+
+  int? _optionalPositiveInt(TextEditingController controller) {
+    final text = controller.text.trim();
+    if (text.isEmpty) return null;
+    final value = int.tryParse(text);
+    return value != null && value > 0 ? value : null;
+  }
+
+  int _nonNegativeInt(TextEditingController controller) {
+    final value = int.tryParse(controller.text.trim());
+    return value == null || value < 0 ? 0 : value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -132,7 +175,10 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         : _categories.first;
     _purchaseDate = appliance?.purchaseDate;
     _warrantyExpiryDate = appliance?.warrantyExpiryDate;
+    _extendedWarrantyStartDate = appliance?.extendedWarrantyStartDate;
     _extendedWarrantyExpiryDate = appliance?.extendedWarrantyExpiryDate;
+    _amcStartDate = appliance?.amcStartDate;
+    _amcExpiryDate = appliance?.amcExpiryDate;
     final savedDurationUnit = appliance?.warrantyDurationUnit;
     final savedDurationValue = appliance?.warrantyDurationValue;
     _warrantyDurationUnit = savedDurationUnit ?? WarrantyDurationUnit.years;
@@ -148,13 +194,25 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _warrantyReminderDaysBefore = _reminderOptions.contains(savedReminderDays)
         ? savedReminderDays
         : 30;
+    _amcReminderEnabled = appliance?.amcReminderEnabled ?? false;
+    final savedAmcReminderDays = appliance?.amcReminderDaysBefore ?? 30;
+    _amcReminderDaysBefore = _reminderOptions.contains(savedAmcReminderDays)
+        ? savedAmcReminderDays
+        : 30;
+    _appliancePhotoDocument = appliance?.appliancePhotoDocument;
     _invoiceDocument = appliance?.invoiceDocument;
     _warrantyDocument = appliance?.warrantyDocument;
+    _extendedWarrantyDocument = appliance?.extendedWarrantyDocument;
+    _amcDocument = appliance?.amcDocument;
     _originalDocumentPaths = {
-      if (appliance?.invoiceDocument != null)
-        appliance!.invoiceDocument!.localPath,
+      if (appliance?.appliancePhotoDocument != null)
+        appliance!.appliancePhotoDocument!.localPath,
+      if (appliance?.invoiceDocument != null) appliance!.invoiceDocument!.localPath,
       if (appliance?.warrantyDocument != null)
         appliance!.warrantyDocument!.localPath,
+      if (appliance?.extendedWarrantyDocument != null)
+        appliance!.extendedWarrantyDocument!.localPath,
+      if (appliance?.amcDocument != null) appliance!.amcDocument!.localPath,
     };
 
     _nameController = TextEditingController(text: appliance?.name ?? '');
@@ -205,6 +263,30 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _extendedWarrantyReferenceController = TextEditingController(
       text: appliance?.extendedWarrantyReference ?? '',
     );
+    _extendedWarrantyCostController = TextEditingController(
+      text: _editableMoney(appliance?.extendedWarrantyCost ?? 0),
+    );
+    _amcProviderController = TextEditingController(
+      text: appliance?.amcProvider ?? '',
+    );
+    _amcReferenceController = TextEditingController(
+      text: appliance?.amcReference ?? '',
+    );
+    _amcPhoneController = TextEditingController(
+      text: _supportNumberForEditing(appliance?.amcPhone),
+    );
+    _amcCostController = TextEditingController(
+      text: _editableMoney(appliance?.amcCost ?? 0),
+    );
+    _amcIncludedServicesController = TextEditingController(
+      text: appliance?.amcIncludedServices?.toString() ?? '',
+    );
+    _amcUsedServicesController = TextEditingController(
+      text: appliance == null || appliance.amcUsedServices == 0
+          ? ''
+          : appliance.amcUsedServices.toString(),
+    );
+    _amcNotesController = TextEditingController(text: appliance?.amcNotes ?? '');
     _warrantyClaimNumberController = TextEditingController(
       text: appliance?.warrantyClaimNumber ?? '',
     );
@@ -236,6 +318,14 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     _warrantyCoverageController.dispose();
     _extendedWarrantyProviderController.dispose();
     _extendedWarrantyReferenceController.dispose();
+    _extendedWarrantyCostController.dispose();
+    _amcProviderController.dispose();
+    _amcReferenceController.dispose();
+    _amcPhoneController.dispose();
+    _amcCostController.dispose();
+    _amcIncludedServicesController.dispose();
+    _amcUsedServicesController.dispose();
+    _amcNotesController.dispose();
     _warrantyClaimNumberController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -308,12 +398,18 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     final currentValue = switch (selection) {
       _DateSelection.purchase => _purchaseDate,
       _DateSelection.warranty => _warrantyExpiryDate,
+      _DateSelection.extendedWarrantyStart => _extendedWarrantyStartDate,
       _DateSelection.extendedWarranty => _extendedWarrantyExpiryDate,
+      _DateSelection.amcStart => _amcStartDate,
+      _DateSelection.amcExpiry => _amcExpiryDate,
     };
     final isPurchaseDate = selection == _DateSelection.purchase;
+    final isStartDate =
+        selection == _DateSelection.extendedWarrantyStart ||
+        selection == _DateSelection.amcStart;
     final initialDate =
         currentValue ??
-        (isPurchaseDate
+        (isPurchaseDate || isStartDate
             ? DateTime.now()
             : DateTime.now().add(const Duration(days: 365)));
 
@@ -331,12 +427,19 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
     }
 
     setState(() {
-      if (selection == _DateSelection.purchase) {
-        _purchaseDate = selectedDate;
-      } else if (selection == _DateSelection.warranty) {
-        _warrantyExpiryDate = selectedDate;
-      } else {
-        _extendedWarrantyExpiryDate = selectedDate;
+      switch (selection) {
+        case _DateSelection.purchase:
+          _purchaseDate = selectedDate;
+        case _DateSelection.warranty:
+          _warrantyExpiryDate = selectedDate;
+        case _DateSelection.extendedWarrantyStart:
+          _extendedWarrantyStartDate = selectedDate;
+        case _DateSelection.extendedWarranty:
+          _extendedWarrantyExpiryDate = selectedDate;
+        case _DateSelection.amcStart:
+          _amcStartDate = selectedDate;
+        case _DateSelection.amcExpiry:
+          _amcExpiryDate = selectedDate;
       }
 
       _clearStaleOutOfWarrantyOverride();
@@ -401,6 +504,110 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         });
       }
     }
+  }
+
+  Future<void> _pickPhoto() async {
+    setState(() => _isPickingPhoto = true);
+    try {
+      final selectedDocument = await _documentStorageService.pickAndStorePhoto(
+        applianceId: _draftId,
+      );
+      if (selectedDocument == null || !mounted) return;
+
+      final previousDocument = _appliancePhotoDocument;
+      if (previousDocument != null) {
+        await _queueOrDeletePreviousDocument(previousDocument);
+      }
+
+      _newDocuments[selectedDocument.localPath] = selectedDocument;
+      setState(() => _appliancePhotoDocument = selectedDocument);
+    } on DocumentStorageException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The appliance photo could not be added.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isPickingPhoto = false);
+    }
+  }
+
+  Future<void> _pickExtendedWarrantyDocument() async {
+    setState(() => _isPickingExtendedWarranty = true);
+    try {
+      final selectedDocument = await _documentStorageService.pickAndStore(
+        applianceId: _draftId,
+        documentFolder: DocumentType.extendedWarranty.storageFolder,
+      );
+      if (selectedDocument == null || !mounted) return;
+
+      final previousDocument = _extendedWarrantyDocument;
+      if (previousDocument != null) {
+        await _queueOrDeletePreviousDocument(previousDocument);
+      }
+
+      _newDocuments[selectedDocument.localPath] = selectedDocument;
+      setState(() => _extendedWarrantyDocument = selectedDocument);
+    } on DocumentStorageException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The extended warranty file could not be attached.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isPickingExtendedWarranty = false);
+    }
+  }
+
+  Future<void> _pickAmcDocument() async {
+    setState(() => _isPickingAmc = true);
+    try {
+      final selectedDocument = await _documentStorageService.pickAndStore(
+        applianceId: _draftId,
+        documentFolder: DocumentType.amcContract.storageFolder,
+      );
+      if (selectedDocument == null || !mounted) return;
+
+      final previousDocument = _amcDocument;
+      if (previousDocument != null) {
+        await _queueOrDeletePreviousDocument(previousDocument);
+      }
+
+      _newDocuments[selectedDocument.localPath] = selectedDocument;
+      setState(() => _amcDocument = selectedDocument);
+    } on DocumentStorageException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The AMC contract could not be attached.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isPickingAmc = false);
+    }
+  }
+
+  Future<void> _removeManagedDocument(
+    StoredDocument? document,
+    void Function() clear,
+  ) async {
+    if (document == null) return;
+    await _queueOrDeletePreviousDocument(document);
+    if (!mounted) return;
+    setState(clear);
   }
 
   Future<void> _queueOrDeletePreviousDocument(
@@ -480,7 +687,34 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       return;
     }
 
+    final extendedWarrantyStartDate = _extendedWarrantyStartDate;
     final extendedWarrantyDate = _extendedWarrantyExpiryDate;
+    if (extendedWarrantyStartDate != null &&
+        purchaseDate != null &&
+        extendedWarrantyStartDate.isBefore(purchaseDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Extended warranty start date cannot be before the purchase date.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (extendedWarrantyDate != null &&
+        extendedWarrantyStartDate != null &&
+        extendedWarrantyDate.isBefore(extendedWarrantyStartDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Extended warranty expiry cannot be before its start date.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (extendedWarrantyDate != null &&
         purchaseDate != null &&
         extendedWarrantyDate.isBefore(purchaseDate)) {
@@ -502,6 +736,90 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
           content: Text(
             'Extended warranty expiry cannot be before the standard warranty expiry.',
           ),
+        ),
+      );
+      return;
+    }
+
+    final extendedWarrantyCost = _moneyValue(
+      _extendedWarrantyCostController,
+    );
+    if (_extendedWarrantyCostController.text.trim().isNotEmpty &&
+        (double.tryParse(
+                  _extendedWarrantyCostController.text.trim().replaceAll(',', ''),
+                ) ==
+                null ||
+            extendedWarrantyCost < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid extended warranty cost.')),
+      );
+      return;
+    }
+
+    final amcStartDate = _amcStartDate;
+    final amcExpiryDate = _amcExpiryDate;
+    if (amcStartDate != null &&
+        purchaseDate != null &&
+        amcStartDate.isBefore(purchaseDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AMC start date cannot be before the purchase date.'),
+        ),
+      );
+      return;
+    }
+    if (amcExpiryDate != null &&
+        amcStartDate != null &&
+        amcExpiryDate.isBefore(amcStartDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AMC expiry cannot be before its start date.')),
+      );
+      return;
+    }
+
+    final amcCost = _moneyValue(_amcCostController);
+    if (_amcCostController.text.trim().isNotEmpty &&
+        (double.tryParse(_amcCostController.text.trim().replaceAll(',', '')) ==
+                null ||
+            amcCost < 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid AMC cost.')),
+      );
+      return;
+    }
+
+    final amcIncludedServices = _optionalPositiveInt(
+      _amcIncludedServicesController,
+    );
+    if (_amcIncludedServicesController.text.trim().isNotEmpty &&
+        amcIncludedServices == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AMC included services must be greater than 0.'),
+        ),
+      );
+      return;
+    }
+    final amcUsedServices = _nonNegativeInt(_amcUsedServicesController);
+    if (_amcUsedServicesController.text.trim().isNotEmpty &&
+        int.tryParse(_amcUsedServicesController.text.trim()) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid number of AMC services used.')),
+      );
+      return;
+    }
+    if (amcIncludedServices != null && amcUsedServices > amcIncludedServices) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AMC services used cannot exceed services included.'),
+        ),
+      );
+      return;
+    }
+    if (_amcReminderEnabled && amcExpiryDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add an AMC expiry date before enabling its reminder.'),
         ),
       );
       return;
@@ -529,6 +847,10 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       brand: _brandController.text.trim(),
       modelNumber: _modelController.text.trim(),
       serialNumber: _serialController.text.trim(),
+      appliancePhotoDocument: _appliancePhotoDocument?.copyWith(
+        type: DocumentType.appliancePhoto,
+        title: 'Appliance photo',
+      ),
       purchaseDate: _purchaseDate,
       warrantyExpiryDate: warrantyDate,
       warrantyDurationValue: _useManualWarrantyExpiry ? null : duration,
@@ -548,7 +870,30 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       extendedWarrantyProvider: _extendedWarrantyProviderController.text.trim(),
       extendedWarrantyReference: _extendedWarrantyReferenceController.text
           .trim(),
+      extendedWarrantyStartDate: _extendedWarrantyStartDate,
       extendedWarrantyExpiryDate: _extendedWarrantyExpiryDate,
+      extendedWarrantyCost: extendedWarrantyCost,
+      extendedWarrantyDocument: _extendedWarrantyDocument?.copyWith(
+        type: DocumentType.extendedWarranty,
+        title: 'Extended warranty',
+        reference: _extendedWarrantyReferenceController.text.trim(),
+      ),
+      amcProvider: _amcProviderController.text.trim(),
+      amcReference: _amcReferenceController.text.trim(),
+      amcPhone: _normalizeSupportNumber(_amcPhoneController.text),
+      amcStartDate: _amcStartDate,
+      amcExpiryDate: _amcExpiryDate,
+      amcCost: amcCost,
+      amcIncludedServices: amcIncludedServices,
+      amcUsedServices: amcUsedServices,
+      amcReminderEnabled: _amcReminderEnabled,
+      amcReminderDaysBefore: _amcReminderDaysBefore,
+      amcDocument: _amcDocument?.copyWith(
+        type: DocumentType.amcContract,
+        title: 'AMC contract',
+        reference: _amcReferenceController.text.trim(),
+      ),
+      amcNotes: _amcNotesController.text.trim(),
       warrantyClaimNumber: _warrantyClaimNumberController.text.trim(),
       warrantyClaimStatus: _warrantyClaimStatus,
       warrantyMarkedExpired: _warrantyMarkedExpired,
@@ -600,6 +945,16 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 subtitle: _isEditing
                     ? 'Update the information used to identify this appliance.'
                     : 'Add the information used to identify this appliance.',
+              ),
+              const SizedBox(height: 16),
+              _AppliancePhotoField(
+                document: _appliancePhotoDocument,
+                isLoading: _isPickingPhoto,
+                onPick: _pickPhoto,
+                onRemove: () => _removeManagedDocument(
+                  _appliancePhotoDocument,
+                  () => _appliancePhotoDocument = null,
+                ),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -932,7 +1287,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               const _SectionTitle(
                 title: 'Extended warranty',
                 subtitle:
-                    'Optional coverage purchased after the original warranty.',
+                    'Track optional coverage purchased beyond the manufacturer warranty.',
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -954,6 +1309,16 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               ),
               const SizedBox(height: 12),
               _DateField(
+                label: 'Extended warranty start date',
+                value: _extendedWarrantyStartDate,
+                icon: Icons.event_available_outlined,
+                onTap: () => _selectDate(
+                  selection: _DateSelection.extendedWarrantyStart,
+                ),
+                onClear: () => setState(() => _extendedWarrantyStartDate = null),
+              ),
+              const SizedBox(height: 12),
+              _DateField(
                 label: 'Extended warranty expiry date',
                 value: _extendedWarrantyExpiryDate,
                 icon: Icons.verified_user_outlined,
@@ -962,7 +1327,217 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                 onClear: () =>
                     setState(() => _extendedWarrantyExpiryDate = null),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _extendedWarrantyCostController,
+                decoration: const InputDecoration(
+                  labelText: 'Extended warranty cost',
+                  hintText: 'Example: 2499',
+                  prefixIcon: Icon(Icons.currency_rupee_outlined),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.next,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(10),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DocumentAttachmentField(
+                title: 'Extended warranty document',
+                description: 'Upload the plan/certificate as PDF or image.',
+                icon: Icons.shield_outlined,
+                document: _extendedWarrantyDocument,
+                isLoading: _isPickingExtendedWarranty,
+                onPick: _pickExtendedWarrantyDocument,
+                onRemove: () => _removeManagedDocument(
+                  _extendedWarrantyDocument,
+                  () => _extendedWarrantyDocument = null,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle(
+                title: 'AMC / maintenance contract',
+                subtitle:
+                    'Track an annual maintenance contract, included visits, cost, and renewal date.',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amcProviderController,
+                decoration: const InputDecoration(
+                  labelText: 'AMC provider',
+                  hintText: 'Brand or service company',
+                  prefixIcon: Icon(Icons.handyman_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amcReferenceController,
+                decoration: const InputDecoration(
+                  labelText: 'AMC contract / reference number',
+                  prefixIcon: Icon(Icons.confirmation_number_outlined),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amcPhoneController,
+                decoration: const InputDecoration(
+                  labelText: 'AMC contact number',
+                  hintText: '9876543210 or 18001234567',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
+                maxLength: 11,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(11),
+                ],
+                validator: (value) {
+                  final number = value?.trim() ?? '';
+                  if (number.isEmpty) return null;
+                  final isMobile = RegExp(r'^[6-9]\d{9}$').hasMatch(number);
+                  final isServiceNumber = RegExp(
+                    r'^(1800|1860)\d{6,7}$',
+                  ).hasMatch(number);
+                  if (!isMobile && !isServiceNumber) {
+                    return 'Enter a valid AMC contact number.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              _DateField(
+                label: 'AMC start date',
+                value: _amcStartDate,
+                icon: Icons.event_available_outlined,
+                onTap: () => _selectDate(selection: _DateSelection.amcStart),
+                onClear: () => setState(() => _amcStartDate = null),
+              ),
+              const SizedBox(height: 12),
+              _DateField(
+                label: 'AMC expiry / renewal date',
+                value: _amcExpiryDate,
+                icon: Icons.event_repeat_outlined,
+                onTap: () => _selectDate(selection: _DateSelection.amcExpiry),
+                onClear: () => setState(() => _amcExpiryDate = null),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amcCostController,
+                decoration: const InputDecoration(
+                  labelText: 'AMC cost',
+                  hintText: 'Example: 3600',
+                  prefixIcon: Icon(Icons.currency_rupee_outlined),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.next,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  LengthLimitingTextInputFormatter(10),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _amcIncludedServicesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Services included',
+                        prefixIcon: Icon(Icons.format_list_numbered_outlined),
+                      ),
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _amcUsedServicesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Services used',
+                        prefixIcon: Icon(Icons.done_all_outlined),
+                      ),
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DocumentAttachmentField(
+                title: 'AMC contract',
+                description: 'Upload the AMC agreement, receipt, or certificate.',
+                icon: Icons.assignment_outlined,
+                document: _amcDocument,
+                isLoading: _isPickingAmc,
+                onPick: _pickAmcDocument,
+                onRemove: () => _removeManagedDocument(
+                  _amcDocument,
+                  () => _amcDocument = null,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('AMC renewal reminder'),
+                subtitle: const Text(
+                  'Schedule a local notification before the AMC expiry date.',
+                ),
+                value: _amcReminderEnabled,
+                onChanged: (value) {
+                  setState(() => _amcReminderEnabled = value);
+                },
+              ),
+              if (_amcReminderEnabled) ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  initialValue: _amcReminderDaysBefore,
+                  decoration: const InputDecoration(
+                    labelText: 'Remind me before AMC expiry',
+                    prefixIcon: Icon(Icons.notifications_active_outlined),
+                  ),
+                  items: _reminderOptions
+                      .map(
+                        (days) => DropdownMenuItem(
+                          value: days,
+                          child: Text('$days days before'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _amcReminderDaysBefore = value);
+                    }
+                  },
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amcNotesController,
+                decoration: const InputDecoration(
+                  labelText: 'AMC notes',
+                  hintText: 'Coverage, exclusions, visit limits, renewal details',
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.notes_outlined),
+                ),
+                minLines: 2,
+                maxLines: 4,
+              ),
+              const SizedBox(height: 24),
               const _SectionTitle(
                 title: 'Warranty claim',
                 subtitle: 'Track an existing claim or support case.',
@@ -1186,7 +1761,125 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   }
 }
 
-enum _DateSelection { purchase, warranty, extendedWarranty }
+enum _DateSelection {
+  purchase,
+  warranty,
+  extendedWarrantyStart,
+  extendedWarranty,
+  amcStart,
+  amcExpiry,
+}
+
+class _AppliancePhotoField extends StatelessWidget {
+  const _AppliancePhotoField({
+    required this.document,
+    required this.isLoading,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final StoredDocument? document;
+  final bool isLoading;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final localPath = document?.localPath.trim() ?? '';
+    final hasLocalPhoto = localPath.isNotEmpty;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                width: 88,
+                height: 88,
+                child: hasLocalPhoto
+                    ? Image.file(
+                        File(localPath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const _PhotoPlaceholder(),
+                      )
+                    : const _PhotoPlaceholder(),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    document == null ? 'Appliance photo' : 'Photo added',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    document == null
+                        ? 'Add a JPG or PNG up to 10 MB.'
+                        : document!.fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: isLoading ? null : onPick,
+                        icon: isLoading
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(
+                                document == null
+                                    ? Icons.add_photo_alternate_outlined
+                                    : Icons.photo_camera_back_outlined,
+                              ),
+                        label: Text(document == null ? 'Add photo' : 'Replace'),
+                      ),
+                      if (document != null)
+                        TextButton.icon(
+                          onPressed: isLoading ? null : onRemove,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Remove'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoPlaceholder extends StatelessWidget {
+  const _PhotoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(
+        Icons.devices_other,
+        size: 36,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.subtitle});
