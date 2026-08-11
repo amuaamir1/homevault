@@ -406,23 +406,29 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                         const Text(
                           'A full backup includes appliance records, warranty and support details, service history, and document files.',
                         ),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
+                        const SizedBox(height: 12),
+                        Row(
                           children: [
-                            _CountChip(
-                              icon: Icons.home_repair_service_outlined,
-                              label: '${store.totalCount} appliances',
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.home_repair_service_outlined,
+                                label: '${store.totalCount} appliances',
+                              ),
                             ),
-                            _CountChip(
-                              icon: Icons.description_outlined,
-                              label: '$documentCount documents',
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.description_outlined,
+                                label: '$documentCount documents',
+                              ),
                             ),
-                            _CountChip(
-                              icon: Icons.build_outlined,
-                              label:
-                                  '${store.totalServiceRecordCount} services',
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.build_outlined,
+                                label:
+                                    '${store.totalServiceRecordCount} services',
+                              ),
                             ),
                           ],
                         ),
@@ -610,6 +616,36 @@ class _CountChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(avatar: Icon(icon, size: 18), label: Text(label));
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.primary),
+          const SizedBox(width: 5),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
