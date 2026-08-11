@@ -52,3 +52,13 @@ android/app/google-services.json
 android/app/google-services.json.*
 lib/firebase_options.dart
 lib/firebase_options.dart.*
+
+# Firebase generated/local configuration
+android/app/google-services.json
+android/app/google-services.json.backup
+lib/firebase_options.dart
+
+# Environment files
+.env
+.env.*
+!.env.example
