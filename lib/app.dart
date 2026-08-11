@@ -21,6 +21,7 @@ import 'services/document_storage_service.dart';
 import 'state/app_scope.dart';
 import 'state/appliance_store.dart';
 import 'theme/app_theme.dart';
+import 'widgets/cloud_backup_startup_coordinator.dart';
 
 class HomeVaultApp extends StatefulWidget {
   const HomeVaultApp({
@@ -339,7 +340,7 @@ class _StartupGate extends StatelessWidget {
       );
     }
 
-    return const MainNavigation();
+    return const CloudBackupStartupCoordinator(child: MainNavigation());
   }
 }
 

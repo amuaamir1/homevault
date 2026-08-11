@@ -9,6 +9,7 @@ import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
+import 'cloud_backup_screen.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
   const BackupRestoreScreen({super.key});
@@ -431,6 +432,25 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ),
                 const SizedBox(height: 12),
                 Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_outlined),
+                    title: const Text('Cloud backup & recovery'),
+                    subtitle: const Text(
+                      'Automatic restore points, Backup now, history, and recovery.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    enabled: !_isBusy,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const CloudBackupScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
                   child: Column(
                     children: [
                       ListTile(
@@ -509,7 +529,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.lock_open_outlined),
-                    title: Text('Backup security'),
+                    title: Text('Local backup security'),
                     subtitle: Text(
                       'Backups are account-tagged but not encrypted. Store them in a private, trusted location.',
                     ),

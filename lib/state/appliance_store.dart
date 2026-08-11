@@ -957,16 +957,48 @@ class ApplianceStore extends ChangeNotifier {
         _repository is WatchableApplianceRepository && _ownerUid != null;
 
     if (shouldRestart) {
-      await _repositorySubscription?.cancel();
+      final subscription = _repositorySubscription;
       _repositorySubscription = null;
+
+      if (subscription != null) {
+        try {
+          await subscription.cancel().timeout(const Duration(seconds: 5));
+        } catch (error, stack) {
+          // A Firebase stream can occasionally take too long to tear down.
+          // Restore/save operations must not remain blocked indefinitely just
+          // because the live repository watcher is slow to cancel.
+          unawaited(
+            CrashReportingService.recordNonFatal(
+              error,
+              stack,
+              reason: 'Pausing cloud repository watch for a data restore',
+            ),
+          );
+        }
+      }
     }
 
     try {
       return await operation();
     } finally {
       if (shouldRestart && _ownerUid != null) {
-        await _startRepositoryWatch();
+        // Restarting the live watcher is post-save maintenance. The restored
+        // data has already been persisted, so do not keep a restore dialog
+        // spinning while a Firestore listener is being re-established.
+        unawaited(_restartRepositoryWatchAfterRestore());
       }
+    }
+  }
+
+  Future<void> _restartRepositoryWatchAfterRestore() async {
+    try {
+      await _startRepositoryWatch().timeout(const Duration(seconds: 5));
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Restarting cloud repository watch after a data restore',
+      );
     }
   }
 

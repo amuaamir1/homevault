@@ -87,6 +87,14 @@ String _firebaseMessage(String code, String? details, String fallback) {
     'unauthenticated' => 'Your session has expired. Sign in again.',
     'network-request-failed' =>
       'A network error occurred. Check your internet connection.',
+    'object-not-found' => 'The requested cloud file could not be found.',
+    'unauthorized' =>
+      'HomeVault does not have permission to access this cloud file.',
+    'retry-limit-exceeded' =>
+      'The cloud transfer took too long. Check your connection and try again.',
+    'quota-exceeded' =>
+      'Cloud storage quota has been reached. Free some storage and try again.',
+    'canceled' => 'The cloud transfer was cancelled.',
     _ => _messageFallback(details, fallback),
   };
 }

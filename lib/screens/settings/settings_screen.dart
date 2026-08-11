@@ -150,7 +150,7 @@ class SettingsScreen extends StatelessWidget {
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('Backup, restore & export'),
                   subtitle: const Text(
-                    'Create ZIP backups, restore data, and save CSV or PDF reports.',
+                    'Cloud and ZIP backups, recovery, plus CSV and PDF exports.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {

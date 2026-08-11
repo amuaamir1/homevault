@@ -815,6 +815,11 @@ class HomeVaultBackupService {
         ...documentJson,
         'localPath': destination.path,
         'sizeBytes': bytes.length,
+        // A historical restore must not trust the original cloud object path.
+        // Treat the restored file as local-only so the current signed-in
+        // account uploads a fresh authoritative cloud copy.
+        'cloudStoragePath': '',
+        'cloudContentType': '',
       },
       restoredCount: 1,
       missingCount: 0,
