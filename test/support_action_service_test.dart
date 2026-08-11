@@ -33,6 +33,12 @@ void main() {
     expect(uri.queryParameters['body'], contains('Brand: Daikin'));
     expect(uri.queryParameters['body'], contains('Model: FTKM50'));
     expect(uri.queryParameters['body'], contains('Serial number: SN-100'));
+    // Guards against Uri(queryParameters:) form-encoding, which turns spaces
+    // into '+'. Mail clients do not decode that, so the body renders as
+    // "I+need+support+for...". uri.queryParameters hides this by decoding
+    // '+' back to a space, so the raw query must be asserted directly.
+    expect(uri.query, isNot(contains('+')));
+    expect(uri.query, contains('%20'));
   });
 
   test('website URI adds HTTPS when the scheme is omitted', () {
