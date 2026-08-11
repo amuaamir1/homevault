@@ -37,6 +37,66 @@ void main() {
     expect(find.text('Create your HomeVault account'), findsNothing);
   });
 
+  testWidgets('forgot password cancel closes safely', (tester) async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      AuthScope(
+        controller: controller,
+        child: const MaterialApp(home: WelcomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Forgot password?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reset password'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('resetPasswordCancelButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reset password'), findsNothing);
+    expect(find.text('Sign in to HomeVault'), findsOneWidget);
+  });
+
+  testWidgets('forgot password sends reset before closing the dialog', (
+    tester,
+  ) async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      AuthScope(
+        controller: controller,
+        child: const MaterialApp(home: WelcomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Forgot password?'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('resetPasswordEmailField')),
+      'aamir.ahmad5144@gmail.com',
+    );
+    await tester.tap(find.byKey(const Key('resetPasswordSubmitButton')));
+    await tester.pumpAndSettle();
+
+    expect(service.lastPasswordResetEmail, 'aamir.ahmad5144@gmail.com');
+    expect(find.text('Reset password'), findsNothing);
+    expect(
+      find.text('Password reset instructions were sent by email.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('register link opens the email registration form', (
     tester,
   ) async {
@@ -74,6 +134,7 @@ void main() {
 
 class _FakeEmailAuthService implements EmailAuthService {
   AuthenticatedUser? _currentUser;
+  String? lastPasswordResetEmail;
 
   @override
   AuthenticatedUser? get currentUser => _currentUser;
@@ -129,7 +190,9 @@ class _FakeEmailAuthService implements EmailAuthService {
   Future<void> resendVerificationEmail() async {}
 
   @override
-  Future<void> sendPasswordResetEmail(String email) async {}
+  Future<void> sendPasswordResetEmail(String email) async {
+    lastPasswordResetEmail = email;
+  }
 
   @override
   Future<void> reauthenticateWithEmailAndPassword({

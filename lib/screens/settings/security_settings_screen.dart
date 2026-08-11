@@ -131,22 +131,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       );
                     },
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.lock_outline),
-                    title: const Text('Lock HomeVault now'),
-                    subtitle: const Text(
-                      'Require your PIN or biometrics immediately.',
-                    ),
-                    onTap: () {
-                      final navigator = Navigator.of(context);
-                      final controller = AppLockScope.read(context);
-                      navigator.popUntil((route) => route.isFirst);
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        controller.lock();
-                      });
-                    },
-                  ),
                 ],
               ],
             ),

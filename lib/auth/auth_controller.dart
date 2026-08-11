@@ -28,9 +28,11 @@ class AuthController extends ChangeNotifier {
 
   final EmailAuthService? _service;
   StreamSubscription<AuthenticatedUser?>? _authSubscription;
+  Future<bool>? _sessionValidationFuture;
 
   bool _isInitializing = true;
   bool _isBusy = false;
+  bool _isValidatingSession = false;
   bool _unlockAfterAccountSignIn = false;
   bool _isTestController = false;
   AuthenticatedUser? _user;
@@ -39,6 +41,7 @@ class AuthController extends ChangeNotifier {
 
   bool get isInitializing => _isInitializing;
   bool get isBusy => _isBusy;
+  bool get isValidatingSession => _isValidatingSession;
   bool get isAuthenticated => _user != null;
   bool get isEmailVerified => _user?.isEmailVerified == true;
   bool get needsLegacyEmailUpgrade =>
@@ -72,8 +75,80 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     });
 
+    if (_user != null) {
+      await validateCurrentSession();
+    }
+
     _isInitializing = false;
     notifyListeners();
+  }
+
+  Future<bool> validateCurrentSession() {
+    if (_isTestController || _user == null) {
+      return Future<bool>.value(_user != null);
+    }
+
+    final existing = _sessionValidationFuture;
+    if (existing != null) return existing;
+
+    final future = _validateCurrentSessionInternal();
+    _sessionValidationFuture = future;
+
+    return future.whenComplete(() {
+      if (identical(_sessionValidationFuture, future)) {
+        _sessionValidationFuture = null;
+      }
+    });
+  }
+
+  Future<bool> _validateCurrentSessionInternal() async {
+    final service = _service;
+    if (service == null || service is! SessionValidationOperations) {
+      return true;
+    }
+
+    _isValidatingSession = true;
+    notifyListeners();
+
+    try {
+      final result = await (service as SessionValidationOperations)
+          .validateCurrentSession();
+
+      if (result == SessionValidationResult.revoked) {
+        _unlockAfterAccountSignIn = false;
+        _errorMessage =
+            'Your account session has expired. Sign in again to continue.';
+
+        try {
+          await service.signOut();
+        } catch (error, stack) {
+          await CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Signing out after Firebase session revocation',
+          );
+        }
+
+        _user = null;
+        notifyListeners();
+        return false;
+      }
+
+      // A temporary network failure must not make offline HomeVault data
+      // inaccessible. The session will be checked again on the next resume,
+      // PIN/biometric unlock, or periodic validation.
+      return true;
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Validating the current Firebase Authentication session',
+      );
+      return true;
+    } finally {
+      _isValidatingSession = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> registerWithEmailAndPassword({

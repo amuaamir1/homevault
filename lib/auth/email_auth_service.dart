@@ -52,8 +52,17 @@ abstract interface class SensitiveAuthOperations {
   Future<void> deleteCurrentUser();
 }
 
+enum SessionValidationResult { valid, revoked, unavailable }
+
+abstract interface class SessionValidationOperations {
+  Future<SessionValidationResult> validateCurrentSession();
+}
+
 class FirebaseEmailAuthService
-    implements EmailAuthService, SensitiveAuthOperations {
+    implements
+        EmailAuthService,
+        SensitiveAuthOperations,
+        SessionValidationOperations {
   FirebaseEmailAuthService({
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
@@ -297,6 +306,46 @@ class FirebaseEmailAuthService
     final user = _firebaseAuth.currentUser;
     if (user == null) throw StateError('No Firebase user is signed in.');
     await user.delete();
+  }
+
+  @override
+  Future<SessionValidationResult> validateCurrentSession() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) return SessionValidationResult.revoked;
+
+    try {
+      final token = await user.getIdToken(true);
+      if (token == null || token.trim().isEmpty) {
+        return SessionValidationResult.revoked;
+      }
+      return SessionValidationResult.valid;
+    } on FirebaseAuthException catch (error) {
+      final code = error.code.trim().toLowerCase();
+
+      if (code == 'user-token-expired' ||
+          code == 'invalid-user-token' ||
+          code == 'user-disabled' ||
+          code == 'user-not-found') {
+        debugPrint(
+          'HOMEVAULT_AUTH: Firebase session is no longer valid. code=$code',
+        );
+        return SessionValidationResult.revoked;
+      }
+
+      // Do not force-sign-out merely because the device is temporarily
+      // offline or Firebase cannot be reached. HomeVault supports local
+      // PIN access while offline.
+      debugPrint(
+        'HOMEVAULT_AUTH: Firebase session validation unavailable. '
+        'code=$code, message=${error.message}',
+      );
+      return SessionValidationResult.unavailable;
+    } catch (error) {
+      debugPrint(
+        'HOMEVAULT_AUTH: Firebase session validation unavailable: $error',
+      );
+      return SessionValidationResult.unavailable;
+    }
   }
 
   @override

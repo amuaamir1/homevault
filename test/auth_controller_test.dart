@@ -86,6 +86,51 @@ void main() {
     expect(controller.consumeAccountSignInUnlock(), isFalse);
   });
 
+  test('revoked Firebase session is signed out during startup', () async {
+    final service = _FakeSessionValidationAuthService(
+      currentUser: const AuthenticatedUser(
+        uid: 'existing-user',
+        email: 'user@example.com',
+        isEmailVerified: true,
+      ),
+      validationResult: SessionValidationResult.revoked,
+    );
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(service.validationCalls, 1);
+    expect(service.signOutCalls, 1);
+    expect(controller.isAuthenticated, isFalse);
+    expect(
+      controller.errorMessage,
+      'Your account session has expired. Sign in again to continue.',
+    );
+  });
+
+  test(
+    'temporary validation outage keeps the cached Firebase session',
+    () async {
+      final service = _FakeSessionValidationAuthService(
+        currentUser: const AuthenticatedUser(
+          uid: 'existing-user',
+          email: 'user@example.com',
+          isEmailVerified: true,
+        ),
+        validationResult: SessionValidationResult.unavailable,
+      );
+      final controller = AuthController(service: service);
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(service.validationCalls, 1);
+      expect(service.signOutCalls, 0);
+      expect(controller.isAuthenticated, isTrue);
+    },
+  );
+
   test('Google sign-in authenticates and unlocks the local session', () async {
     final service = _FakeEmailAuthService();
     final controller = AuthController(service: service);
@@ -216,4 +261,28 @@ class _FakeEmailAuthService implements EmailAuthService {
 
   @override
   Future<void> signOut() async => _currentUser = null;
+}
+
+class _FakeSessionValidationAuthService extends _FakeEmailAuthService
+    implements SessionValidationOperations {
+  _FakeSessionValidationAuthService({
+    required AuthenticatedUser currentUser,
+    required this.validationResult,
+  }) : super(currentUser: currentUser);
+
+  final SessionValidationResult validationResult;
+  int validationCalls = 0;
+  int signOutCalls = 0;
+
+  @override
+  Future<SessionValidationResult> validateCurrentSession() async {
+    validationCalls++;
+    return validationResult;
+  }
+
+  @override
+  Future<void> signOut() async {
+    signOutCalls++;
+    await super.signOut();
+  }
 }

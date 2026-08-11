@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../auth/auth_scope.dart';
 import '../../profile/profile_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
@@ -74,6 +75,9 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
       _errorText = null;
     });
 
+    final sessionValid = await AuthScope.read(context).validateCurrentSession();
+    if (!mounted || !sessionValid) return;
+
     final isValid = await AppLockScope.read(context).unlock(pin);
     if (!mounted || isValid) return;
 
@@ -104,6 +108,9 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
       _isChecking = true;
       if (!automatic) _errorText = null;
     });
+
+    final sessionValid = await AuthScope.read(context).validateCurrentSession();
+    if (!mounted || !sessionValid) return;
 
     final controller = AppLockScope.read(context);
     final authenticated = await controller.authenticateWithBiometrics();

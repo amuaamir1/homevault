@@ -40,7 +40,7 @@ class ReportsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _MetricsGrid(report: report),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             _AttentionCard(report: report),
             const SizedBox(height: 24),
             _SectionCard(
@@ -260,42 +260,57 @@ class _MetricsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cards = [
+      _MetricCard(
+        icon: Icons.devices_other_outlined,
+        label: 'Appliances',
+        value: '${report.totalAppliances}',
+        color: AppColors.primary,
+      ),
+      _MetricCard(
+        icon: Icons.description_outlined,
+        label: 'Documents',
+        value: '${report.totalDocuments}',
+        color: AppColors.warning,
+      ),
+      _MetricCard(
+        icon: Icons.build_circle_outlined,
+        label: 'Service records',
+        value: '${report.totalServiceRecords}',
+        color: AppColors.secondary,
+      ),
+      _MetricCard(
+        icon: Icons.payments_outlined,
+        label: 'Service cost',
+        value: ReportsScreen._formatAmount(report.totalServiceCost),
+        color: AppColors.success,
+      ),
+    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = (constraints.maxWidth - 12) / 2;
+        if (constraints.maxWidth >= 340) {
+          return SizedBox(
+            height: 92,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = 0; index < cards.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(child: cards[index]),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final width = (constraints.maxWidth - 8) / 2;
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _MetricCard(
-              width: width,
-              icon: Icons.devices_other_outlined,
-              label: 'Appliances',
-              value: '${report.totalAppliances}',
-              color: AppColors.primary,
-            ),
-            _MetricCard(
-              width: width,
-              icon: Icons.description_outlined,
-              label: 'Documents',
-              value: '${report.totalDocuments}',
-              color: AppColors.warning,
-            ),
-            _MetricCard(
-              width: width,
-              icon: Icons.build_circle_outlined,
-              label: 'Service records',
-              value: '${report.totalServiceRecords}',
-              color: AppColors.secondary,
-            ),
-            _MetricCard(
-              width: width,
-              icon: Icons.payments_outlined,
-              label: 'Service cost',
-              value: ReportsScreen._formatAmount(report.totalServiceCost),
-              color: AppColors.success,
-            ),
-          ],
+          spacing: 8,
+          runSpacing: 8,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(growable: false),
         );
       },
     );
@@ -304,14 +319,12 @@ class _MetricsGrid extends StatelessWidget {
 
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
-    required this.width,
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
   });
 
-  final double width;
   final IconData icon;
   final String label;
   final String value;
@@ -319,26 +332,42 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      child: Card(
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 92),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 14),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+              Icon(icon, color: color, size: 18),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(label),
+              const SizedBox(height: 1),
+              SizedBox(
+                height: 24,
+                child: Center(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(height: 1.05),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -347,13 +376,48 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-class _AttentionCard extends StatelessWidget {
+class _AttentionCard extends StatefulWidget {
   const _AttentionCard({required this.report});
 
   final HomeVaultReport report;
 
   @override
+  State<_AttentionCard> createState() => _AttentionCardState();
+}
+
+class _AttentionCardState extends State<_AttentionCard>
+    with AutomaticKeepAliveClientMixin<_AttentionCard> {
+  bool _dismissed = false;
+  late String _attentionSignature = _signature(widget.report);
+
+  static String _signature(HomeVaultReport report) {
+    return [
+      report.appliancesWithoutWarrantyDate,
+      report.appliancesWithoutDocuments,
+      report.appliancesWithoutSupport,
+      report.activeServiceRecords,
+    ].join(':');
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttentionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final nextSignature = _signature(widget.report);
+    if (nextSignature != _attentionSignature) {
+      _attentionSignature = nextSignature;
+      _dismissed = false;
+    }
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+
+    final report = widget.report;
     final items = <String>[
       if (report.appliancesWithoutWarrantyDate > 0)
         '${report.appliancesWithoutWarrantyDate} without a warranty date',
@@ -365,7 +429,11 @@ class _AttentionCard extends StatelessWidget {
         '${report.activeServiceRecords} active service record${report.activeServiceRecords == 1 ? '' : 's'}',
     ];
 
-    return Card(
+    if (_dismissed && items.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final card = Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
@@ -403,6 +471,21 @@ class _AttentionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    if (items.isEmpty) {
+      return card;
+    }
+
+    return Dismissible(
+      key: ValueKey<String>('reportsAttention-$_attentionSignature'),
+      direction: DismissDirection.horizontal,
+      resizeDuration: const Duration(milliseconds: 180),
+      onDismissed: (_) {
+        if (!mounted) return;
+        setState(() => _dismissed = true);
+      },
+      child: card,
     );
   }
 }
