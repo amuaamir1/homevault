@@ -117,6 +117,7 @@ jobs:
             printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
             printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/android/app/homevault-release.jks"
           } > android/key.properties
+          
       - name: Verify release signing configuration
         shell: bash
         run: |
