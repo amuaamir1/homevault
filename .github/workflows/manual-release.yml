@@ -130,6 +130,21 @@ jobs:
             printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/android/app/homevault-release.jks"
           } > android/key.properties
 
+      - name: Verify release signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/key.properties
+          for key in storePassword keyPassword keyAlias storeFile; do
+            value="$(grep "^${key}=" android/key.properties | cut -d= -f2-)"
+            if [ -z "$value" ]; then
+              echo "::error::android/key.properties has an empty '${key}'."
+              echo "::error::Check the ANDROID_* repository secrets."
+              exit 1
+            fi
+          done
+          echo "Release signing configuration is present."
+          
       - name: Calculate next build and release number
         shell: bash
         env:

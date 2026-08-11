@@ -48,8 +48,14 @@ class FileApplianceRepository
         ApplianceRepository,
         OwnerScopedApplianceRepository,
         ApplianceRepositoryDiagnostics {
+  FileApplianceRepository({
+    Future<Directory> Function()? documentsDirectoryProvider,
+  }) : _documentsDirectoryProvider =
+           documentsDirectoryProvider ?? getApplicationDocumentsDirectory;
+
   static const int _schemaVersion = 5;
 
+  final Future<Directory> Function() _documentsDirectoryProvider;
   String? _ownerUid;
   String? _lastLoadWarning;
 
@@ -80,7 +86,7 @@ class FileApplianceRepository
   }
 
   Future<Directory> _dataDirectory() async {
-    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final documentsDirectory = await _documentsDirectoryProvider();
     final directory = Directory(
       path.join(
         documentsDirectory.path,
@@ -100,7 +106,7 @@ class FileApplianceRepository
   }
 
   Future<File> _legacyDataFile() async {
-    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final documentsDirectory = await _documentsDirectoryProvider();
     return File(
       path.join(
         documentsDirectory.path,

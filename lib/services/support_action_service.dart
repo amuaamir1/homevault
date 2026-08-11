@@ -35,13 +35,15 @@ class SupportActionService {
       '',
     ];
 
+    final subject = 'Support request for ${appliance.name}';
+    final body = details.join('\r\n');
+
     return Uri(
       scheme: 'mailto',
       path: appliance.supportEmail.trim(),
-      queryParameters: {
-        'subject': 'Support request for ${appliance.name}',
-        'body': details.join('\n'),
-      },
+      query:
+          'subject=${Uri.encodeComponent(subject)}'
+          '&body=${Uri.encodeComponent(body)}',
     );
   }
 

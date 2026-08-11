@@ -693,6 +693,9 @@ class FirestoreApplianceRepository
     _lastCloudFingerprints = {
       for (final appliance in appliances) appliance.id: _fingerprint(appliance),
     };
+    _lastCloudRevisions = {
+      for (final appliance in appliances) appliance.id: appliance.cloudRevision,
+    };
     _hasCloudBaseline = true;
   }
 

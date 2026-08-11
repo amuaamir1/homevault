@@ -18,6 +18,15 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+
+if (!hasReleaseKeystore) {
+    logger.warn(
+        "WARNING: android/key.properties not found. Release builds will use " +
+        "the DEBUG signing config and cannot be uploaded to Google Play."
+    )
+}
+
 android {
     namespace = "com.amuaamir.homevault"
     compileSdk = flutter.compileSdkVersion
@@ -41,16 +50,22 @@ android {
     // This must be created before buildTypes uses it.
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String
+            if (hasReleaseKeystore) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
