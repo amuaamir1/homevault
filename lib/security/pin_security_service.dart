@@ -226,8 +226,7 @@ class PinSecurityService {
   ) async {
     final history = await _readHistory();
     history.removeWhere(
-      (existing) =>
-          existing.salt == entry.salt && existing.hash == entry.hash,
+      (existing) => existing.salt == entry.salt && existing.hash == entry.hash,
     );
     history.insert(0, entry);
     if (history.length > _pinHistoryLimit) {

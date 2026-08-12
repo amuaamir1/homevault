@@ -83,10 +83,7 @@ void main() {
       await service.bindUser('firebase-user-a');
       await service.createPin('2468');
 
-      await service.clearPin(
-        markSetupComplete: false,
-        clearHistory: true,
-      );
+      await service.clearPin(markSetupComplete: false, clearHistory: true);
 
       expect(await service.hasPin(), isFalse);
       expect(await service.hasCompletedPinSetup(), isFalse);
@@ -98,18 +95,9 @@ void main() {
     await service.bindUser('firebase-user-history');
 
     await service.createPin('1111');
-    expect(
-      await service.changePin(currentPin: '1111', newPin: '2222'),
-      isTrue,
-    );
-    expect(
-      await service.changePin(currentPin: '2222', newPin: '3333'),
-      isTrue,
-    );
-    expect(
-      await service.changePin(currentPin: '3333', newPin: '4444'),
-      isTrue,
-    );
+    expect(await service.changePin(currentPin: '1111', newPin: '2222'), isTrue);
+    expect(await service.changePin(currentPin: '2222', newPin: '3333'), isTrue);
+    expect(await service.changePin(currentPin: '3333', newPin: '4444'), isTrue);
 
     expect(
       service.changePin(currentPin: '4444', newPin: '1111'),
@@ -135,10 +123,7 @@ void main() {
     await service.changePin(currentPin: '3333', newPin: '4444');
     await service.changePin(currentPin: '4444', newPin: '5555');
 
-    expect(
-      await service.changePin(currentPin: '5555', newPin: '1111'),
-      isTrue,
-    );
+    expect(await service.changePin(currentPin: '5555', newPin: '1111'), isTrue);
     expect(await service.verifyPin('1111'), isTrue);
   });
 
@@ -150,10 +135,7 @@ void main() {
     await service.clearPin(markSetupComplete: false);
 
     expect(await service.hasPin(), isFalse);
-    expect(
-      service.createPin('2468'),
-      throwsA(isA<PinReuseException>()),
-    );
+    expect(service.createPin('2468'), throwsA(isA<PinReuseException>()));
     await service.createPin('1357');
     expect(await service.verifyPin('1357'), isTrue);
   });
@@ -163,10 +145,7 @@ void main() {
     await service.bindUser('firebase-user-delete-history');
     await service.createPin('2468');
 
-    await service.clearPin(
-      markSetupComplete: false,
-      clearHistory: true,
-    );
+    await service.clearPin(markSetupComplete: false, clearHistory: true);
 
     await service.createPin('2468');
     expect(await service.verifyPin('2468'), isTrue);
@@ -184,10 +163,6 @@ void main() {
     expect(await service.verifyPin('1122'), isTrue);
 
     await service.bindUser('firebase-user-history-a');
-    expect(
-      service.createPin('1122'),
-      throwsA(isA<PinReuseException>()),
-    );
+    expect(service.createPin('1122'), throwsA(isA<PinReuseException>()));
   });
-
 }
