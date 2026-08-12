@@ -227,7 +227,11 @@ class _AppGate extends StatelessWidget {
     }
 
     final auth = AuthScope.of(context);
-    if (auth.isInitializing || auth.isValidatingSession) {
+    // Initial authentication/session validation must finish before the app
+    // is shown. Later validation (for example immediately before PIN or
+    // biometric unlock) must not replace and dispose the unlock screen while
+    // that unlock operation is awaiting Firebase.
+    if (auth.isInitializing) {
       return const _LoadingScreen(message: 'Checking your account...');
     }
 

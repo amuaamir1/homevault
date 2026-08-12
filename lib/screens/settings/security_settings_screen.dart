@@ -194,6 +194,7 @@ class _CreatePinDialogState extends State<_CreatePinDialog> {
   final _pinController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _isSaving = false;
+  String? _pinError;
 
   @override
   void dispose() {
@@ -203,10 +204,28 @@ class _CreatePinDialogState extends State<_CreatePinDialog> {
   }
 
   Future<void> _submit() async {
+    setState(() => _pinError = null);
     if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isSaving = true);
-    await AppLockScope.read(context).createPin(_pinController.text);
-    if (mounted) Navigator.of(context).pop(true);
+    try {
+      await AppLockScope.read(context).createPin(_pinController.text);
+      if (mounted) Navigator.of(context).pop(true);
+    } on PinReuseException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _pinError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The PIN could not be saved. Please try again.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -222,6 +241,7 @@ class _CreatePinDialogState extends State<_CreatePinDialog> {
               _PinField(
                 controller: _pinController,
                 label: 'New PIN',
+                errorText: _pinError,
                 validator: _validatePin,
               ),
               const SizedBox(height: 10),
@@ -269,6 +289,7 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
   final _confirmController = TextEditingController();
   bool _isSaving = false;
   String? _currentPinError;
+  String? _newPinError;
 
   @override
   void dispose() {
@@ -279,25 +300,44 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
   }
 
   Future<void> _submit() async {
-    setState(() => _currentPinError = null);
+    setState(() {
+      _currentPinError = null;
+      _newPinError = null;
+    });
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
-    final changed = await AppLockScope.read(context).changePin(
-      currentPin: _currentController.text,
-      newPin: _newController.text,
-    );
+    try {
+      final changed = await AppLockScope.read(context).changePin(
+        currentPin: _currentController.text,
+        newPin: _newController.text,
+      );
 
-    if (!mounted) return;
-    if (changed) {
-      Navigator.of(context).pop(true);
-      return;
+      if (!mounted) return;
+      if (changed) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+        _currentPinError = 'The current PIN is incorrect.';
+      });
+    } on PinReuseException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _newPinError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The PIN could not be changed. Please try again.'),
+        ),
+      );
     }
-
-    setState(() {
-      _isSaving = false;
-      _currentPinError = 'The current PIN is incorrect.';
-    });
   }
 
   @override
@@ -320,6 +360,7 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
               _PinField(
                 controller: _newController,
                 label: 'New PIN',
+                errorText: _newPinError,
                 validator: _validatePin,
               ),
               const SizedBox(height: 10),

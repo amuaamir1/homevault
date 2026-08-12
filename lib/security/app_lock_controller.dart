@@ -276,7 +276,10 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> clearSecurityForDeletedAccount() async {
     await Future.wait([
-      _securityService.clearPin(markSetupComplete: false),
+      _securityService.clearPin(
+        markSetupComplete: false,
+        clearHistory: true,
+      ),
       _biometricService.setEnabled(false),
       _autoLockPreferenceService.clear(),
     ]);
