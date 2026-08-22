@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_scope.dart';
 import '../../models/beta_feedback.dart';
 import '../../services/beta_feedback_service.dart';
+import '../../services/homevault_error_presenter.dart';
 
 class BetaFeedbackScreen extends StatefulWidget {
   const BetaFeedbackScreen({super.key});
@@ -31,11 +32,13 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
       final selected = await _service.pickScreenshot();
       if (!mounted || selected == null) return;
       setState(() => _screenshot = selected);
-    } on FeedbackSubmissionException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+        error,
+        fallback: 'The screenshot could not be attached. Please try again.',
+      );
     }
   }
 
@@ -68,11 +71,13 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thank you. Your feedback was sent.')),
       );
-    } on FeedbackSubmissionException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+        error,
+        fallback: 'Your feedback could not be sent. Please try again.',
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

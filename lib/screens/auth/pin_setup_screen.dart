@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
+import '../../services/homevault_error_presenter.dart';
 
 class PinSetupScreen extends StatefulWidget {
   const PinSetupScreen({super.key, this.allowSkip = true});
@@ -33,17 +34,12 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     setState(() => _isSaving = true);
     try {
       await AppLockScope.read(context).createPin(_pinController.text);
-    } on PinReuseException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The PIN could not be saved. Please try again.'),
-        ),
+        error,
+        fallback: 'The PIN could not be saved. Please try again.',
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

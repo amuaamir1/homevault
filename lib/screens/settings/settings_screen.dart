@@ -50,6 +50,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final profile = ProfileScope.of(context).profile;
+    final auth = AuthScope.of(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -84,9 +85,46 @@ class SettingsScreen extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
-                        Text(profile?.email ?? ''),
+                        Text(profile?.email ?? auth.user?.email ?? ''),
+                        const SizedBox(height: 6),
+                        Container(
+                          key: const ValueKey(
+                            'settingsEmailVerificationStatus',
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: auth.isEmailVerified
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.tertiaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                auth.isEmailVerified
+                                    ? Icons.verified_outlined
+                                    : Icons.mark_email_unread_outlined,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                auth.isEmailVerified
+                                    ? 'Email verified'
+                                    : 'Email verification pending',
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
                         if (profile?.phoneNumber.isNotEmpty == true) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(profile!.phoneNumber),
                         ],
                         const SizedBox(height: 2),

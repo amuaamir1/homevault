@@ -8,6 +8,7 @@ import '../../models/backup_models.dart';
 import '../../services/cloud_backup_service.dart';
 import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
+import '../../services/homevault_error_message.dart';
 import '../../state/app_scope.dart';
 
 class CloudBackupScreen extends StatefulWidget {
@@ -55,9 +56,11 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _historyError = error is CloudBackupException
-            ? error.message
-            : 'Cloud backup history could not be loaded.';
+        _historyError = friendlyHomeVaultError(
+          error,
+          fallback:
+              'Cloud backup history could not be loaded. Check your connection and try again.',
+        );
       });
     } finally {
       if (mounted) {
@@ -354,14 +357,10 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
   }
 
   void _showError(Object error) {
-    final String message;
-    if (error is CloudBackupException) {
-      message = error.message;
-    } else if (error is BackupFormatException) {
-      message = error.message;
-    } else {
-      message = 'The operation could not be completed. Please try again.';
-    }
+    final message = friendlyHomeVaultError(
+      error,
+      fallback: 'The cloud backup operation could not be completed. Try again.',
+    );
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -487,8 +486,8 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                       leading: Icon(Icons.security_outlined),
                       title: Text('Account-isolated storage'),
                       subtitle: Text(
-                        'Cloud backups are stored under your Firebase user ID '
-                        'and can only be accessed by that signed-in account. '
+                        'Cloud backups are isolated to your signed-in HomeVault '
+                        'account and cannot be accessed by another account. '
                         'They are not end-to-end encrypted.',
                       ),
                     ),

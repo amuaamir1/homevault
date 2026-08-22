@@ -1239,7 +1239,7 @@ class FirestoreApplianceRepository
     switch (error.code) {
       case 'permission-denied':
         return 'HomeVault does not have permission to access your cloud '
-            'appliance data. Publish the latest Firestore rules and try again.';
+            'appliance data. Sign in again and try once more.';
       case 'unavailable':
       case 'network-request-failed':
       case 'deadline-exceeded':

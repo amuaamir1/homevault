@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/homevault_error_message.dart';
+
 class FirebaseSetupRequiredScreen extends StatelessWidget {
   const FirebaseSetupRequiredScreen({super.key, this.details});
 
@@ -7,6 +9,14 @@ class FirebaseSetupRequiredScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final message = details == null
+        ? 'HomeVault could not start its cloud services. Close the app and try again.'
+        : friendlyHomeVaultError(
+            details!,
+            fallback:
+                'HomeVault could not start its cloud services. Check your connection and try again.',
+          );
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -24,40 +34,19 @@ class FirebaseSetupRequiredScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'Firebase setup is required',
+                    'HomeVault could not start',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 12),
+                  Text(message, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
                   const Text(
-                    'HomeVault email authentication and user profiles require Firebase Authentication and Cloud Firestore. Enable the Email/Password provider, configure the Android app for com.amuaamir.homevault, then rebuild.',
+                    'Your data has not been changed. If the problem continues, check your internet connection and reopen HomeVault.',
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 18),
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: SelectableText(
-                        'firebase login\n'
-                        'dart pub global activate flutterfire_cli\n'
-                        'flutterfire configure',
-                      ),
-                    ),
-                  ),
-                  if (details != null) ...[
-                    const SizedBox(height: 12),
-                    ExpansionTile(
-                      title: const Text('Technical details'),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: SelectableText(details.toString()),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),

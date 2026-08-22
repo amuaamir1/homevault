@@ -50,7 +50,7 @@ void main() {
   });
 
   test(
-    'registers with email and password and waits for verification',
+    'registers with email and password without blocking on verification',
     () async {
       final service = _FakeEmailAuthService();
       final controller = AuthController(service: service);
@@ -66,7 +66,29 @@ void main() {
       expect(service.registerCalls, 1);
       expect(controller.isAuthenticated, isTrue);
       expect(controller.isEmailVerified, isFalse);
-      expect(controller.statusMessage, contains('Verification email sent'));
+      expect(controller.statusMessage, contains('Account created'));
+      expect(controller.statusMessage, contains('verify it from your profile'));
+    },
+  );
+
+  test(
+    'registration succeeds when the initial verification email cannot be sent',
+    () async {
+      final service = _FakeEmailAuthService(failVerificationEmail: true);
+      final controller = AuthController(service: service);
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final registered = await controller.registerWithEmailAndPassword(
+        email: 'new@example.com',
+        password: 'SecurePass1',
+      );
+
+      expect(registered, isTrue);
+      expect(controller.isAuthenticated, isTrue);
+      expect(controller.isEmailVerified, isFalse);
+      expect(controller.statusMessage, contains('verification is pending'));
+      expect(controller.statusMessage, contains('continue'));
     },
   );
 
@@ -163,9 +185,18 @@ void main() {
 }
 
 class _FakeEmailAuthService implements EmailAuthService {
-  _FakeEmailAuthService({this._currentUser});
+  _FakeEmailAuthService({
+    AuthenticatedUser? currentUser,
+    bool failVerificationEmail = false,
+  }) : this._(currentUser, failVerificationEmail: failVerificationEmail);
+
+  _FakeEmailAuthService._(
+    this._currentUser, {
+    this.failVerificationEmail = false,
+  });
 
   AuthenticatedUser? _currentUser;
+  final bool failVerificationEmail;
   int registerCalls = 0;
   int signInCalls = 0;
   int googleSignInCalls = 0;
@@ -234,7 +265,11 @@ class _FakeEmailAuthService implements EmailAuthService {
   }
 
   @override
-  Future<void> resendVerificationEmail() async {}
+  Future<void> resendVerificationEmail() async {
+    if (failVerificationEmail) {
+      throw StateError('Verification email service unavailable.');
+    }
+  }
 
   @override
   Future<void> sendPasswordResetEmail(String email) async {}

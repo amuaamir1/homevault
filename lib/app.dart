@@ -7,11 +7,9 @@ import 'auth/auth_scope.dart';
 import 'profile/profile_controller.dart';
 import 'profile/profile_scope.dart';
 import 'screens/auth/firebase_setup_required_screen.dart';
-import 'screens/auth/email_verification_screen.dart';
 import 'screens/auth/legacy_email_upgrade_screen.dart';
 import 'screens/auth/pin_login_screen.dart';
 import 'screens/auth/pin_setup_screen.dart';
-import 'screens/auth/profile_setup_screen.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/main_navigation.dart';
 import 'security/app_lock_controller.dart';
@@ -247,10 +245,6 @@ class _AppGate extends StatelessWidget {
       return const LegacyEmailUpgradeScreen();
     }
 
-    if (!auth.isEmailVerified) {
-      return const EmailVerificationScreen();
-    }
-
     final lockController = AppLockScope.of(context);
     if (lockController.isInitializing ||
         lockController.boundUid != auth.user?.uid) {
@@ -260,82 +254,11 @@ class _AppGate extends StatelessWidget {
     if (!lockController.hasPin) {
       return const PinSetupScreen(allowSkip: false);
     }
-
-    final profile = ProfileScope.of(context);
-    final authenticatedUid = auth.user?.uid;
-
-    if (authenticatedUid == null ||
-        !profile.isResolvedForUser(authenticatedUid)) {
-      return const _LoadingScreen(message: 'Loading your profile...');
-    }
-
-    if (profile.errorMessage != null) {
-      return _ProfileLoadErrorScreen(message: profile.errorMessage!);
-    }
-
-    if (!profile.hasCompleteProfile) {
-      return const ProfileSetupScreen();
-    }
-
     if (!lockController.isUnlocked) {
       return const PinLoginScreen();
     }
 
     return const _StartupGate();
-  }
-}
-
-class _ProfileLoadErrorScreen extends StatelessWidget {
-  const _ProfileLoadErrorScreen({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = AuthScope.of(context);
-
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.cloud_off_outlined,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Your profile could not be loaded',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(message, textAlign: TextAlign.center),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () {
-                    final user = auth.user;
-                    if (user != null) {
-                      ProfileScope.read(context).loadForUser(user, force: true);
-                    }
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Try again'),
-                ),
-                TextButton(
-                  onPressed: auth.signOut,
-                  child: const Text('Sign out'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

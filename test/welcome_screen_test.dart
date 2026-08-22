@@ -24,7 +24,7 @@ void main() {
 
     expect(find.text('HomeVault'), findsOneWidget);
     expect(find.text('Sign in to HomeVault'), findsOneWidget);
-    expect(find.text('Use your verified email and password.'), findsOneWidget);
+    expect(find.text('Use your email and password.'), findsOneWidget);
     expect(find.text('Email address'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Forgot password?'), findsOneWidget);

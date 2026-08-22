@@ -8,6 +8,7 @@ import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../widgets/document_attachment_field.dart';
 
 class AddServiceRecordScreen extends StatefulWidget {
@@ -263,19 +264,12 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
           _reportDocument = prepared;
         }
       });
-    } on DocumentStorageException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The document could not be attached. Please try again.',
-          ),
-        ),
+        error,
+        fallback: 'The document could not be attached. Please try again.',
       );
     } finally {
       if (mounted) {

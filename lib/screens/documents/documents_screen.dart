@@ -4,8 +4,8 @@ import 'package:open_filex/open_filex.dart';
 import '../../models/appliance.dart';
 import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
-import '../../services/cloud_document_storage_service.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/stored_document_tile.dart';
@@ -53,18 +53,15 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         availableDocument = await AppScope.read(
           context,
         ).downloadDocument(applianceId, document.id);
-      } on CloudDocumentStorageException catch (error) {
+      } catch (error) {
         messenger.hideCurrentSnackBar();
         if (!context.mounted) return;
-        messenger.showSnackBar(SnackBar(content: Text(error.message)));
-        return;
-      } catch (_) {
-        messenger.hideCurrentSnackBar();
-        if (!context.mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('The document could not be prepared right now.'),
-          ),
+        showHomeVaultError(
+          context,
+          error,
+          fallback: 'The document could not be prepared right now.',
+          actionLabel: 'Retry',
+          onAction: () => _openDocument(context, applianceId, document),
         );
         return;
       }
@@ -74,12 +71,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
     try {
       await OpenFilex.open(availableDocument.localPath);
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The document could not be opened on this device.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be opened on this device.',
       );
     }
   }
@@ -113,15 +110,17 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.document.displayTitle} was saved.')),
       );
-    } catch (_) {
+    } catch (error) {
       try {
         await DocumentStorageService().deleteStoredDocument(result.document);
       } catch (_) {
         // Preserve the original save error if temporary-file cleanup fails.
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The document could not be saved.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be saved. Please try again.',
       );
     }
   }
@@ -159,7 +158,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.document.displayTitle} was updated.')),
       );
-    } catch (_) {
+    } catch (error) {
       if (result.replacedFile) {
         try {
           await DocumentStorageService().deleteStoredDocument(result.document);
@@ -168,8 +167,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         }
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The document could not be updated.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be updated. Please try again.',
       );
     }
   }
@@ -213,10 +214,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Document deleted.')));
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The document could not be deleted.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be deleted. Please try again.',
       );
     }
   }

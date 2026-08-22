@@ -32,7 +32,7 @@ String _googleSignInMessage(GoogleSignInExceptionCode code, String fallback) {
       'Google sign-in was interrupted. Please try again.',
     GoogleSignInExceptionCode.clientConfigurationError ||
     GoogleSignInExceptionCode.providerConfigurationError =>
-      'Google sign-in is not fully configured for this app.',
+      'Google sign-in is temporarily unavailable. Please try again later.',
     GoogleSignInExceptionCode.uiUnavailable =>
       'Google sign-in could not open on this device.',
     _ => fallback,
@@ -53,8 +53,7 @@ String _authMessage(String code, String? details, String fallback) {
       'Too many attempts were made. Wait a little before trying again.',
     'network-request-failed' =>
       'A network error occurred. Check your internet connection.',
-    'operation-not-allowed' =>
-      'This sign-in method is not enabled in Firebase Authentication.',
+    'operation-not-allowed' => 'This sign-in method is currently unavailable.',
     'requires-recent-login' =>
       'For security, sign in again before completing this action.',
     'provider-already-linked' =>
@@ -75,15 +74,15 @@ String _authMessage(String code, String? details, String fallback) {
 String _firebaseMessage(String code, String? details, String fallback) {
   return switch (code) {
     'permission-denied' =>
-      'Permission was denied. Sign in again and check the Firebase security rules.',
+      'HomeVault does not have permission to access this data. Sign in again and try once more.',
     'failed-precondition' =>
-      'Firebase is not fully configured for this operation.',
+      'This feature is temporarily unavailable. Please try again later.',
     'unavailable' =>
-      'The Firebase service is temporarily unavailable. Try again shortly.',
+      'HomeVault cloud services are temporarily unavailable. Try again shortly.',
     'deadline-exceeded' =>
       'The request timed out. Check your connection and try again.',
     'resource-exhausted' =>
-      'The Firebase service limit was reached. Try again later.',
+      'HomeVault has reached a temporary cloud service limit. Try again later.',
     'unauthenticated' => 'Your session has expired. Sign in again.',
     'network-request-failed' =>
       'A network error occurred. Check your internet connection.',

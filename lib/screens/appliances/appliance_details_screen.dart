@@ -11,8 +11,8 @@ import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
 import '../../models/stored_document.dart';
 import '../../services/appliance_repository.dart';
-import '../../services/cloud_document_storage_service.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../services/support_action_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/service_record_tile.dart';
@@ -82,11 +82,13 @@ class ApplianceDetailsScreen extends StatelessWidget {
   ) async {
     try {
       await action();
-    } on SupportActionException catch (error) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+        error,
+        fallback: 'The support action could not be opened. Please try again.',
+      );
     }
   }
 
@@ -120,18 +122,15 @@ class ApplianceDetailsScreen extends StatelessWidget {
         availableDocument = await AppScope.read(
           context,
         ).downloadDocument(applianceId, document.id);
-      } on CloudDocumentStorageException catch (error) {
+      } catch (error) {
         messenger.hideCurrentSnackBar();
         if (!context.mounted) return;
-        messenger.showSnackBar(SnackBar(content: Text(error.message)));
-        return;
-      } catch (_) {
-        messenger.hideCurrentSnackBar();
-        if (!context.mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('The document could not be prepared right now.'),
-          ),
+        showHomeVaultError(
+          context,
+          error,
+          fallback: 'The document could not be prepared right now.',
+          actionLabel: 'Retry',
+          onAction: () => _openDocument(context, document),
         );
         return;
       }
@@ -141,12 +140,12 @@ class ApplianceDetailsScreen extends StatelessWidget {
 
     try {
       await OpenFilex.open(availableDocument.localPath);
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The document could not be opened on this device.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be opened on this device.',
       );
     }
   }
@@ -186,10 +185,8 @@ class ApplianceDetailsScreen extends StatelessWidget {
         }
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
+      showHomeVaultError(context, error);
+    } catch (error) {
       for (final document in result.documentsAdded) {
         try {
           await DocumentStorageService().deleteStoredDocument(document);
@@ -199,12 +196,10 @@ class ApplianceDetailsScreen extends StatelessWidget {
       }
 
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The changes could not be saved. Please check the device storage and try again.',
-          ),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The changes could not be saved. Please try again.',
       );
     }
   }
@@ -230,15 +225,17 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.document.displayTitle} was saved.')),
       );
-    } catch (_) {
+    } catch (error) {
       try {
         await DocumentStorageService().deleteStoredDocument(result.document);
       } catch (_) {
         // Preserve the original save error if cleanup also fails.
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The document could not be saved.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be saved. Please try again.',
       );
     }
   }
@@ -309,7 +306,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
           ),
         ),
       );
-    } catch (_) {
+    } catch (error) {
       for (final document in result.documentsAdded) {
         try {
           await DocumentStorageService().deleteStoredDocument(document);
@@ -318,8 +315,10 @@ class ApplianceDetailsScreen extends StatelessWidget {
         }
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The service record could not be saved.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The service record could not be saved. Please try again.',
       );
     }
   }
@@ -363,12 +362,12 @@ class ApplianceDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Service record deleted.')));
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The service record could not be deleted.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The service record could not be deleted. Please try again.',
       );
     }
   }
@@ -400,18 +399,14 @@ class ApplianceDetailsScreen extends StatelessWidget {
       await AppScope.read(context).delete(appliance.id);
     } on ApplianceConflictException catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      showHomeVaultError(context, error);
       return;
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The appliance could not be deleted. Please try again.',
-          ),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The appliance could not be deleted. Please try again.',
       );
       return;
     }
