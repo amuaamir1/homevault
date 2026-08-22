@@ -574,14 +574,12 @@ jobs:
             --stats-one-line
       
           echo "Google Drive upload completed."
-          {
-            echo ""
-            echo "### Google Drive"
-            echo "- Folder: \${GDRIVE_RELEASE_DIR}\"
-            echo "- APK: \${APK_NAME}\"
-            echo "- SHA-256: \${APK_NAME}.sha256.txt\"
-          } >> "$GITHUB_STEP_SUMMARY"
-           
+      
+          echo "Google Drive folder: ${GDRIVE_RELEASE_DIR}" >> "$GITHUB_STEP_SUMMARY"
+      
+          echo "APK: ${APK_NAME}" >> "$GITHUB_STEP_SUMMARY"
+      
+          echo "SHA-256: ${APK_NAME}.sha256.txt" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish GitHub prerelease
         shell: bash
         env:
