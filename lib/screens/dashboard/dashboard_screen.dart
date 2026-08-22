@@ -371,7 +371,7 @@ class _DashboardMetrics extends StatelessWidget {
       builder: (context, constraints) {
         if (constraints.maxWidth >= 340) {
           return SizedBox(
-            height: 88,
+            height: 94,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -389,7 +389,7 @@ class _DashboardMetrics extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: cards
-              .map((card) => SizedBox(width: width, height: 84, child: card))
+              .map((card) => SizedBox(width: width, height: 90, child: card))
               .toList(growable: false),
         );
       },
@@ -421,21 +421,21 @@ class _MetricCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 27,
+                height: 27,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(9),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: color, size: 17),
+                child: Icon(icon, color: color, size: 16),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
@@ -453,11 +453,11 @@ class _MetricCard extends StatelessWidget {
                     label,
                     maxLines: 2,
                     textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
+                    overflow: TextOverflow.visible,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
-                      height: 1.05,
+                      height: 1.0,
                     ),
                   ),
                 ),

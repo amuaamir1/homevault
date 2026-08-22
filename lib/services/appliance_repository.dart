@@ -40,6 +40,7 @@ abstract class ConflictProtectedApplianceRepository {
   Future<List<Appliance>> saveAppliancesProtected(
     List<Appliance> appliances, {
     bool forceOverwrite = false,
+    Set<String> authoritativeDeleteIds = const <String>{},
   });
 }
 

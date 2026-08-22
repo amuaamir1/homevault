@@ -452,10 +452,15 @@ class ApplianceStore extends ChangeNotifier {
   Future<List<Appliance>> _persistAppliances(
     List<Appliance> appliances, {
     bool forceOverwrite = false,
+    Set<String> authoritativeDeleteIds = const <String>{},
   }) async {
     if (_repository is ConflictProtectedApplianceRepository) {
       return (_repository as ConflictProtectedApplianceRepository)
-          .saveAppliancesProtected(appliances, forceOverwrite: forceOverwrite);
+          .saveAppliancesProtected(
+            appliances,
+            forceOverwrite: forceOverwrite,
+            authoritativeDeleteIds: authoritativeDeleteIds,
+          );
     }
 
     await _repository.saveAppliances(appliances);
@@ -1020,7 +1025,15 @@ class ApplianceStore extends ChangeNotifier {
       return;
     }
 
-    final persisted = await _persistAppliances(updated);
+    // A user-confirmed delete is authoritative for this appliance only.
+    // This allows Device B to delete the latest cloud revision even if Device A
+    // advanced the revision through normal background synchronization after
+    // Device B originally displayed the record. Other appliances retain normal
+    // conflict protection.
+    final persisted = await _persistAppliances(
+      updated,
+      authoritativeDeleteIds: {applianceId},
+    );
     _appliances = persisted;
     notifyListeners();
     await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);

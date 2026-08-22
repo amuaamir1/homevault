@@ -9,6 +9,7 @@ class _ConflictRepository
 
   List<Appliance> current;
   bool forceOverwriteSeen = false;
+  Set<String> authoritativeDeleteIdsSeen = const <String>{};
 
   @override
   Future<List<Appliance>> loadAppliances() async =>
@@ -23,8 +24,10 @@ class _ConflictRepository
   Future<List<Appliance>> saveAppliancesProtected(
     List<Appliance> appliances, {
     bool forceOverwrite = false,
+    Set<String> authoritativeDeleteIds = const <String>{},
   }) async {
     forceOverwriteSeen = forceOverwrite;
+    authoritativeDeleteIdsSeen = Set<String>.from(authoritativeDeleteIds);
     current = appliances
         .map(
           (item) => item.withCloudSyncMetadata(
@@ -86,6 +89,42 @@ void main() {
 
       expect(store.appliances.single.cloudRevision, 4);
       expect(store.appliances.single.cloudUpdatedByDevice, 'test-device');
+
+      store.dispose();
+    },
+  );
+
+  test(
+    'explicit appliance delete is authoritative for that appliance',
+    () async {
+      final repository = _ConflictRepository([
+        Appliance(
+          id: 'ac-1',
+          name: 'Bedroom AC',
+          category: 'Air Conditioner',
+          brand: 'LG',
+          cloudRevision: 3,
+          cloudUpdatedByDevice: 'device-a',
+          createdAt: DateTime(2026, 8, 8),
+        ),
+        Appliance(
+          id: 'tv-1',
+          name: 'Living room TV',
+          category: 'Television',
+          brand: 'Sony',
+          cloudRevision: 2,
+          cloudUpdatedByDevice: 'device-a',
+          createdAt: DateTime(2026, 8, 8),
+        ),
+      ]);
+      final store = ApplianceStore(repository: repository);
+      await store.initialize();
+
+      await store.delete('ac-1');
+
+      expect(repository.authoritativeDeleteIdsSeen, {'ac-1'});
+      expect(store.applianceById('ac-1'), isNull);
+      expect(store.applianceById('tv-1'), isNotNull);
 
       store.dispose();
     },

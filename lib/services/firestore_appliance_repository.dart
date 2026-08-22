@@ -368,6 +368,7 @@ class FirestoreApplianceRepository
   Future<List<Appliance>> saveAppliancesProtected(
     List<Appliance> appliances, {
     bool forceOverwrite = false,
+    Set<String> authoritativeDeleteIds = const <String>{},
   }) async {
     final ownerAtStart = _requiredOwnerUid;
 
@@ -504,7 +505,11 @@ class FirestoreApplianceRepository
                   (current.data()?['cloudRevision'] as num?)?.toInt() ?? 0;
               final expectedRevision = _lastCloudRevisions[id] ?? 0;
 
-              if (!forceOverwrite && currentRevision != expectedRevision) {
+              final authoritativeDelete = authoritativeDeleteIds.contains(id);
+
+              if (!forceOverwrite &&
+                  !authoritativeDelete &&
+                  currentRevision != expectedRevision) {
                 throw ApplianceConflictException(
                   applianceId: id,
                   message:
@@ -512,6 +517,9 @@ class FirestoreApplianceRepository
                 );
               }
 
+              // Explicit deletion wins over a newer revision of the same
+              // appliance. This is intentionally scoped to the confirmed ID;
+              // stale edits and unrelated appliance writes remain protected.
               transaction.delete(_appliancesCollection.doc(id));
             }
 

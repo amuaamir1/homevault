@@ -80,6 +80,71 @@ void main() {
     expect(find.text('1 feedback item'), findsOneWidget);
   });
 
+  testWidgets('dashboard defaults to open feedback', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _FakeFeedbackRepository(
+      admin: true,
+      items: [
+        _feedback(id: 'new-1'),
+        _feedback(id: 'resolved-1', status: FeedbackWorkflowStatus.resolved),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FeedbackDashboardScreen(
+          adminUid: 'admin-1',
+          repository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('feedback-status-open')), findsOneWidget);
+    expect(find.text('Showing 1 of 2'), findsOneWidget);
+  });
+
+  testWidgets('summary tiles filter feedback and sync the status field', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = _FakeFeedbackRepository(
+      admin: true,
+      items: [
+        _feedback(id: 'new-1'),
+        _feedback(id: 'review-1', status: FeedbackWorkflowStatus.inReview),
+        _feedback(id: 'resolved-1', status: FeedbackWorkflowStatus.resolved),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FeedbackDashboardScreen(
+          adminUid: 'admin-1',
+          repository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('feedback-summary-resolved')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('feedback-status-resolved')),
+      findsOneWidget,
+    );
+    expect(find.text('Showing 1 of 3'), findsOneWidget);
+  });
+
   testWidgets('empty dashboard has a clear empty state', (tester) async {
     final repository = _FakeFeedbackRepository(admin: true, items: const []);
 
