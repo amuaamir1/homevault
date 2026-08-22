@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../services/support_action_service.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
@@ -68,12 +69,13 @@ class _SupportScreenState extends State<SupportScreen> {
   ) async {
     try {
       await action();
-    } on SupportActionException catch (error) {
+    } catch (error) {
       if (!context.mounted) return;
-
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+        error,
+        fallback: 'The support action could not be opened. Please try again.',
+      );
     }
   }
 
@@ -172,7 +174,7 @@ class _SupportScreenState extends State<SupportScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.appliance.name} was updated.')),
       );
-    } catch (_) {
+    } catch (error) {
       for (final document in result.documentsAdded) {
         try {
           await DocumentStorageService().deleteStoredDocument(document);
@@ -182,11 +184,10 @@ class _SupportScreenState extends State<SupportScreen> {
       }
 
       if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The support details could not be saved.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The support details could not be saved. Please try again.',
       );
     }
   }

@@ -7,7 +7,6 @@ import 'auth/auth_scope.dart';
 import 'profile/profile_controller.dart';
 import 'profile/profile_scope.dart';
 import 'screens/auth/firebase_setup_required_screen.dart';
-import 'screens/auth/email_verification_screen.dart';
 import 'screens/auth/legacy_email_upgrade_screen.dart';
 import 'screens/auth/pin_login_screen.dart';
 import 'screens/auth/pin_setup_screen.dart';
@@ -245,10 +244,6 @@ class _AppGate extends StatelessWidget {
 
     if (auth.needsLegacyEmailUpgrade) {
       return const LegacyEmailUpgradeScreen();
-    }
-
-    if (!auth.isEmailVerified) {
-      return const EmailVerificationScreen();
     }
 
     final lockController = AppLockScope.of(context);

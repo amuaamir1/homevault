@@ -8,6 +8,7 @@ import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../services/support_action_service.dart';
 import '../../widgets/document_attachment_field.dart';
 
@@ -482,19 +483,12 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
           _warrantyDocument = selectedDocument;
         }
       });
-    } on DocumentStorageException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The document could not be attached. Please try again.',
-          ),
-        ),
+        error,
+        fallback: 'The document could not be attached. Please try again.',
       );
     } finally {
       if (mounted) {
@@ -524,17 +518,12 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
       _newDocuments[selectedDocument.localPath] = selectedDocument;
       setState(() => _appliancePhotoDocument = selectedDocument);
-    } on DocumentStorageException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The appliance photo could not be added.'),
-        ),
+        error,
+        fallback: 'The appliance photo could not be added. Please try again.',
       );
     } finally {
       if (mounted) setState(() => _isPickingPhoto = false);
@@ -557,17 +546,12 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
       _newDocuments[selectedDocument.localPath] = selectedDocument;
       setState(() => _extendedWarrantyDocument = selectedDocument);
-    } on DocumentStorageException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The extended warranty file could not be attached.'),
-        ),
+        error,
+        fallback: 'The extended warranty file could not be attached.',
       );
     } finally {
       if (mounted) setState(() => _isPickingExtendedWarranty = false);
@@ -590,17 +574,12 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
 
       _newDocuments[selectedDocument.localPath] = selectedDocument;
       setState(() => _amcDocument = selectedDocument);
-    } on DocumentStorageException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showHomeVaultError(
         context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The AMC contract could not be attached.'),
-        ),
+        error,
+        fallback: 'The AMC contract could not be attached.',
       );
     } finally {
       if (mounted) setState(() => _isPickingAmc = false);

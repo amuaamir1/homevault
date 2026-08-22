@@ -107,6 +107,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _checkEmailVerification() async {
+    final auth = AuthScope.read(context);
+    final verified = await auth.refreshEmailVerification();
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          verified
+              ? 'Email verified successfully.'
+              : auth.errorMessage ??
+                    'Email verification is still pending. Check your inbox and try again.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _resendEmailVerification() async {
+    final auth = AuthScope.read(context);
+    final sent = await auth.resendVerificationEmail();
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          sent
+              ? 'A new verification email was sent.'
+              : auth.errorMessage ??
+                    'The verification email could not be sent. Please try again.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildEmailVerificationStatus(AuthController auth) {
+    final scheme = Theme.of(context).colorScheme;
+    final verified = auth.isEmailVerified;
+
+    return Container(
+      key: const ValueKey('profileEmailVerificationStatus'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: verified ? scheme.primaryContainer : scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            verified
+                ? Icons.verified_outlined
+                : Icons.mark_email_unread_outlined,
+            color: verified
+                ? scheme.onPrimaryContainer
+                : scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  verified ? 'Email verified' : 'Verification pending',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: verified
+                        ? scheme.onPrimaryContainer
+                        : scheme.onTertiaryContainer,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  verified
+                      ? 'Your email address has been verified.'
+                      : 'Verify your email address to keep your account status up to date. '
+                            'You can continue using HomeVault while verification is pending.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: verified
+                        ? scheme.onPrimaryContainer
+                        : scheme.onTertiaryContainer,
+                  ),
+                ),
+                if (!verified) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      FilledButton.tonalIcon(
+                        key: const ValueKey(
+                          'profileCheckEmailVerificationButton',
+                        ),
+                        onPressed: auth.isBusy ? null : _checkEmailVerification,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text("I've verified"),
+                      ),
+                      TextButton.icon(
+                        key: const ValueKey(
+                          'profileResendEmailVerificationButton',
+                        ),
+                        onPressed: auth.isBusy
+                            ? null
+                            : _resendEmailVerification,
+                        icon: const Icon(Icons.send_outlined, size: 18),
+                        label: const Text('Resend verification email'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String? _requiredText(String? value, String label) {
     if ((value ?? '').trim().isEmpty) return '$label is required.';
     return null;
@@ -134,6 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profileController = ProfileScope.of(context);
+    final auth = AuthScope.of(context);
     final title = widget.isInitialSetup ? 'Create your profile' : 'My profile';
 
     final body = Form(
@@ -177,11 +301,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextFormField(
             controller: _emailController,
             readOnly: true,
-            decoration: const InputDecoration(
-              labelText: 'Verified email address',
-              prefixIcon: Icon(Icons.verified_outlined),
+            decoration: InputDecoration(
+              labelText: 'Email address',
+              prefixIcon: const Icon(Icons.email_outlined),
+              suffixIcon: Tooltip(
+                message: auth.isEmailVerified
+                    ? 'Email verified'
+                    : 'Verification pending',
+                child: Icon(
+                  auth.isEmailVerified
+                      ? Icons.verified_outlined
+                      : Icons.pending_outlined,
+                ),
+              ),
             ),
           ),
+          const SizedBox(height: 10),
+          _buildEmailVerificationStatus(auth),
           const SizedBox(height: 14),
           TextFormField(
             key: const Key('profileMobileNumberField'),

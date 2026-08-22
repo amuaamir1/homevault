@@ -21,7 +21,11 @@ Future<ApplianceStore> _createStore({
   return store;
 }
 
-Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
+Future<void> _pumpHomeVault(
+  WidgetTester tester,
+  ApplianceStore store, {
+  bool isEmailVerified = true,
+}) async {
   const testUid = 'test-user';
 
   // Bind the test database before building the app so the startup gate
@@ -33,6 +37,7 @@ Future<void> _pumpHomeVault(WidgetTester tester, ApplianceStore store) async {
   final authController = AuthController.authenticatedForTesting(
     uid: testUid,
     phoneNumber: '+919876543210',
+    isEmailVerified: isEmailVerified,
   );
 
   final profileController = ProfileController.loadedForTesting(
@@ -100,6 +105,19 @@ void main() {
       find.descendant(of: navigationBar, matching: find.text('Documents')),
       findsNothing,
     );
+  });
+
+  testWidgets('unverified email user can continue into HomeVault', (
+    tester,
+  ) async {
+    final store = await _createStore();
+    addTearDown(store.dispose);
+
+    await _pumpHomeVault(tester, store, isEmailVerified: false);
+
+    expect(find.text('HomeVault'), findsOneWidget);
+    expect(find.text('Welcome Aamir'), findsOneWidget);
+    expect(find.text('Verify your email'), findsNothing);
   });
 
   testWidgets('user can open the add appliance form', (tester) async {

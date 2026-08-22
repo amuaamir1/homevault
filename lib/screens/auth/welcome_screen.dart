@@ -237,7 +237,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Use your verified email and password.',
+            'Use your email and password.',
             style: Theme.of(
               context,
             ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
@@ -385,7 +385,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'A verification link will be sent to your email before HomeVault setup continues. Check Spam if it does not appear in your inbox.',
+            'We will send a verification link to your email. You can continue using HomeVault and verify your address later from My profile.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),

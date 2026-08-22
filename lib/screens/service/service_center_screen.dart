@@ -4,6 +4,7 @@ import '../../models/appliance.dart';
 import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
 import '../../services/document_storage_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/service_record_tile.dart';
@@ -296,7 +297,7 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
           ),
         ),
       );
-    } catch (_) {
+    } catch (error) {
       for (final document in result.documentsAdded) {
         try {
           await DocumentStorageService().deleteStoredDocument(document);
@@ -305,12 +306,10 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
         }
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The service record could not be saved. Please try again.',
-          ),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The service record could not be saved. Please try again.',
       );
     }
   }
@@ -352,12 +351,12 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Service record deleted.')));
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The service record could not be deleted.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The service record could not be deleted. Please try again.',
       );
     }
   }

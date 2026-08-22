@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/admin_feedback.dart';
 import '../../models/beta_feedback.dart';
 import '../../services/feedback_admin_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import 'feedback_detail_screen.dart';
 
 class FeedbackDashboardScreen extends StatefulWidget {
@@ -271,10 +272,14 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
         adminUid: widget.adminUid,
         status: status,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Feedback could not be updated.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'Feedback could not be updated. Please try again.',
+        actionLabel: 'Retry',
+        onAction: () => _quickStatus(item, status),
       );
     }
   }

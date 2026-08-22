@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_scope.dart';
 import '../../security/app_lock_scope.dart';
 import '../../services/account_deletion_service.dart';
+import '../../services/homevault_error_message.dart';
 
 class AccountDeletionScreen extends StatefulWidget {
   const AccountDeletionScreen({super.key});
@@ -109,18 +110,15 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
             'The HomeVault data was removed, but the sign-in account could '
                 'not be deleted. Verify your account again and retry.';
       });
-    } on AccountDeletionException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _isDeleting = false;
-        _errorMessage = error.message;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isDeleting = false;
-        _errorMessage =
-            'HomeVault could not finish deleting the account. Please retry.';
+        _errorMessage = friendlyHomeVaultError(
+          error,
+          fallback:
+              'HomeVault could not finish deleting the account. Please retry.',
+        );
       });
     }
   }

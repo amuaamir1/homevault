@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/admin_feedback.dart';
 import '../../models/beta_feedback.dart';
 import '../../services/feedback_admin_service.dart';
+import '../../services/homevault_error_presenter.dart';
 
 class FeedbackDetailScreen extends StatefulWidget {
   const FeedbackDetailScreen({
@@ -58,10 +59,14 @@ class _FeedbackDetailScreenState extends State<FeedbackDetailScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Feedback updated.')));
       Navigator.of(context).pop();
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Feedback could not be updated.')),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'Feedback could not be updated. Please try again.',
+        actionLabel: 'Retry',
+        onAction: _save,
       );
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -175,7 +175,22 @@ class AuthController extends ChangeNotifier {
           email: normalizedEmail,
           password: password,
         );
-        _statusMessage = 'Verification email sent to ${_user!.email}.';
+
+        try {
+          await _service.resendVerificationEmail();
+          _statusMessage =
+              'Account created. A verification email was sent to ${_user!.email}. '
+              'You can continue and verify it from your profile.';
+        } catch (error, stack) {
+          _statusMessage =
+              'Account created. Email verification is pending. '
+              'You can continue and resend the verification email from your profile.';
+          await CrashReportingService.recordNonFatal(
+            error,
+            stack,
+            reason: 'Sending the initial email verification after registration',
+          );
+        }
       },
     );
   }
@@ -239,7 +254,8 @@ class AuthController extends ChangeNotifier {
           _statusMessage = 'Email verified successfully.';
         } else {
           _errorMessage =
-              'The email is not verified yet. Open the link and try again.';
+              'Email verification is still pending. Open the verification link '
+              'from your inbox, then check again.';
         }
       },
       successWhen: () => _user?.isEmailVerified == true,

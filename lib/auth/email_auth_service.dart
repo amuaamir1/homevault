@@ -103,22 +103,6 @@ class FirebaseEmailAuthService
       throw StateError('Firebase did not return the newly created user.');
     }
 
-    try {
-      await user.sendEmailVerification();
-
-      debugPrint(
-        'HOMEVAULT_AUTH: Initial verification email request completed '
-        'for ${user.email}',
-      );
-    } on FirebaseAuthException catch (error, stackTrace) {
-      debugPrint(
-        'HOMEVAULT_AUTH: Initial verification email failed. '
-        'code=${error.code}, message=${error.message}',
-      );
-      debugPrintStack(stackTrace: stackTrace);
-      rethrow;
-    }
-
     return _mapRequiredUser(user);
   }
 

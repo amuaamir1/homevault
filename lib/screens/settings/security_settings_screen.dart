@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/auto_lock_preference_service.dart';
 import '../../security/pin_security_service.dart';
+import '../../services/homevault_error_presenter.dart';
 import '../auth/reset_pin_with_password_screen.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
@@ -217,13 +218,13 @@ class _CreatePinDialogState extends State<_CreatePinDialog> {
         _isSaving = false;
         _pinError = error.message;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The PIN could not be saved. Please try again.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The PIN could not be saved. Please try again.',
       );
     }
   }
@@ -329,13 +330,13 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
         _isSaving = false;
         _newPinError = error.message;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The PIN could not be changed. Please try again.'),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The PIN could not be changed. Please try again.',
       );
     }
   }

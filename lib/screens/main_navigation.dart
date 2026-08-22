@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/app_section.dart';
 import '../models/appliance_form_result.dart';
 import '../services/document_storage_service.dart';
+import '../services/homevault_error_presenter.dart';
 import '../services/warranty_notification_service.dart';
 import '../state/app_scope.dart';
 import 'appliances/add_appliance_screen.dart';
@@ -116,7 +117,7 @@ class _MainNavigationState extends State<MainNavigation> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${result.appliance.name} was saved.')),
       );
-    } catch (_) {
+    } catch (error) {
       try {
         await DocumentStorageService().deleteApplianceDocuments(
           result.appliance.id,
@@ -128,12 +129,10 @@ class _MainNavigationState extends State<MainNavigation> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The appliance could not be saved. Please check the device storage and try again.',
-          ),
-        ),
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The appliance could not be saved. Please try again.',
       );
     }
   }
