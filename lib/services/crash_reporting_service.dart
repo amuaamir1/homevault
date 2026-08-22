@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'homevault_error_telemetry.dart';
+
 class CrashReportingService {
   const CrashReportingService._();
 
@@ -56,15 +58,24 @@ class CrashReportingService {
   static Future<void> recordNonFatal(
     Object error,
     StackTrace stack, {
+    String? operation,
     String? reason,
+    Map<String, Object?> context = const <String, Object?>{},
   }) async {
     if (!_isReady) return;
 
+    final telemetry = HomeVaultErrorTelemetry.fromError(
+      error,
+      operation: operation ?? reason ?? 'Unspecified HomeVault operation',
+      context: context,
+    );
+
+    await FirebaseCrashlytics.instance.log(telemetry.logLine);
     await FirebaseCrashlytics.instance.recordError(
       error,
       stack,
       fatal: false,
-      reason: reason,
+      reason: telemetry.crashReason,
     );
   }
 

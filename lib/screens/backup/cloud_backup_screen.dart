@@ -486,8 +486,8 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                       leading: Icon(Icons.security_outlined),
                       title: Text('Account-isolated storage'),
                       subtitle: Text(
-                        'Cloud backups are stored under your Firebase user ID '
-                        'and can only be accessed by that signed-in account. '
+                        'Cloud backups are isolated to your signed-in HomeVault '
+                        'account and cannot be accessed by another account. '
                         'They are not end-to-end encrypted.',
                       ),
                     ),

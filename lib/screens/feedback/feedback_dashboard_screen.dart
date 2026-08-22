@@ -834,7 +834,7 @@ class _FeedbackLoadError extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(24),
         child: Text(
-          'Feedback could not be loaded. Check the Firestore rules and admin access.',
+          'Feedback could not be loaded. Check your connection and administrator access.',
           textAlign: TextAlign.center,
         ),
       ),
