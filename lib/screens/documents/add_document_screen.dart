@@ -14,11 +14,13 @@ class AddDocumentScreen extends StatefulWidget {
     super.key,
     required this.appliances,
     this.initialApplianceId,
+    this.initialType,
     this.document,
   });
 
   final List<Appliance> appliances;
   final String? initialApplianceId;
+  final DocumentType? initialType;
   final StoredDocument? document;
 
   @override
@@ -50,7 +52,8 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
         : widget.appliances.first.id;
 
     final existingDocument = widget.document;
-    _type = existingDocument?.type ?? DocumentType.userManual;
+    _type =
+        existingDocument?.type ?? widget.initialType ?? DocumentType.userManual;
     _document = existingDocument;
     _titleController = TextEditingController(
       text: existingDocument?.displayTitle ?? _type.label,
