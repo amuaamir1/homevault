@@ -199,9 +199,12 @@ void main() {
     expect(find.text('Add document'), findsOneWidget);
   });
 
-  testWidgets('support directory groups and expands support details', (
+  testWidgets('provider directory exposes manufacturer and support contacts', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final appliance = Appliance(
       id: 'ac-support-1',
       name: 'Bedroom AC',
@@ -226,27 +229,39 @@ void main() {
     await tester.tap(supportDestination);
     await tester.pumpAndSettle();
 
-    expect(find.text('Air Conditioner'), findsOneWidget);
-    expect(find.text('1 appliance'), findsOneWidget);
-    expect(find.text('Bedroom AC'), findsNothing);
-    expect(find.text('Call'), findsNothing);
-    expect(find.text('Sunday to Thursday'), findsNothing);
-
-    await tester.tap(find.text('Air Conditioner'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Bedroom AC'), findsOneWidget);
+    expect(find.text('Provider directory'), findsOneWidget);
+    expect(find.text('Daikin'), findsOneWidget);
     expect(find.text('Daikin Care'), findsOneWidget);
-    expect(find.text('Call'), findsNothing);
-    expect(find.text('Sunday to Thursday'), findsNothing);
+    expect(find.textContaining('Manufacturer'), findsWidgets);
 
-    await tester.tap(find.text('Bedroom AC'));
+    await tester.tap(find.text('Daikin Care'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Call'), findsOneWidget);
-    expect(find.text('Email'), findsWidgets);
-    expect(find.text('Website'), findsWidgets);
+    expect(find.text('Provider details'), findsOneWidget);
+    expect(find.text('Customer support'), findsOneWidget);
+    expect(find.text('Bedroom AC'), findsOneWidget);
     expect(find.text('Sunday to Thursday'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Call'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Email'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Website'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('warranty center shows warranty status and reminders', (
