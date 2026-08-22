@@ -80,7 +80,8 @@ class _CloudBackupStartupCoordinatorState
 
     final cloudReady =
         store.cloudSyncStatus.state == CloudSyncState.synced &&
-        !store.cloudSyncStatus.hasPendingWrites;
+        !store.cloudSyncStatus.hasPendingWrites &&
+        !store.hasPendingCloudDocumentWork;
 
     if (_retryPendingBackupWhenCloudReady &&
         cloudReady &&
@@ -128,7 +129,9 @@ class _CloudBackupStartupCoordinatorState
   Future<void> _runDailyAutomaticBackup(String uid) async {
     try {
       final store = AppScope.read(context);
-      await store.retryCloudDocumentSync().timeout(const Duration(minutes: 2));
+      await store.ensureCloudDocumentSyncComplete().timeout(
+        const Duration(minutes: 2),
+      );
       if (!mounted || AuthScope.read(context).user?.uid != uid) return;
 
       final service = _service ??= CloudBackupService();
@@ -175,7 +178,9 @@ class _CloudBackupStartupCoordinatorState
 
       // Let pending invoice/photo/warranty/service attachments reach cloud
       // storage before building the full backup ZIP.
-      await store.retryCloudDocumentSync().timeout(const Duration(minutes: 2));
+      await store.ensureCloudDocumentSyncComplete().timeout(
+        const Duration(minutes: 2),
+      );
 
       if (!mounted || AuthScope.read(context).user?.uid != uid) return;
 
@@ -211,7 +216,8 @@ class _CloudBackupStartupCoordinatorState
           latestStore != null &&
           (latestStore.cloudSyncStatus.state == CloudSyncState.offline ||
               latestStore.cloudSyncStatus.state == CloudSyncState.connecting ||
-              latestStore.cloudSyncStatus.hasPendingWrites);
+              latestStore.cloudSyncStatus.hasPendingWrites ||
+              latestStore.hasPendingCloudDocumentWork);
 
       if (waitingForCloud) {
         // Keep this revision pending. When structured sync confirms that the
