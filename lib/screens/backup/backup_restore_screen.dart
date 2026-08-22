@@ -7,6 +7,7 @@ import '../../models/appliance.dart';
 import '../../models/backup_models.dart';
 import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
+import '../../services/homevault_error_message.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
 import 'cloud_backup_screen.dart';
@@ -366,9 +367,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   void _showError(Object error) {
-    final message = error is BackupFormatException
-        ? error.message
-        : 'The operation could not be completed. Please try again.';
+    final message = friendlyHomeVaultError(
+      error,
+      fallback: 'The backup operation could not be completed. Try again.',
+    );
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));

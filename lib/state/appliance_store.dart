@@ -12,6 +12,7 @@ import '../services/cloud_document_storage_service.dart';
 import '../services/cloud_document_sync_journal.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/document_storage_service.dart';
+import '../services/homevault_error_message.dart';
 import '../services/warranty_notification_service.dart';
 
 class ApplianceStore extends ChangeNotifier {
@@ -352,7 +353,10 @@ class ApplianceStore extends ChangeNotifier {
       await _startRepositoryWatch();
       unawaited(retryCloudDocumentSync());
     } catch (error, stack) {
-      _loadError = error.toString();
+      _loadError = friendlyHomeVaultError(
+        error,
+        fallback: 'HomeVault could not load your saved appliances. Try again.',
+      );
       _isInitialized = false;
       await CrashReportingService.recordNonFatal(
         error,
