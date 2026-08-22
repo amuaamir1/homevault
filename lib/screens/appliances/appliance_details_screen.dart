@@ -8,18 +8,23 @@ import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/document_form_result.dart';
 import '../../models/service_form_result.dart';
+import '../../models/service_request_form_result.dart';
 import '../../models/service_record.dart';
+import '../../models/service_request.dart';
 import '../../models/stored_document.dart';
 import '../../services/appliance_repository.dart';
 import '../../services/document_storage_service.dart';
 import '../../services/homevault_error_presenter.dart';
 import '../../services/support_action_service.dart';
+import '../../profile/profile_scope.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/service_record_tile.dart';
 import '../../widgets/stored_document_tile.dart';
 import '../../widgets/warranty_status_chip.dart';
 import '../documents/add_document_screen.dart';
 import '../service/add_service_record_screen.dart';
+import '../service/add_service_request_screen.dart';
+import '../service/service_request_details_screen.dart';
 import 'add_appliance_screen.dart';
 
 class ApplianceDetailsScreen extends StatelessWidget {
@@ -238,6 +243,53 @@ class ApplianceDetailsScreen extends StatelessWidget {
         fallback: 'The document could not be saved. Please try again.',
       );
     }
+  }
+
+  Future<void> _requestService(
+    BuildContext context,
+    Appliance appliance,
+  ) async {
+    final store = AppScope.read(context);
+    final result = await Navigator.of(context).push<ServiceRequestFormResult>(
+      MaterialPageRoute(
+        builder: (context) => AddServiceRequestScreen(
+          appliances: store.appliances.toList(growable: false),
+          initialApplianceId: appliance.id,
+          initialProfile: ProfileScope.of(context).profile,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+
+    try {
+      await store.addServiceRequest(result.applianceId, result.request);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Service request saved.')));
+    } catch (error) {
+      if (!context.mounted) return;
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The service request could not be saved. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _openServiceRequest(
+    BuildContext context,
+    Appliance appliance,
+    String requestId,
+  ) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => ServiceRequestDetailsScreen(
+          applianceId: appliance.id,
+          requestId: requestId,
+        ),
+      ),
+    );
   }
 
   Future<void> _addServiceRecord(
@@ -501,9 +553,10 @@ class ApplianceDetailsScreen extends StatelessWidget {
         title: const Text('Appliance details'),
         actions: [
           IconButton(
-            tooltip: 'Add service record',
-            onPressed: () => _addServiceRecord(context, appliance),
-            icon: const Icon(Icons.build_circle_outlined),
+            key: const Key('requestServiceFromApplianceButton'),
+            tooltip: 'Request service',
+            onPressed: () => _requestService(context, appliance),
+            icon: const Icon(Icons.calendar_month_outlined),
           ),
           IconButton(
             tooltip: 'Add document',
@@ -785,7 +838,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'}',
+                          '${appliance.serviceRecordCount} record${appliance.serviceRecordCount == 1 ? '' : 's'} • ${appliance.activeServiceRequestCount} active request${appliance.activeServiceRequestCount == 1 ? '' : 's'}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
@@ -798,14 +851,57 @@ class ApplianceDetailsScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    key: const Key('requestServiceButton'),
+                    onPressed: () => _requestService(context, appliance),
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: const Text('Request service'),
+                  ),
                   TextButton.icon(
                     onPressed: () => _addServiceRecord(context, appliance),
                     icon: const Icon(Icons.add),
-                    label: const Text('Add service'),
+                    label: const Text('Add service record'),
                   ),
                 ],
               ),
+              if (appliance.serviceRequests.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                const Divider(),
+                Text(
+                  'Service requests',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                ...([
+                  ...appliance.serviceRequests,
+                ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt))).map(
+                  (request) => ListTile(
+                    key: ValueKey('applianceServiceRequest-${request.id}'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.pending_actions_outlined),
+                    title: Text(
+                      request.issueDescription,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${_date(request.preferredDate)} • ${request.status.label}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () =>
+                        _openServiceRequest(context, appliance, request.id),
+                  ),
+                ),
+              ],
               if (appliance.lastServiceDate != null)
                 _DetailRow(
                   label: 'Last serviced',

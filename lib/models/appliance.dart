@@ -1,4 +1,5 @@
 import 'service_record.dart';
+import 'service_request.dart';
 import 'stored_document.dart';
 
 enum WarrantyStatus { active, expiringSoon, expired, notProvided }
@@ -88,11 +89,13 @@ class Appliance {
     this.warrantyDocument,
     List<StoredDocument> additionalDocuments = const [],
     List<ServiceRecord> serviceRecords = const [],
+    List<ServiceRequest> serviceRequests = const [],
     this.notes = '',
     this.cloudRevision = 0,
     this.cloudUpdatedByDevice = '',
   }) : additionalDocuments = List.unmodifiable(additionalDocuments),
-       serviceRecords = List.unmodifiable(serviceRecords);
+       serviceRecords = List.unmodifiable(serviceRecords),
+       serviceRequests = List.unmodifiable(serviceRequests);
 
   factory Appliance.fromJson(Map<String, dynamic> json) {
     final appliancePhotoDocument = _upgradeLegacyDocument(
@@ -122,6 +125,7 @@ class Appliance {
     );
     final additionalJson = json['additionalDocuments'];
     final serviceJson = json['serviceRecords'];
+    final serviceRequestJson = json['serviceRequests'];
 
     return Appliance(
       id: json['id'] as String? ?? '',
@@ -203,6 +207,16 @@ class Appliance {
                 .where((record) => record.id.isNotEmpty)
                 .toList(growable: false)
           : const [],
+      serviceRequests: serviceRequestJson is List
+          ? serviceRequestJson
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      ServiceRequest.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .where((request) => request.id.isNotEmpty)
+                .toList(growable: false)
+          : const [],
       notes: json['notes'] as String? ?? '',
       cloudRevision: (json['cloudRevision'] as num?)?.toInt() ?? 0,
       cloudUpdatedByDevice: json['cloudUpdatedByDevice'] as String? ?? '',
@@ -260,6 +274,7 @@ class Appliance {
   final StoredDocument? warrantyDocument;
   final List<StoredDocument> additionalDocuments;
   final List<ServiceRecord> serviceRecords;
+  final List<ServiceRequest> serviceRequests;
   final String notes;
   final int cloudRevision;
   final String cloudUpdatedByDevice;
@@ -283,6 +298,18 @@ class Appliance {
   int get documentCount => allDocuments.length;
 
   int get serviceRecordCount => serviceRecords.length;
+
+  int get serviceRequestCount => serviceRequests.length;
+
+  int get activeServiceRequestCount =>
+      serviceRequests.where((request) => request.isActive).length;
+
+  ServiceRequest? serviceRequestById(String requestId) {
+    for (final request in serviceRequests) {
+      if (request.id == requestId) return request;
+    }
+    return null;
+  }
 
   double get totalServiceCost => serviceRecords.fold<double>(
     0,
@@ -481,6 +508,29 @@ class Appliance {
     );
   }
 
+  Appliance withServiceRequest(ServiceRequest request) {
+    return _rebuild(serviceRequests: [...serviceRequests, request]);
+  }
+
+  Appliance replaceServiceRequest(ServiceRequest request) {
+    final index = serviceRequests.indexWhere((item) => item.id == request.id);
+    if (index == -1) {
+      throw StateError('The service request could not be found.');
+    }
+
+    final updated = [...serviceRequests];
+    updated[index] = request;
+    return _rebuild(serviceRequests: updated);
+  }
+
+  Appliance withoutServiceRequest(String requestId) {
+    return _rebuild(
+      serviceRequests: serviceRequests
+          .where((request) => request.id != requestId)
+          .toList(growable: false),
+    );
+  }
+
   Appliance withAdditionalDocument(StoredDocument document) {
     return _rebuild(additionalDocuments: [...additionalDocuments, document]);
   }
@@ -587,6 +637,7 @@ class Appliance {
     bool setAmcDocument = false,
     List<StoredDocument>? additionalDocuments,
     List<ServiceRecord>? serviceRecords,
+    List<ServiceRequest>? serviceRequests,
     int? cloudRevision,
     String? cloudUpdatedByDevice,
   }) {
@@ -647,6 +698,7 @@ class Appliance {
           : this.warrantyDocument,
       additionalDocuments: additionalDocuments ?? this.additionalDocuments,
       serviceRecords: serviceRecords ?? this.serviceRecords,
+      serviceRequests: serviceRequests ?? this.serviceRequests,
       notes: notes,
       cloudRevision: cloudRevision ?? this.cloudRevision,
       cloudUpdatedByDevice: cloudUpdatedByDevice ?? this.cloudUpdatedByDevice,
@@ -718,6 +770,9 @@ class Appliance {
           .toList(),
       'serviceRecords': serviceRecords
           .map((record) => record.toJson())
+          .toList(),
+      'serviceRequests': serviceRequests
+          .map((request) => request.toJson())
           .toList(),
       'notes': notes,
       'cloudRevision': cloudRevision,

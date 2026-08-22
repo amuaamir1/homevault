@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/appliance.dart';
 import '../models/cloud_sync_status.dart';
 import '../models/service_record.dart';
+import '../models/service_request.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
 import '../services/cloud_document_storage_service.dart';
@@ -98,6 +99,16 @@ class ApplianceStore extends ChangeNotifier {
   int get totalServiceRecordCount => _appliances.fold<int>(
     0,
     (total, appliance) => total + appliance.serviceRecordCount,
+  );
+
+  int get totalServiceRequestCount => _appliances.fold<int>(
+    0,
+    (total, appliance) => total + appliance.serviceRequestCount,
+  );
+
+  int get activeServiceRequestCount => _appliances.fold<int>(
+    0,
+    (total, appliance) => total + appliance.activeServiceRequestCount,
   );
 
   double get totalServiceCost => _appliances.fold<double>(
@@ -1047,6 +1058,39 @@ class ApplianceStore extends ChangeNotifier {
       throw StateError('The appliance could not be found.');
     }
     await update(appliance.withoutServiceRecord(recordId));
+  }
+
+  Future<void> addServiceRequest(
+    String applianceId,
+    ServiceRequest request,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.withServiceRequest(request));
+  }
+
+  Future<void> updateServiceRequest(
+    String applianceId,
+    ServiceRequest request,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.replaceServiceRequest(request));
+  }
+
+  Future<void> removeServiceRequest(
+    String applianceId,
+    String requestId,
+  ) async {
+    final appliance = applianceById(applianceId);
+    if (appliance == null) {
+      throw StateError('The appliance could not be found.');
+    }
+    await update(appliance.withoutServiceRequest(requestId));
   }
 
   Future<void> addDocument(String applianceId, StoredDocument document) async {

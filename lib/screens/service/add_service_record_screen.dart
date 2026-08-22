@@ -17,11 +17,21 @@ class AddServiceRecordScreen extends StatefulWidget {
     required this.appliances,
     this.initialApplianceId,
     this.record,
+    this.initialServiceDate,
+    this.initialProvider = '',
+    this.initialTechnicianName = '',
+    this.initialTicketNumber = '',
+    this.initialProblemDescription = '',
   });
 
   final List<Appliance> appliances;
   final String? initialApplianceId;
   final ServiceRecord? record;
+  final DateTime? initialServiceDate;
+  final String initialProvider;
+  final String initialTechnicianName;
+  final String initialTicketNumber;
+  final String initialProblemDescription;
 
   @override
   State<AddServiceRecordScreen> createState() => _AddServiceRecordScreenState();
@@ -71,7 +81,8 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
     _applianceId = widget.appliances.any((item) => item.id == requestedId)
         ? requestedId!
         : widget.appliances.first.id;
-    _serviceDate = record?.serviceDate ?? DateTime.now();
+    _serviceDate =
+        record?.serviceDate ?? widget.initialServiceDate ?? DateTime.now();
     _nextServiceDate = record?.nextServiceDate;
     _serviceIntervalUnit =
         record?.serviceIntervalUnit ?? ServiceIntervalUnit.months;
@@ -89,13 +100,17 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
       if (record?.reportDocument != null) record!.reportDocument!.localPath,
     };
 
-    _providerController = TextEditingController(text: record?.provider ?? '');
-    _technicianController = TextEditingController(
-      text: record?.technicianName ?? '',
+    _providerController = TextEditingController(
+      text: record?.provider ?? widget.initialProvider,
     );
-    _ticketController = TextEditingController(text: record?.ticketNumber ?? '');
+    _technicianController = TextEditingController(
+      text: record?.technicianName ?? widget.initialTechnicianName,
+    );
+    _ticketController = TextEditingController(
+      text: record?.ticketNumber ?? widget.initialTicketNumber,
+    );
     _problemController = TextEditingController(
-      text: record?.problemDescription ?? '',
+      text: record?.problemDescription ?? widget.initialProblemDescription,
     );
     _workController = TextEditingController(text: record?.workCompleted ?? '');
     _partsController = TextEditingController(text: record?.partsReplaced ?? '');

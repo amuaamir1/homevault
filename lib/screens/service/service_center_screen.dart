@@ -9,6 +9,7 @@ import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/service_record_tile.dart';
 import 'add_service_record_screen.dart';
+import 'service_requests_screen.dart';
 
 enum ServiceFilter { all, open, scheduled, dueSoon, completed, cancelled }
 
@@ -224,6 +225,12 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
     return 3;
   }
 
+  Future<void> _openServiceRequests(BuildContext context) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (context) => const ServiceRequestsScreen()),
+    );
+  }
+
   Future<void> _showAllRecords() async {
     _searchController.clear();
     if (!mounted) return;
@@ -372,6 +379,12 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
       appBar: AppBar(
         title: const Text('Service center'),
         actions: [
+          IconButton(
+            key: const Key('serviceRequestsAppBarButton'),
+            tooltip: 'Service requests',
+            onPressed: () => _openServiceRequests(context),
+            icon: const Icon(Icons.calendar_month_outlined),
+          ),
           PopupMenuButton<ServiceSort>(
             tooltip: 'Sort service history',
             initialValue: _sort,
@@ -423,6 +436,22 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  key: const Key('serviceRequestsCard'),
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.calendar_month_outlined),
+                    title: const Text('Service requests'),
+                    subtitle: Text(
+                      store.activeServiceRequestCount == 0
+                          ? 'Schedule and track appliance service visits.'
+                          : '${store.activeServiceRequestCount} active request${store.activeServiceRequestCount == 1 ? '' : 's'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openServiceRequests(context),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
