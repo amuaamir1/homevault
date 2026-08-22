@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/appliance.dart';
 import '../models/service_record.dart';
+import 'reminder_schedule_service.dart';
 
 abstract class WarrantyReminderScheduler {
   Future<void> syncAll(List<Appliance> appliances);
@@ -211,7 +212,14 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     final expiryDate = appliance.effectiveWarrantyExpiryDate;
     if (reminderDate == null || expiryDate == null) return;
 
-    final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
+    final scheduleDate = ReminderScheduleService.resolve(
+      preferredDate: reminderDate,
+      dueDate: expiryDate,
+      now: DateTime.now(),
+    );
+    if (scheduleDate == null) return;
+
+    final scheduledDate = tz.TZDateTime.from(scheduleDate, tz.local);
     final now = tz.TZDateTime.now(tz.local);
     if (!scheduledDate.isAfter(now)) return;
 
@@ -231,7 +239,14 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     final expiryDate = appliance.amcExpiryDate;
     if (reminderDate == null || expiryDate == null) return;
 
-    final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
+    final scheduleDate = ReminderScheduleService.resolve(
+      preferredDate: reminderDate,
+      dueDate: expiryDate,
+      now: DateTime.now(),
+    );
+    if (scheduleDate == null) return;
+
+    final scheduledDate = tz.TZDateTime.from(scheduleDate, tz.local);
     final now = tz.TZDateTime.now(tz.local);
     if (!scheduledDate.isAfter(now)) return;
 
@@ -254,7 +269,14 @@ class WarrantyNotificationService implements WarrantyReminderScheduler {
     final nextServiceDate = record.nextServiceDate;
     if (reminderDate == null || nextServiceDate == null) return;
 
-    final scheduledDate = tz.TZDateTime.from(reminderDate, tz.local);
+    final scheduleDate = ReminderScheduleService.resolve(
+      preferredDate: reminderDate,
+      dueDate: nextServiceDate,
+      now: DateTime.now(),
+    );
+    if (scheduleDate == null) return;
+
+    final scheduledDate = tz.TZDateTime.from(scheduleDate, tz.local);
     final now = tz.TZDateTime.now(tz.local);
     if (!scheduledDate.isAfter(now)) return;
 

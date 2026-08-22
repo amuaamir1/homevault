@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/appliance.dart';
 import '../../models/homevault_report.dart';
+import '../../models/homevault_reminder.dart';
 import '../../profile/profile_scope.dart';
 import '../../services/homevault_report_service.dart';
+import '../../services/reminder_center_service.dart';
 import '../../state/app_scope.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/warranty_status_chip.dart';
@@ -22,6 +24,7 @@ class DashboardScreen extends StatelessWidget {
     required this.onOpenServiceCenter,
     required this.onOpenGlobalSearch,
     required this.onOpenReports,
+    required this.onOpenReminderCenter,
     required this.onOpenAppliance,
   });
 
@@ -33,6 +36,7 @@ class DashboardScreen extends StatelessWidget {
   final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
   final Future<void> Function() onOpenGlobalSearch;
   final Future<void> Function() onOpenReports;
+  final Future<void> Function() onOpenReminderCenter;
   final Future<void> Function(String applianceId) onOpenAppliance;
 
   @override
@@ -41,7 +45,14 @@ class DashboardScreen extends StatelessWidget {
     final profile = ProfileScope.of(context).profile;
     final firstName = profile?.firstName ?? '';
     final recentAppliances = store.recentAppliances;
-    final report = const HomeVaultReportService().build(store.appliances);
+    final now = DateTime.now();
+    final report = const HomeVaultReportService().build(
+      store.appliances,
+      now: now,
+    );
+    const reminderService = ReminderCenterService();
+    final reminders = reminderService.build(store.appliances, now: now);
+    final reminderSummary = reminderService.summarize(reminders, now: now);
 
     return Scaffold(
       appBar: AppBar(
@@ -50,6 +61,10 @@ class DashboardScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          _ReminderCenterButton(
+            attentionCount: reminderSummary.attention,
+            onPressed: onOpenReminderCenter,
+          ),
           IconButton(
             tooltip: 'Add appliance',
             onPressed: onAddAppliance,
@@ -119,14 +134,16 @@ class DashboardScreen extends StatelessWidget {
                 const SizedBox(height: 28),
                 _SectionTitle(
                   title: 'Coming up',
-                  subtitle: 'Upcoming warranty expiries and service dates.',
+                  subtitle: 'Upcoming warranty, AMC, and maintenance dates.',
+                  actionLabel: 'Reminders',
+                  onAction: onOpenReminderCenter,
                 ),
                 const SizedBox(height: 12),
                 _UpcomingActions(
-                  report: report,
+                  reminders: reminders,
+                  now: now,
                   onOpenAppliance: onOpenAppliance,
-                  onOpenWarrantyCenter: onOpenWarrantyCenter,
-                  onOpenServiceCenter: onOpenServiceCenter,
+                  onOpenReminderCenter: onOpenReminderCenter,
                 ),
                 const SizedBox(height: 28),
                 Row(
@@ -197,6 +214,62 @@ class DashboardScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReminderCenterButton extends StatelessWidget {
+  const _ReminderCenterButton({
+    required this.attentionCount,
+    required this.onPressed,
+  });
+
+  final int attentionCount;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeText = attentionCount > 99 ? '99+' : '$attentionCount';
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          tooltip: 'Reminder center',
+          onPressed: onPressed,
+          icon: const Icon(Icons.notifications_outlined),
+        ),
+        if (attentionCount > 0)
+          Positioned(
+            key: const ValueKey('dashboardReminderBadge'),
+            right: 3,
+            top: 5,
+            child: IgnorePointer(
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.surface,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  badgeText,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onError,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -573,44 +646,37 @@ class _WarrantyOverviewItem {
 
 class _UpcomingActions extends StatelessWidget {
   const _UpcomingActions({
-    required this.report,
+    required this.reminders,
+    required this.now,
     required this.onOpenAppliance,
-    required this.onOpenWarrantyCenter,
-    required this.onOpenServiceCenter,
+    required this.onOpenReminderCenter,
   });
 
-  final HomeVaultReport report;
+  final List<HomeVaultReminder> reminders;
+  final DateTime now;
   final Future<void> Function(String applianceId) onOpenAppliance;
-  final Future<void> Function(WarrantyFilter initialFilter)
-  onOpenWarrantyCenter;
-  final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
+  final Future<void> Function() onOpenReminderCenter;
 
   @override
   Widget build(BuildContext context) {
-    final items = <_UpcomingItem>[
-      ...report.upcomingWarranties.map(
-        (item) => _UpcomingItem(
-          applianceId: item.applianceId,
-          title: item.applianceName,
-          subtitle: 'Warranty expires ${_relativeDayLabel(item.daysRemaining)}',
-          daysRemaining: item.daysRemaining,
-          icon: Icons.verified_user_outlined,
-          color: item.daysRemaining <= 30
-              ? AppColors.warning
-              : AppColors.primary,
-        ),
-      ),
-      ...report.upcomingServices.map(
-        (item) => _UpcomingItem(
-          applianceId: item.applianceId,
-          title: item.applianceName,
-          subtitle: 'Service due ${_relativeDayLabel(item.daysRemaining)}',
-          daysRemaining: item.daysRemaining,
-          icon: Icons.build_circle_outlined,
-          color: AppColors.secondary,
-        ),
-      ),
-    ]..sort((a, b) => a.daysRemaining.compareTo(b.daysRemaining));
+    final items =
+        reminders
+            .where((reminder) {
+              final days = reminder.daysUntilDueAt(now);
+              return days >= 0 && days <= 90;
+            })
+            .map(
+              (reminder) => _UpcomingItem(
+                applianceId: reminder.applianceId,
+                title: reminder.applianceName,
+                subtitle: _subtitle(reminder, now),
+                daysRemaining: reminder.daysUntilDueAt(now),
+                icon: _icon(reminder.type),
+                color: _color(reminder.type, reminder.daysUntilDueAt(now)),
+              ),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => a.daysRemaining.compareTo(b.daysRemaining));
 
     if (items.isEmpty) {
       return Card(
@@ -638,7 +704,7 @@ class _UpcomingActions extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'No warranty expiry within 90 days or service due within 30 days.',
+                      'No warranty, AMC, or maintenance date is due within 90 days.',
                     ),
                   ],
                 ),
@@ -678,33 +744,39 @@ class _UpcomingActions extends StatelessWidget {
           ],
           if (items.length > visibleItems.length) ...[
             const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          onOpenWarrantyCenter(WarrantyFilter.expiringSoon),
-                      icon: const Icon(Icons.verified_user_outlined),
-                      label: const Text('Warranties'),
-                    ),
-                  ),
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          onOpenServiceCenter(ServiceFilter.dueSoon),
-                      icon: const Icon(Icons.build_circle_outlined),
-                      label: const Text('Service'),
-                    ),
-                  ),
-                ],
-              ),
+            TextButton.icon(
+              onPressed: onOpenReminderCenter,
+              icon: const Icon(Icons.notifications_outlined),
+              label: Text('View all ${items.length} reminders'),
             ),
           ],
         ],
       ),
     );
+  }
+
+  static String _subtitle(HomeVaultReminder reminder, DateTime now) {
+    final relative = _relativeDayLabel(reminder.daysUntilDueAt(now));
+    return switch (reminder.type) {
+      HomeVaultReminderType.warranty => 'Warranty expires $relative',
+      HomeVaultReminderType.amc => 'AMC expires $relative',
+      HomeVaultReminderType.maintenance => 'Service due $relative',
+    };
+  }
+
+  static IconData _icon(HomeVaultReminderType type) => switch (type) {
+    HomeVaultReminderType.warranty => Icons.verified_user_outlined,
+    HomeVaultReminderType.amc => Icons.assignment_outlined,
+    HomeVaultReminderType.maintenance => Icons.build_circle_outlined,
+  };
+
+  static Color _color(HomeVaultReminderType type, int daysRemaining) {
+    return switch (type) {
+      HomeVaultReminderType.warranty =>
+        daysRemaining <= 30 ? AppColors.warning : AppColors.primary,
+      HomeVaultReminderType.amc => AppColors.warning,
+      HomeVaultReminderType.maintenance => AppColors.secondary,
+    };
   }
 
   static String _relativeDayLabel(int days) {

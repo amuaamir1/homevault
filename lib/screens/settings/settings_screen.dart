@@ -9,8 +9,8 @@ import '../feedback/beta_feedback_screen.dart';
 import '../feedback/feedback_dashboard_screen.dart';
 import '../../services/feedback_admin_service.dart';
 import '../profile/profile_screen.dart';
+import '../reminders/reminder_center_screen.dart';
 import '../service/service_center_screen.dart';
-import '../warranty/warranty_screen.dart';
 import 'security_settings_screen.dart';
 import 'account_deletion_screen.dart';
 
@@ -210,16 +210,17 @@ class SettingsScreen extends StatelessWidget {
                   uid: AuthScope.of(context).user?.uid ?? '',
                 ),
                 ListTile(
+                  key: const ValueKey('settingsReminderCenterTile'),
                   leading: const Icon(Icons.notifications_outlined),
-                  title: const Text('Warranty reminders'),
+                  title: const Text('Reminder center'),
                   subtitle: const Text(
-                    'Manage warranty status and local expiry notifications.',
+                    'Warranty, AMC, and maintenance alerts in one place.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (context) => const WarrantyScreen(),
+                        builder: (context) => const ReminderCenterScreen(),
                       ),
                     );
                   },
