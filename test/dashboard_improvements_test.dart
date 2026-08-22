@@ -129,5 +129,11 @@ void main() {
     expect(find.text('Bedroom AC'), findsWidgets);
     expect(find.text('Warranty expires in 10 days'), findsOneWidget);
     expect(find.text('Service due in 5 days'), findsOneWidget);
+
+    expect(find.byTooltip('Reminder center'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('dashboardReminderBadge')),
+      findsOneWidget,
+    );
   });
 }

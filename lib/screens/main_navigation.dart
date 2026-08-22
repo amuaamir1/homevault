@@ -14,6 +14,7 @@ import 'appliances/appliances_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'documents/documents_screen.dart';
 import 'reports/reports_screen.dart';
+import 'reminders/reminder_center_screen.dart';
 import 'search/global_search_screen.dart';
 import 'service/service_center_screen.dart';
 import 'settings/settings_screen.dart';
@@ -99,6 +100,15 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 
+  Future<void> _openReminderCenter() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            ReminderCenterScreen(onOpenAppliance: _openApplianceDetails),
+      ),
+    );
+  }
+
   Future<void> _openAddAppliance() async {
     final result = await Navigator.of(context).push<ApplianceFormResult>(
       MaterialPageRoute(builder: (context) => const AddApplianceScreen()),
@@ -164,6 +174,7 @@ class _MainNavigationState extends State<MainNavigation> {
         onOpenServiceCenter: _openServiceCenter,
         onOpenGlobalSearch: _openGlobalSearch,
         onOpenReports: _openReports,
+        onOpenReminderCenter: _openReminderCenter,
         onOpenAppliance: _openApplianceDetails,
       ),
       const ServiceCenterScreen(),
