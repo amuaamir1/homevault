@@ -417,9 +417,9 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'Automatic backups run once per day while HomeVault '
-                            'is opened and signed in. Automatic history keeps '
-                            '7 daily, 4 weekly, and 6 monthly restore points.',
+                            'HomeVault automatically backs up after saved data '
+                            'changes and also checks once per day as a fallback. '
+                            'Only the latest 2 cloud restore points are kept.',
                           ),
                           const SizedBox(height: 14),
                           FilledButton.icon(

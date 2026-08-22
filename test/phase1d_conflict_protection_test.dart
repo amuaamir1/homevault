@@ -130,6 +130,41 @@ void main() {
     },
   );
 
+  test('store data change revision advances after local mutations', () async {
+    final repository = _ConflictRepository(const []);
+    final store = ApplianceStore(repository: repository);
+    await store.initialize();
+
+    expect(store.dataChangeRevision, 0);
+
+    final appliance = Appliance(
+      id: 'ac-change-1',
+      name: 'AC',
+      category: 'Air Conditioner',
+      brand: 'LG',
+      createdAt: DateTime(2026, 8, 22),
+    );
+
+    await store.add(appliance);
+    expect(store.dataChangeRevision, 1);
+
+    await store.update(
+      Appliance(
+        id: appliance.id,
+        name: 'Bedroom AC',
+        category: appliance.category,
+        brand: appliance.brand,
+        createdAt: appliance.createdAt,
+      ),
+    );
+    expect(store.dataChangeRevision, 2);
+
+    await store.delete(appliance.id);
+    expect(store.dataChangeRevision, 3);
+
+    store.dispose();
+  });
+
   test('explicit replace requests force overwrite', () async {
     final repository = _ConflictRepository(const []);
     final store = ApplianceStore(repository: repository);

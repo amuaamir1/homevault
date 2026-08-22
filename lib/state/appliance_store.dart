@@ -47,6 +47,11 @@ class ApplianceStore extends ChangeNotifier {
   Future<void>? _documentSyncInProgress;
   final Map<String, Future<StoredDocument>> _documentDownloads = {};
 
+  // Advances only after a successful local structured-data mutation.
+  // Cloud-sync status changes, remote-watch refreshes, and local document-cache
+  // downloads intentionally do not advance this value.
+  int _dataChangeRevision = 0;
+
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
 
@@ -59,6 +64,13 @@ class ApplianceStore extends ChangeNotifier {
   bool get cloudSyncAvailable =>
       _repository is CloudSyncAwareApplianceRepository;
   bool get cloudDocumentStorageAvailable => _cloudDocumentStorage.isAvailable;
+
+  /// Monotonic revision used by automatic backup coordination.
+  ///
+  /// It changes only when HomeVault successfully persists a local appliance
+  /// data mutation. It is deliberately separate from Firestore cloudRevision.
+  int get dataChangeRevision => _dataChangeRevision;
+
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -802,10 +814,15 @@ class ApplianceStore extends ChangeNotifier {
     }
   }
 
+  void _markDataChanged() {
+    _dataChangeRevision++;
+  }
+
   Future<void> add(Appliance appliance) async {
     final updated = [..._appliances, appliance];
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
     await _scheduleReminderSafely(appliance);
     unawaited(retryCloudDocumentSync());
@@ -822,6 +839,7 @@ class ApplianceStore extends ChangeNotifier {
     updated[index] = appliance;
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
 
     await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
@@ -905,6 +923,7 @@ class ApplianceStore extends ChangeNotifier {
         forceOverwrite: true,
       );
       _appliances = persisted;
+      _markDataChanged();
       notifyListeners();
       // The restored structured data is already safely persisted at this
       // point. Cloud-file cleanup and local reminder rebuilding are
@@ -946,6 +965,7 @@ class ApplianceStore extends ChangeNotifier {
       final updated = [..._appliances, ...imported];
       final persisted = await _persistAppliances(updated);
       _appliances = persisted;
+      _markDataChanged();
       notifyListeners();
       // Reminder rebuilding is best-effort post-restore work. Do not block
       // merge completion if the platform notification plugin is slow.
@@ -1035,6 +1055,7 @@ class ApplianceStore extends ChangeNotifier {
       authoritativeDeleteIds: {applianceId},
     );
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
     await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
     await _cancelReminderSafely(applianceId);

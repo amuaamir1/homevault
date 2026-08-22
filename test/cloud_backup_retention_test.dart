@@ -3,57 +3,53 @@ import 'package:homevault/models/backup_models.dart';
 import 'package:homevault/services/cloud_backup_service.dart';
 
 void main() {
-  test('cloud backup retention keeps 7 daily, 4 weekly, and 6 monthly', () {
-    final reference = DateTime(2026, 8, 11, 9);
-    final automatic = List<CloudBackupSnapshot>.generate(180, (index) {
-      return _snapshot(
-        id: 'auto-$index',
-        createdAt: reference.subtract(Duration(days: index)),
+  test('cloud backup retention keeps only the latest two snapshots', () {
+    final reference = DateTime(2026, 8, 22, 12);
+    final snapshots = <CloudBackupSnapshot>[
+      _snapshot(
+        id: 'old-manual',
+        createdAt: reference.subtract(const Duration(days: 5)),
+        source: CloudBackupSource.manual,
+      ),
+      _snapshot(
+        id: 'old-auto',
+        createdAt: reference.subtract(const Duration(days: 3)),
         source: CloudBackupSource.automatic,
-      );
-    });
+      ),
+      _snapshot(
+        id: 'latest-auto',
+        createdAt: reference.subtract(const Duration(hours: 2)),
+        source: CloudBackupSource.automatic,
+      ),
+      _snapshot(
+        id: 'latest-safety',
+        createdAt: reference.subtract(const Duration(minutes: 15)),
+        source: CloudBackupSource.preRestoreSafety,
+      ),
+    ];
 
-    final kept = CloudBackupService.retainedBackupIds(automatic);
-    final keptAutomatic = automatic.where((item) => kept.contains(item.id));
+    final kept = CloudBackupService.retainedBackupIds(snapshots);
 
-    expect(
-      keptAutomatic.length,
-      CloudBackupService.dailyRetention +
-          CloudBackupService.weeklyRetention +
-          CloudBackupService.monthlyRetention,
-    );
-
-    for (var index = 0; index < CloudBackupService.dailyRetention; index++) {
-      expect(kept, contains('auto-$index'));
-    }
+    expect(kept.length, CloudBackupService.cloudRetention);
+    expect(kept, containsAll(<String>['latest-safety', 'latest-auto']));
+    expect(kept, isNot(contains('old-auto')));
+    expect(kept, isNot(contains('old-manual')));
   });
 
   test(
-    'manual backups are preserved and safety backups keep the latest three',
+    'cloud backup retention keeps a single snapshot when only one exists',
     () {
-      final now = DateTime(2026, 8, 11, 12);
       final snapshots = <CloudBackupSnapshot>[
         _snapshot(
-          id: 'manual-old',
-          createdAt: now.subtract(const Duration(days: 500)),
+          id: 'only-backup',
+          createdAt: DateTime(2026, 8, 22, 12),
           source: CloudBackupSource.manual,
-        ),
-        ...List<CloudBackupSnapshot>.generate(
-          5,
-          (index) => _snapshot(
-            id: 'safety-$index',
-            createdAt: now.subtract(Duration(hours: index)),
-            source: CloudBackupSource.preRestoreSafety,
-          ),
         ),
       ];
 
       final kept = CloudBackupService.retainedBackupIds(snapshots);
 
-      expect(kept, contains('manual-old'));
-      expect(kept, containsAll(<String>['safety-0', 'safety-1', 'safety-2']));
-      expect(kept, isNot(contains('safety-3')));
-      expect(kept, isNot(contains('safety-4')));
+      expect(kept, {'only-backup'});
     },
   );
 }

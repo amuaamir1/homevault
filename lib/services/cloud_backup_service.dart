@@ -18,10 +18,9 @@ class CloudBackupService {
        _backupService = backupService ?? HomeVaultBackupService();
 
   static const int maxBackupBytes = 250 * 1024 * 1024;
-  static const int dailyRetention = 7;
-  static const int weeklyRetention = 4;
-  static const int monthlyRetention = 6;
-  static const int safetyRetention = 3;
+
+  /// HomeVault keeps only the two newest cloud restore points for each user.
+  static const int cloudRetention = 2;
 
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
@@ -52,6 +51,15 @@ class CloudBackupService {
 
   Future<bool> needsAutomaticBackup(String uid, {DateTime? now}) async {
     final reference = (now ?? DateTime.now()).toLocal();
+
+    // Also migrate users from the previous 7/4/6 retention policy during the
+    // normal startup backup check, even if today's backup is not yet due.
+    try {
+      await pruneRetention(uid);
+    } catch (_) {
+      // Cleanup is best-effort and will be retried later.
+    }
+
     final backups = await listBackups(uid);
 
     for (final backup in backups) {
@@ -137,13 +145,13 @@ class CloudBackupService {
         rethrow;
       }
 
-      if (source == CloudBackupSource.automatic) {
-        try {
-          await pruneRetention(ownerUid);
-        } catch (_) {
-          // The newly created backup is still valid even when old-history
-          // cleanup has to be retried on a later automatic backup.
-        }
+      try {
+        // Manual, automatic, and pre-restore safety snapshots all participate
+        // in the same two-backup retention policy.
+        await pruneRetention(ownerUid);
+      } catch (_) {
+        // The newly-created snapshot is still valid. Cleanup will be retried on
+        // the next startup check or cloud-backup operation.
       }
 
       return snapshot;
@@ -239,62 +247,8 @@ class CloudBackupService {
   ) {
     final sorted = snapshots.toList(growable: false)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final keep = <String>{};
 
-    // User-created backups are explicit restore points and are only removed
-    // when the user deletes them.
-    for (final item in sorted) {
-      if (item.source == CloudBackupSource.manual) {
-        keep.add(item.id);
-      }
-    }
-
-    // Keep the latest few pre-restore safety snapshots so repeated restores do
-    // not grow storage forever.
-    var safetyKept = 0;
-    for (final item in sorted) {
-      if (item.source != CloudBackupSource.preRestoreSafety) continue;
-      if (safetyKept < safetyRetention) {
-        keep.add(item.id);
-        safetyKept++;
-      }
-    }
-
-    final automatic = sorted
-        .where((item) => item.source == CloudBackupSource.automatic)
-        .toList(growable: false);
-
-    final dailyBuckets = <String>{};
-    final weeklyCandidates = <CloudBackupSnapshot>[];
-    for (final item in automatic) {
-      final key = _dayBucket(item.createdAt.toLocal());
-      if (dailyBuckets.length < dailyRetention && dailyBuckets.add(key)) {
-        keep.add(item.id);
-      } else {
-        weeklyCandidates.add(item);
-      }
-    }
-
-    final weeklyBuckets = <String>{};
-    final monthlyCandidates = <CloudBackupSnapshot>[];
-    for (final item in weeklyCandidates) {
-      final key = _weekBucket(item.createdAt.toLocal());
-      if (weeklyBuckets.length < weeklyRetention && weeklyBuckets.add(key)) {
-        keep.add(item.id);
-      } else {
-        monthlyCandidates.add(item);
-      }
-    }
-
-    final monthlyBuckets = <String>{};
-    for (final item in monthlyCandidates) {
-      final key = _monthBucket(item.createdAt.toLocal());
-      if (monthlyBuckets.length < monthlyRetention && monthlyBuckets.add(key)) {
-        keep.add(item.id);
-      }
-    }
-
-    return keep;
+    return sorted.take(cloudRetention).map((snapshot) => snapshot.id).toSet();
   }
 
   CollectionReference<Map<String, dynamic>> _backupCollection(String uid) {
@@ -383,19 +337,6 @@ class CloudBackupService {
     return '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'
         '${value.day.toString().padLeft(2, '0')}';
-  }
-
-  static String _weekBucket(DateTime value) {
-    final date = DateTime(value.year, value.month, value.day);
-    final monday = date.subtract(
-      Duration(days: date.weekday - DateTime.monday),
-    );
-    return _dayBucket(monday);
-  }
-
-  static String _monthBucket(DateTime value) {
-    return '${value.year.toString().padLeft(4, '0')}-'
-        '${value.month.toString().padLeft(2, '0')}';
   }
 
   String _cloudFileName(CloudBackupSnapshot snapshot) {
