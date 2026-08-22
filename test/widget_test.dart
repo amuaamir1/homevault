@@ -202,6 +202,9 @@ void main() {
   testWidgets('provider directory exposes manufacturer and support contacts', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final appliance = Appliance(
       id: 'ac-support-1',
       name: 'Bedroom AC',
@@ -238,9 +241,27 @@ void main() {
     expect(find.text('Customer support'), findsOneWidget);
     expect(find.text('Bedroom AC'), findsOneWidget);
     expect(find.text('Sunday to Thursday'), findsOneWidget);
-    expect(find.text('Call'), findsOneWidget);
-    expect(find.text('Email'), findsOneWidget);
-    expect(find.text('Website'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Call'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Email'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FilledButton),
+        matching: find.text('Website'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('warranty center shows warranty status and reminders', (
