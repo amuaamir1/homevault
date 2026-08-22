@@ -47,6 +47,11 @@ class ApplianceStore extends ChangeNotifier {
   Future<void>? _documentSyncInProgress;
   final Map<String, Future<StoredDocument>> _documentDownloads = {};
 
+  // Advances only after a successful local structured-data mutation.
+  // Cloud-sync status changes, remote-watch refreshes, and local document-cache
+  // downloads intentionally do not advance this value.
+  int _dataChangeRevision = 0;
+
   UnmodifiableListView<Appliance> get appliances =>
       UnmodifiableListView(_appliances);
 
@@ -59,6 +64,13 @@ class ApplianceStore extends ChangeNotifier {
   bool get cloudSyncAvailable =>
       _repository is CloudSyncAwareApplianceRepository;
   bool get cloudDocumentStorageAvailable => _cloudDocumentStorage.isAvailable;
+
+  /// Monotonic revision used by automatic backup coordination.
+  ///
+  /// It changes only when HomeVault successfully persists a local appliance
+  /// data mutation. It is deliberately separate from Firestore cloudRevision.
+  int get dataChangeRevision => _dataChangeRevision;
+
   int get totalCount => _appliances.length;
 
   int get totalServiceRecordCount => _appliances.fold<int>(
@@ -452,10 +464,15 @@ class ApplianceStore extends ChangeNotifier {
   Future<List<Appliance>> _persistAppliances(
     List<Appliance> appliances, {
     bool forceOverwrite = false,
+    Set<String> authoritativeDeleteIds = const <String>{},
   }) async {
     if (_repository is ConflictProtectedApplianceRepository) {
       return (_repository as ConflictProtectedApplianceRepository)
-          .saveAppliancesProtected(appliances, forceOverwrite: forceOverwrite);
+          .saveAppliancesProtected(
+            appliances,
+            forceOverwrite: forceOverwrite,
+            authoritativeDeleteIds: authoritativeDeleteIds,
+          );
     }
 
     await _repository.saveAppliances(appliances);
@@ -797,10 +814,15 @@ class ApplianceStore extends ChangeNotifier {
     }
   }
 
+  void _markDataChanged() {
+    _dataChangeRevision++;
+  }
+
   Future<void> add(Appliance appliance) async {
     final updated = [..._appliances, appliance];
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
     await _scheduleReminderSafely(appliance);
     unawaited(retryCloudDocumentSync());
@@ -817,6 +839,7 @@ class ApplianceStore extends ChangeNotifier {
     updated[index] = appliance;
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
 
     await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
@@ -900,6 +923,7 @@ class ApplianceStore extends ChangeNotifier {
         forceOverwrite: true,
       );
       _appliances = persisted;
+      _markDataChanged();
       notifyListeners();
       // The restored structured data is already safely persisted at this
       // point. Cloud-file cleanup and local reminder rebuilding are
@@ -941,6 +965,7 @@ class ApplianceStore extends ChangeNotifier {
       final updated = [..._appliances, ...imported];
       final persisted = await _persistAppliances(updated);
       _appliances = persisted;
+      _markDataChanged();
       notifyListeners();
       // Reminder rebuilding is best-effort post-restore work. Do not block
       // merge completion if the platform notification plugin is slow.
@@ -957,16 +982,48 @@ class ApplianceStore extends ChangeNotifier {
         _repository is WatchableApplianceRepository && _ownerUid != null;
 
     if (shouldRestart) {
-      await _repositorySubscription?.cancel();
+      final subscription = _repositorySubscription;
       _repositorySubscription = null;
+
+      if (subscription != null) {
+        try {
+          await subscription.cancel().timeout(const Duration(seconds: 5));
+        } catch (error, stack) {
+          // A Firebase stream can occasionally take too long to tear down.
+          // Restore/save operations must not remain blocked indefinitely just
+          // because the live repository watcher is slow to cancel.
+          unawaited(
+            CrashReportingService.recordNonFatal(
+              error,
+              stack,
+              reason: 'Pausing cloud repository watch for a data restore',
+            ),
+          );
+        }
+      }
     }
 
     try {
       return await operation();
     } finally {
       if (shouldRestart && _ownerUid != null) {
-        await _startRepositoryWatch();
+        // Restarting the live watcher is post-save maintenance. The restored
+        // data has already been persisted, so do not keep a restore dialog
+        // spinning while a Firestore listener is being re-established.
+        unawaited(_restartRepositoryWatchAfterRestore());
       }
+    }
+  }
+
+  Future<void> _restartRepositoryWatchAfterRestore() async {
+    try {
+      await _startRepositoryWatch().timeout(const Duration(seconds: 5));
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Restarting cloud repository watch after a data restore',
+      );
     }
   }
 
@@ -988,8 +1045,17 @@ class ApplianceStore extends ChangeNotifier {
       return;
     }
 
-    final persisted = await _persistAppliances(updated);
+    // A user-confirmed delete is authoritative for this appliance only.
+    // This allows Device B to delete the latest cloud revision even if Device A
+    // advanced the revision through normal background synchronization after
+    // Device B originally displayed the record. Other appliances retain normal
+    // conflict protection.
+    final persisted = await _persistAppliances(
+      updated,
+      authoritativeDeleteIds: {applianceId},
+    );
     _appliances = persisted;
+    _markDataChanged();
     notifyListeners();
     await _cleanupRemovedCloudCopiesSafely(previousAppliances, persisted);
     await _cancelReminderSafely(applianceId);

@@ -33,6 +33,11 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     setState(() => _isSaving = true);
     try {
       await AppLockScope.read(context).createPin(_pinController.text);
+    } on PinReuseException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

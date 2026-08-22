@@ -20,6 +20,9 @@ run-name: >-
 permissions:
   contents: write
 
+
+env:
+  GDRIVE_RELEASE_DIR: ${{ vars.GDRIVE_RELEASE_DIR || 'Projects-Works/HomeVault/Releases' }}
 concurrency:
   group: homevault-release-publishing
   cancel-in-progress: false
@@ -68,6 +71,7 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GDRIVE_RCLONE_CONFIG_BASE64: ${{ secrets.GDRIVE_RCLONE_CONFIG_BASE64 }}
         run: |
           set -euo pipefail
 
@@ -82,7 +86,8 @@ jobs:
             ANDROID_KEYSTORE_BASE64 \
             ANDROID_STORE_PASSWORD \
             ANDROID_KEY_PASSWORD \
-            ANDROID_KEY_ALIAS
+            ANDROID_KEY_ALIAS \
+            GDRIVE_RCLONE_CONFIG_BASE64
           do
             if [ -z "${!name}" ]; then
               echo "::error::Required GitHub Actions secret $name is missing."
@@ -396,6 +401,70 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+
+      - name: Upload release assets to Google Drive
+        shell: bash
+        env:
+          GDRIVE_RCLONE_CONFIG_BASE64: ${{ secrets.GDRIVE_RCLONE_CONFIG_BASE64 }}
+        run: |
+          set -euo pipefail
+      
+          echo "Installing rclone..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rclone
+      
+          RCLONE_CONFIG_FILE="$RUNNER_TEMP/homevault-rclone.conf"
+      
+          cleanup_rclone_config() {
+            rm -f "$RCLONE_CONFIG_FILE"
+          }
+          trap cleanup_rclone_config EXIT
+      
+          printf '%s' "$GDRIVE_RCLONE_CONFIG_BASE64" \
+            | base64 --decode > "$RCLONE_CONFIG_FILE"
+      
+          chmod 600 "$RCLONE_CONFIG_FILE"
+          test -s "$RCLONE_CONFIG_FILE"
+      
+          if ! rclone \
+            --config "$RCLONE_CONFIG_FILE" \
+            listremotes | grep -qx 'gdrive:'; then
+            echo "::error::Google Drive configuration must contain an rclone remote named 'gdrive'."
+            exit 1
+          fi
+      
+          DRIVE_DESTINATION="gdrive:${GDRIVE_RELEASE_DIR}"
+      
+          echo "Google Drive destination: ${GDRIVE_RELEASE_DIR}"
+      
+          rclone \
+            --config "$RCLONE_CONFIG_FILE" \
+            mkdir "$DRIVE_DESTINATION"
+      
+          rclone \
+            --config "$RCLONE_CONFIG_FILE" \
+            copyto \
+            "dist/$APK_NAME" \
+            "$DRIVE_DESTINATION/$APK_NAME" \
+            --drive-chunk-size 64M \
+            --stats-one-line
+      
+          rclone \
+            --config "$RCLONE_CONFIG_FILE" \
+            copyto \
+            "dist/$APK_NAME.sha256.txt" \
+            "$DRIVE_DESTINATION/$APK_NAME.sha256.txt" \
+            --stats-one-line
+      
+          echo "Google Drive upload completed."
+          {
+            echo ""
+            echo "### Google Drive"
+            echo "- Folder: \${GDRIVE_RELEASE_DIR}\"
+            echo "- APK: \${APK_NAME}\"
+            echo "- SHA-256: \${APK_NAME}.sha256.txt\"
+          } >> "$GITHUB_STEP_SUMMARY"
+           
       - name: Publish GitHub release
         shell: bash
         env:

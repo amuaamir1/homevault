@@ -21,6 +21,7 @@ import 'services/document_storage_service.dart';
 import 'state/app_scope.dart';
 import 'state/appliance_store.dart';
 import 'theme/app_theme.dart';
+import 'widgets/cloud_backup_startup_coordinator.dart';
 
 class HomeVaultApp extends StatefulWidget {
   const HomeVaultApp({
@@ -42,7 +43,8 @@ class HomeVaultApp extends StatefulWidget {
   State<HomeVaultApp> createState() => _HomeVaultAppState();
 }
 
-class _HomeVaultAppState extends State<HomeVaultApp> {
+class _HomeVaultAppState extends State<HomeVaultApp>
+    with WidgetsBindingObserver {
   late final ApplianceStore _applianceStore;
   late final AppLockController _appLockController;
   AuthController? _authController;
@@ -55,10 +57,14 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
   String? _profileUserId;
   int _authenticationEpoch = 0;
   Future<void> _authenticationApplyQueue = Future<void>.value();
+  bool _hasScheduledAuthenticationState = false;
+  String? _lastScheduledAuthenticationUid;
+  Timer? _sessionValidationTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ownsStore = widget.applianceStore == null;
     _ownsLockController = widget.appLockController == null;
     _ownsAuthController = widget.authController == null;
@@ -73,16 +79,50 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
       _profileController = widget.profileController ?? ProfileController();
       _authController!.addListener(_handleAuthenticationChanged);
       unawaited(_initializeAuthentication());
+
+      _sessionValidationTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+        final auth = _authController;
+        if (auth?.isAuthenticated == true) {
+          unawaited(auth!.validateCurrentSession());
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+
+    final auth = _authController;
+    if (auth?.isAuthenticated == true) {
+      unawaited(auth!.validateCurrentSession());
     }
   }
 
   Future<void> _initializeAuthentication() async {
     await _authController!.initialize();
-    await _scheduleAuthenticationStateApply();
+    await _scheduleAuthenticationStateApplyIfNeeded();
   }
 
   void _handleAuthenticationChanged() {
-    unawaited(_scheduleAuthenticationStateApply());
+    unawaited(_scheduleAuthenticationStateApplyIfNeeded());
+  }
+
+  Future<void> _scheduleAuthenticationStateApplyIfNeeded() {
+    final auth = _authController;
+    if (auth == null || auth.isInitializing) {
+      return Future<void>.value();
+    }
+
+    final uid = auth.user?.uid;
+    if (_hasScheduledAuthenticationState &&
+        _lastScheduledAuthenticationUid == uid) {
+      return Future<void>.value();
+    }
+
+    _hasScheduledAuthenticationState = true;
+    _lastScheduledAuthenticationUid = uid;
+    return _scheduleAuthenticationStateApply();
   }
 
   Future<void> _scheduleAuthenticationStateApply() {
@@ -139,6 +179,8 @@ class _HomeVaultAppState extends State<HomeVaultApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _sessionValidationTimer?.cancel();
     _authController?.removeListener(_handleAuthenticationChanged);
     if (_ownsStore) _applianceStore.dispose();
     if (_ownsLockController) _appLockController.dispose();
@@ -185,6 +227,10 @@ class _AppGate extends StatelessWidget {
     }
 
     final auth = AuthScope.of(context);
+    // Initial authentication/session validation must finish before the app
+    // is shown. Later validation (for example immediately before PIN or
+    // biometric unlock) must not replace and dispose the unlock screen while
+    // that unlock operation is awaiting Firebase.
     if (auth.isInitializing) {
       return const _LoadingScreen(message: 'Checking your account...');
     }
@@ -339,7 +385,7 @@ class _StartupGate extends StatelessWidget {
       );
     }
 
-    return const MainNavigation();
+    return const CloudBackupStartupCoordinator(child: MainNavigation());
   }
 }
 

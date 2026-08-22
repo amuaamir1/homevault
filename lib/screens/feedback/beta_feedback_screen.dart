@@ -78,6 +78,27 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
     }
   }
 
+  Widget _buildSubmitButton() {
+    return FilledButton.icon(
+      key: const ValueKey('sendFeedbackButton'),
+      onPressed: _isSubmitting ? null : _submit,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      ),
+      icon: _isSubmitting
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.send_outlined),
+      label: Text(
+        _isSubmitting ? 'Sending...' : 'Send feedback',
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,7 +106,8 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
             const Card(
               child: Padding(
@@ -168,19 +190,13 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
                 onTap: _isSubmitting ? null : _pickScreenshot,
               ),
             ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _isSubmitting ? null : _submit,
-              icon: _isSubmitting
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_outlined),
-              label: Text(_isSubmitting ? 'Sending...' : 'Send feedback'),
-            ),
           ],
         ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: _buildSubmitButton(),
       ),
     );
   }

@@ -83,10 +83,86 @@ void main() {
       await service.bindUser('firebase-user-a');
       await service.createPin('2468');
 
-      await service.clearPin(markSetupComplete: false);
+      await service.clearPin(markSetupComplete: false, clearHistory: true);
 
       expect(await service.hasPin(), isFalse);
       expect(await service.hasCompletedPinSetup(), isFalse);
     },
   );
+
+  test('rejects reuse of any of the last four PINs', () async {
+    final service = PinSecurityService();
+    await service.bindUser('firebase-user-history');
+
+    await service.createPin('1111');
+    expect(await service.changePin(currentPin: '1111', newPin: '2222'), isTrue);
+    expect(await service.changePin(currentPin: '2222', newPin: '3333'), isTrue);
+    expect(await service.changePin(currentPin: '3333', newPin: '4444'), isTrue);
+
+    expect(
+      service.changePin(currentPin: '4444', newPin: '1111'),
+      throwsA(isA<PinReuseException>()),
+    );
+    expect(
+      service.changePin(currentPin: '4444', newPin: '2222'),
+      throwsA(isA<PinReuseException>()),
+    );
+    expect(
+      service.changePin(currentPin: '4444', newPin: '4444'),
+      throwsA(isA<PinReuseException>()),
+    );
+  });
+
+  test('allows a PIN again after it falls outside the last four', () async {
+    final service = PinSecurityService();
+    await service.bindUser('firebase-user-rotation');
+
+    await service.createPin('1111');
+    await service.changePin(currentPin: '1111', newPin: '2222');
+    await service.changePin(currentPin: '2222', newPin: '3333');
+    await service.changePin(currentPin: '3333', newPin: '4444');
+    await service.changePin(currentPin: '4444', newPin: '5555');
+
+    expect(await service.changePin(currentPin: '5555', newPin: '1111'), isTrue);
+    expect(await service.verifyPin('1111'), isTrue);
+  });
+
+  test('forgot PIN reset preserves PIN history', () async {
+    final service = PinSecurityService();
+    await service.bindUser('firebase-user-recovery');
+    await service.createPin('2468');
+
+    await service.clearPin(markSetupComplete: false);
+
+    expect(await service.hasPin(), isFalse);
+    expect(service.createPin('2468'), throwsA(isA<PinReuseException>()));
+    await service.createPin('1357');
+    expect(await service.verifyPin('1357'), isTrue);
+  });
+
+  test('account deletion removes PIN history', () async {
+    final service = PinSecurityService();
+    await service.bindUser('firebase-user-delete-history');
+    await service.createPin('2468');
+
+    await service.clearPin(markSetupComplete: false, clearHistory: true);
+
+    await service.createPin('2468');
+    expect(await service.verifyPin('2468'), isTrue);
+  });
+
+  test('PIN history remains scoped to the Firebase user', () async {
+    final service = PinSecurityService();
+
+    await service.bindUser('firebase-user-history-a');
+    await service.createPin('1122');
+    await service.clearPin(markSetupComplete: false);
+
+    await service.bindUser('firebase-user-history-b');
+    await service.createPin('1122');
+    expect(await service.verifyPin('1122'), isTrue);
+
+    await service.bindUser('firebase-user-history-a');
+    expect(service.createPin('1122'), throwsA(isA<PinReuseException>()));
+  });
 }

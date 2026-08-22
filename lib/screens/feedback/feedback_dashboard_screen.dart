@@ -27,7 +27,7 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
   final _searchController = TextEditingController();
 
   String _query = '';
-  FeedbackWorkflowStatus? _statusFilter;
+  _FeedbackStatusFilter _statusFilter = _FeedbackStatusFilter.open;
   FeedbackCategory? _categoryFilter;
   FeedbackPriority? _priorityFilter;
   _FeedbackSort _sort = _FeedbackSort.newest;
@@ -73,7 +73,10 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
               final allItems = feedbackSnapshot.data!;
               final items = _filteredItems(allItems);
               final hasSearchOrFilters =
-                  _query.trim().isNotEmpty || _hasFilters;
+                  _query.trim().isNotEmpty ||
+                  _statusFilter != _FeedbackStatusFilter.all ||
+                  _categoryFilter != null ||
+                  _priorityFilter != null;
 
               return RefreshIndicator(
                 onRefresh: () async {
@@ -85,7 +88,12 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
-                    _Summary(items: allItems),
+                    _Summary(
+                      items: allItems,
+                      selectedFilter: _statusFilter,
+                      onFilterSelected: (filter) =>
+                          setState(() => _statusFilter = filter),
+                    ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _searchController,
@@ -165,13 +173,13 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
   }
 
   bool get _hasFilters =>
-      _statusFilter != null ||
+      _statusFilter != _FeedbackStatusFilter.open ||
       _categoryFilter != null ||
       _priorityFilter != null;
 
   void _clearFilters() {
     setState(() {
-      _statusFilter = null;
+      _statusFilter = _FeedbackStatusFilter.open;
       _categoryFilter = null;
       _priorityFilter = null;
     });
@@ -181,7 +189,7 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
     _searchController.clear();
     setState(() {
       _query = '';
-      _statusFilter = null;
+      _statusFilter = _FeedbackStatusFilter.open;
       _categoryFilter = null;
       _priorityFilter = null;
     });
@@ -196,7 +204,7 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
         .toList();
 
     final items = allItems.where((item) {
-      if (_statusFilter != null && item.status != _statusFilter) {
+      if (!_statusFilter.matches(item.status)) {
         return false;
       }
       if (_categoryFilter != null && item.category != _categoryFilter) {
@@ -272,6 +280,42 @@ class _FeedbackDashboardScreenState extends State<FeedbackDashboardScreen> {
   }
 }
 
+enum _FeedbackStatusFilter {
+  open,
+  all,
+  newFeedback,
+  inReview,
+  planned,
+  resolved,
+  dismissed,
+}
+
+extension on _FeedbackStatusFilter {
+  String get label => switch (this) {
+    _FeedbackStatusFilter.open => 'Open',
+    _FeedbackStatusFilter.all => 'All',
+    _FeedbackStatusFilter.newFeedback => 'New',
+    _FeedbackStatusFilter.inReview => 'In review',
+    _FeedbackStatusFilter.planned => 'Planned',
+    _FeedbackStatusFilter.resolved => 'Resolved',
+    _FeedbackStatusFilter.dismissed => 'Dismissed',
+  };
+
+  bool matches(FeedbackWorkflowStatus status) => switch (this) {
+    _FeedbackStatusFilter.open =>
+      status != FeedbackWorkflowStatus.resolved &&
+          status != FeedbackWorkflowStatus.dismissed,
+    _FeedbackStatusFilter.all => true,
+    _FeedbackStatusFilter.newFeedback =>
+      status == FeedbackWorkflowStatus.newFeedback,
+    _FeedbackStatusFilter.inReview => status == FeedbackWorkflowStatus.inReview,
+    _FeedbackStatusFilter.planned => status == FeedbackWorkflowStatus.planned,
+    _FeedbackStatusFilter.resolved => status == FeedbackWorkflowStatus.resolved,
+    _FeedbackStatusFilter.dismissed =>
+      status == FeedbackWorkflowStatus.dismissed,
+  };
+}
+
 enum _FeedbackSort { newest, oldest, priority }
 
 extension on _FeedbackSort {
@@ -283,35 +327,53 @@ extension on _FeedbackSort {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.items});
+  const _Summary({
+    required this.items,
+    required this.selectedFilter,
+    required this.onFilterSelected,
+  });
 
   final List<AdminFeedbackItem> items;
+  final _FeedbackStatusFilter selectedFilter;
+  final ValueChanged<_FeedbackStatusFilter> onFilterSelected;
 
   @override
   Widget build(BuildContext context) {
     int count(FeedbackWorkflowStatus status) =>
         items.where((item) => item.status == status).length;
 
+    final openCount = items
+        .where(
+          (item) =>
+              item.status != FeedbackWorkflowStatus.resolved &&
+              item.status != FeedbackWorkflowStatus.dismissed,
+        )
+        .length;
+
     final metrics = [
       _MetricData(
-        label: 'Total',
-        value: items.length,
-        icon: Icons.feedback_outlined,
+        label: 'Open',
+        value: openCount,
+        icon: Icons.inbox_outlined,
+        filter: _FeedbackStatusFilter.open,
       ),
       _MetricData(
         label: 'New',
         value: count(FeedbackWorkflowStatus.newFeedback),
         icon: Icons.fiber_new_outlined,
+        filter: _FeedbackStatusFilter.newFeedback,
       ),
       _MetricData(
         label: 'In review',
         value: count(FeedbackWorkflowStatus.inReview),
         icon: Icons.manage_search_outlined,
+        filter: _FeedbackStatusFilter.inReview,
       ),
       _MetricData(
         label: 'Resolved',
         value: count(FeedbackWorkflowStatus.resolved),
         icon: Icons.task_alt_outlined,
+        filter: _FeedbackStatusFilter.resolved,
       ),
     ];
 
@@ -319,7 +381,13 @@ class _Summary extends StatelessWidget {
       children: [
         for (var index = 0; index < metrics.length; index++) ...[
           if (index > 0) const SizedBox(width: 6),
-          Expanded(child: _Metric(data: metrics[index])),
+          Expanded(
+            child: _Metric(
+              data: metrics[index],
+              selected: selectedFilter == metrics[index].filter,
+              onTap: () => onFilterSelected(metrics[index].filter),
+            ),
+          ),
         ],
       ],
     );
@@ -331,17 +399,25 @@ class _MetricData {
     required this.label,
     required this.value,
     required this.icon,
+    required this.filter,
   });
 
   final String label;
   final int value;
   final IconData icon;
+  final _FeedbackStatusFilter filter;
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.data});
+  const _Metric({
+    required this.data,
+    required this.selected,
+    required this.onTap,
+  });
 
   final _MetricData data;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -349,36 +425,51 @@ class _Metric extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(data.icon, size: 16, color: colors.primary),
-                const SizedBox(width: 4),
-                Text(
-                  '${data.value}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+      color: selected ? colors.primaryContainer : null,
+      child: InkWell(
+        key: ValueKey('feedback-summary-${data.filter.name}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    data.icon,
+                    size: 16,
+                    color: selected
+                        ? colors.onPrimaryContainer
+                        : colors.primary,
                   ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${data.value}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: selected ? colors.onPrimaryContainer : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                data.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontSize: 10,
+                  fontWeight: selected ? FontWeight.w700 : null,
+                  color: selected ? colors.onPrimaryContainer : null,
                 ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              data.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(fontSize: 10),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -396,10 +487,10 @@ class _Filters extends StatelessWidget {
     required this.onClear,
   });
 
-  final FeedbackWorkflowStatus? status;
+  final _FeedbackStatusFilter status;
   final FeedbackCategory? category;
   final FeedbackPriority? priority;
-  final ValueChanged<FeedbackWorkflowStatus?> onStatusChanged;
+  final ValueChanged<_FeedbackStatusFilter> onStatusChanged;
   final ValueChanged<FeedbackCategory?> onCategoryChanged;
   final ValueChanged<FeedbackPriority?> onPriorityChanged;
   final VoidCallback? onClear;
@@ -412,25 +503,23 @@ class _Filters extends StatelessWidget {
       contentPadding: const EdgeInsets.fromLTRB(9, 9, 5, 9),
     );
 
-    final statusField = DropdownButtonFormField<FeedbackWorkflowStatus?>(
-      key: ValueKey('feedback-status-${status?.name ?? 'all'}'),
+    final statusField = DropdownButtonFormField<_FeedbackStatusFilter>(
+      key: ValueKey('feedback-status-${status.name}'),
       initialValue: status,
       isExpanded: true,
       iconSize: 18,
       decoration: decoration('Status'),
-      items: [
-        const DropdownMenuItem<FeedbackWorkflowStatus?>(
-          value: null,
-          child: Text('All', overflow: TextOverflow.ellipsis),
-        ),
-        ...FeedbackWorkflowStatus.values.map(
-          (value) => DropdownMenuItem<FeedbackWorkflowStatus?>(
-            value: value,
-            child: Text(value.label, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-      ],
-      onChanged: onStatusChanged,
+      items: _FeedbackStatusFilter.values
+          .map(
+            (value) => DropdownMenuItem<_FeedbackStatusFilter>(
+              value: value,
+              child: Text(value.label, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (value) {
+        if (value != null) onStatusChanged(value);
+      },
     );
 
     final categoryField = DropdownButtonFormField<FeedbackCategory?>(

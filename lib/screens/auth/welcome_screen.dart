@@ -93,60 +93,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _showForgotPasswordDialog() async {
-    final emailController = TextEditingController(
-      text: _loginEmailController.text.trim(),
-    );
-    final formKey = GlobalKey<FormState>();
-
-    final email = await showDialog<String>(
+    final auth = AuthScope.read(context);
+    final sent = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Reset password'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: emailController,
-            autofocus: true,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(
-              labelText: 'Email address',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-            validator: (value) =>
-                AuthController.normalizeEmail(value ?? '') == null
-                ? 'Enter a valid email address.'
-                : null,
-            onFieldSubmitted: (_) {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(dialogContext).pop(emailController.text);
-              }
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(dialogContext).pop(emailController.text);
-              }
-            },
-            child: const Text('Send reset link'),
-          ),
-        ],
+      builder: (_) => _ResetPasswordDialog(
+        initialEmail: _loginEmailController.text.trim(),
+        authController: auth,
       ),
     );
 
-    emailController.dispose();
-    if (email == null || !mounted) return;
-
-    final sent = await AuthScope.read(context).sendPasswordResetEmail(email);
-    if (!mounted || !sent) return;
+    if (sent != true || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -446,6 +402,132 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ResetPasswordDialog extends StatefulWidget {
+  const _ResetPasswordDialog({
+    required this.initialEmail,
+    required this.authController,
+  });
+
+  final String initialEmail;
+  final AuthController authController;
+
+  @override
+  State<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _emailController = TextEditingController(
+    text: widget.initialEmail,
+  );
+
+  bool _isSending = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSending || !_formKey.currentState!.validate()) return;
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _isSending = true;
+      _errorMessage = null;
+    });
+
+    final sent = await widget.authController.sendPasswordResetEmail(
+      _emailController.text,
+    );
+
+    if (!mounted) return;
+
+    if (sent) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
+    setState(() {
+      _isSending = false;
+      _errorMessage =
+          widget.authController.errorMessage ??
+          'The password reset email could not be sent.';
+    });
+  }
+
+  void _cancel() {
+    if (_isSending) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).pop(false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reset password'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Form(
+              key: _formKey,
+              child: TextFormField(
+                key: const Key('resetPasswordEmailField'),
+                controller: _emailController,
+                autofocus: true,
+                enabled: !_isSending,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.email],
+                maxLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'Email address',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                validator: (value) =>
+                    AuthController.normalizeEmail(value ?? '') == null
+                    ? 'Enter a valid email address.'
+                    : null,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('resetPasswordCancelButton'),
+          onPressed: _isSending ? null : _cancel,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('resetPasswordSubmitButton'),
+          onPressed: _isSending ? null : _submit,
+          child: _isSending
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Send reset link'),
+        ),
+      ],
     );
   }
 }

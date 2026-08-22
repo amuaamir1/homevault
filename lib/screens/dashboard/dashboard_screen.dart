@@ -95,50 +95,15 @@ class DashboardScreen extends StatelessWidget {
                   actionLabel: 'Reports',
                   onAction: onOpenReports,
                 ),
-                const SizedBox(height: 12),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.55,
-                  children: [
-                    _MetricCard(
-                      key: const ValueKey('dashboardApplianceMetric'),
-                      icon: Icons.home_repair_service_outlined,
-                      label: 'Appliances',
-                      value: '${report.totalAppliances}',
-                      color: AppColors.primary,
-                      onTap: onOpenAppliances,
-                    ),
-                    _MetricCard(
-                      key: const ValueKey('dashboardDocumentMetric'),
-                      icon: Icons.description_outlined,
-                      label: 'Documents',
-                      value: '${report.totalDocuments}',
-                      color: AppColors.warning,
-                      onTap: onOpenDocuments,
-                    ),
-                    _MetricCard(
-                      key: const ValueKey('dashboardActiveWarrantyMetric'),
-                      icon: Icons.verified_user_outlined,
-                      label: 'Active warranty',
-                      value: '${report.warrantyCount(WarrantyStatus.active)}',
-                      color: AppColors.success,
-                      onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
-                    ),
-                    _MetricCard(
-                      key: const ValueKey('dashboardServiceDueMetric'),
-                      icon: Icons.event_available_outlined,
-                      label: 'Service due',
-                      value: '${report.upcomingServices.length}',
-                      color: AppColors.secondary,
-                      onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                _DashboardMetrics(
+                  report: report,
+                  onOpenAppliances: onOpenAppliances,
+                  onOpenDocuments: onOpenDocuments,
+                  onOpenWarrantyCenter: onOpenWarrantyCenter,
+                  onOpenServiceCenter: onOpenServiceCenter,
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 22),
                 _SectionTitle(
                   title: 'Warranty overview',
                   subtitle:
@@ -349,6 +314,89 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+class _DashboardMetrics extends StatelessWidget {
+  const _DashboardMetrics({
+    required this.report,
+    required this.onOpenAppliances,
+    required this.onOpenDocuments,
+    required this.onOpenWarrantyCenter,
+    required this.onOpenServiceCenter,
+  });
+
+  final HomeVaultReport report;
+  final Future<void> Function() onOpenAppliances;
+  final Future<void> Function() onOpenDocuments;
+  final Future<void> Function(WarrantyFilter initialFilter)
+  onOpenWarrantyCenter;
+  final Future<void> Function(ServiceFilter initialFilter) onOpenServiceCenter;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = <Widget>[
+      _MetricCard(
+        key: const ValueKey('dashboardApplianceMetric'),
+        icon: Icons.home_repair_service_outlined,
+        label: 'Appliances',
+        value: '${report.totalAppliances}',
+        color: AppColors.primary,
+        onTap: onOpenAppliances,
+      ),
+      _MetricCard(
+        key: const ValueKey('dashboardDocumentMetric'),
+        icon: Icons.description_outlined,
+        label: 'Documents',
+        value: '${report.totalDocuments}',
+        color: AppColors.warning,
+        onTap: onOpenDocuments,
+      ),
+      _MetricCard(
+        key: const ValueKey('dashboardActiveWarrantyMetric'),
+        icon: Icons.verified_user_outlined,
+        label: 'Active warranty',
+        value: '${report.warrantyCount(WarrantyStatus.active)}',
+        color: AppColors.success,
+        onTap: () => onOpenWarrantyCenter(WarrantyFilter.active),
+      ),
+      _MetricCard(
+        key: const ValueKey('dashboardServiceDueMetric'),
+        icon: Icons.event_available_outlined,
+        label: 'Service due',
+        value: '${report.upcomingServices.length}',
+        color: AppColors.secondary,
+        onTap: () => onOpenServiceCenter(ServiceFilter.dueSoon),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 340) {
+          return SizedBox(
+            height: 94,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = 0; index < cards.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(child: cards[index]),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final width = (constraints.maxWidth - 8) / 2;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: cards
+              .map((card) => SizedBox(width: width, height: 90, child: card))
+              .toList(growable: false),
+        );
+      },
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     super.key,
@@ -368,46 +416,50 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 27,
+                height: 27,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(9),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: color, size: 23),
+                child: Icon(icon, color: color, size: 16),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 1),
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      value,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+                child: Center(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.visible,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      height: 1.0,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],

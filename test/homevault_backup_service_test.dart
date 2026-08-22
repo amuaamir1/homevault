@@ -204,4 +204,62 @@ void main() {
       throwsA(isA<BackupFormatException>()),
     );
   });
+
+  test('restored attachment clears stale cloud storage metadata', () async {
+    final sourceDirectory = await Directory.systemTemp.createTemp(
+      'homevault_backup_cloud_pointer_source_',
+    );
+    final restoreDirectory = await Directory.systemTemp.createTemp(
+      'homevault_backup_cloud_pointer_restore_',
+    );
+
+    try {
+      final sourceDocument = File('${sourceDirectory.path}/invoice.pdf');
+      await sourceDocument.writeAsBytes([9, 8, 7]);
+
+      final appliance = Appliance(
+        id: 'cloud-pointer-appliance',
+        name: 'Test appliance',
+        category: 'Other',
+        brand: 'Test',
+        invoiceDocument: StoredDocument(
+          id: 'cloud-pointer-document',
+          type: DocumentType.invoice,
+          fileName: 'invoice.pdf',
+          localPath: sourceDocument.path,
+          sizeBytes: 3,
+          attachedAt: DateTime(2026, 8, 11),
+          cloudStoragePath: 'users/old/appliances/a/documents/d/invoice.pdf',
+          cloudContentType: 'application/pdf',
+        ),
+        createdAt: DateTime(2026, 8, 11),
+      );
+
+      final service = HomeVaultBackupService(
+        documentsDirectoryProvider: () async => restoreDirectory,
+      );
+      final archive = await service.buildBackup([
+        appliance,
+      ], ownerUid: 'firebase-user-a');
+      final selection = service.inspectBackupBytes(
+        archive.bytes,
+        fileName: 'cloud-pointer.zip',
+      );
+      final restored = await service.prepareRestore(
+        selection: selection,
+        existingAppliances: const [],
+        mode: RestoreMode.replace,
+        currentOwnerUid: 'firebase-user-a',
+      );
+
+      final document = restored.appliances.single.invoiceDocument!;
+      expect(document.cloudStoragePath, isEmpty);
+      expect(document.cloudContentType, isEmpty);
+      expect(document.isAvailableOnDevice, isTrue);
+      expect(document.needsCloudUpload, isTrue);
+    } finally {
+      await sourceDirectory.delete(recursive: true);
+      await restoreDirectory.delete(recursive: true);
+    }
+  });
 }

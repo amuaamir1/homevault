@@ -9,6 +9,7 @@ import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
+import 'cloud_backup_screen.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
   const BackupRestoreScreen({super.key});
@@ -405,28 +406,53 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                         const Text(
                           'A full backup includes appliance records, warranty and support details, service history, and document files.',
                         ),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
+                        const SizedBox(height: 12),
+                        Row(
                           children: [
-                            _CountChip(
-                              icon: Icons.home_repair_service_outlined,
-                              label: '${store.totalCount} appliances',
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.home_repair_service_outlined,
+                                label: '${store.totalCount} appliances',
+                              ),
                             ),
-                            _CountChip(
-                              icon: Icons.description_outlined,
-                              label: '$documentCount documents',
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.description_outlined,
+                                label: '$documentCount documents',
+                              ),
                             ),
-                            _CountChip(
-                              icon: Icons.build_outlined,
-                              label:
-                                  '${store.totalServiceRecordCount} services',
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _CountChip(
+                                icon: Icons.build_outlined,
+                                label:
+                                    '${store.totalServiceRecordCount} services',
+                              ),
                             ),
                           ],
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_outlined),
+                    title: const Text('Cloud backup & recovery'),
+                    subtitle: const Text(
+                      'Automatic restore points, Backup now, history, and recovery.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    enabled: !_isBusy,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const CloudBackupScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -509,7 +535,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.lock_open_outlined),
-                    title: Text('Backup security'),
+                    title: Text('Local backup security'),
                     subtitle: Text(
                       'Backups are account-tagged but not encrypted. Store them in a private, trusted location.',
                     ),
@@ -590,6 +616,36 @@ class _CountChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(avatar: Icon(icon, size: 18), label: Text(label));
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.primary),
+          const SizedBox(width: 5),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
