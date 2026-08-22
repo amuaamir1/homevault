@@ -14,12 +14,16 @@ class AddServiceRequestScreen extends StatefulWidget {
     this.initialApplianceId,
     this.request,
     this.initialProfile,
+    this.initialProviderName,
+    this.initialProviderPhone,
   });
 
   final List<Appliance> appliances;
   final String? initialApplianceId;
   final ServiceRequest? request;
   final UserProfile? initialProfile;
+  final String? initialProviderName;
+  final String? initialProviderPhone;
 
   @override
   State<AddServiceRequestScreen> createState() =>
@@ -76,11 +80,19 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
         request?.contactPhone ?? profile?.phoneNumber ?? '',
       ),
     );
+    final directoryProvider = widget.initialProviderName?.trim() ?? '';
+    final directoryPhone = widget.initialProviderPhone?.trim() ?? '';
     _providerController = TextEditingController(
-      text: request?.provider ?? providerDefaults.$1,
+      text:
+          request?.provider ??
+          (directoryProvider.isNotEmpty
+              ? directoryProvider
+              : providerDefaults.$1),
     );
     _providerPhoneController = TextEditingController(
-      text: request?.providerPhone ?? providerDefaults.$2,
+      text:
+          request?.providerPhone ??
+          (directoryPhone.isNotEmpty ? directoryPhone : providerDefaults.$2),
     );
     _ticketController = TextEditingController(
       text: request?.ticketNumber ?? '',
@@ -171,10 +183,16 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
       (item) => item.id == applianceId,
     );
     final providerDefaults = _providerDefaults(appliance);
+    final directoryProvider = widget.initialProviderName?.trim() ?? '';
+    final directoryPhone = widget.initialProviderPhone?.trim() ?? '';
 
     setState(() => _applianceId = applianceId);
-    _providerController.text = providerDefaults.$1;
-    _providerPhoneController.text = providerDefaults.$2;
+    _providerController.text = directoryProvider.isNotEmpty
+        ? directoryProvider
+        : providerDefaults.$1;
+    _providerPhoneController.text = directoryPhone.isNotEmpty
+        ? directoryPhone
+        : providerDefaults.$2;
   }
 
   String? _validatePhone(String? value) {
@@ -417,6 +435,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
             ),
             const SizedBox(height: 12),
             TextFormField(
+              key: const Key('serviceRequestProviderPhoneField'),
               controller: _providerPhoneController,
               decoration: const InputDecoration(
                 labelText: 'Provider phone',

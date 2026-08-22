@@ -47,6 +47,20 @@ class SupportActionService {
     );
   }
 
+  static Uri providerEmailUri({
+    required String email,
+    required String providerName,
+  }) {
+    final subject = providerName.trim().isEmpty
+        ? 'HomeVault support request'
+        : 'Support request for ${providerName.trim()}';
+    return Uri(
+      scheme: 'mailto',
+      path: email.trim(),
+      query: 'subject=${Uri.encodeComponent(subject)}',
+    );
+  }
+
   static Uri websiteUri(String website) {
     final trimmed = website.trim();
     final candidate = trimmed.contains('://') ? trimmed : 'https://$trimmed';
@@ -93,6 +107,20 @@ class SupportActionService {
     }
     await _launch(
       emailUri(appliance),
+      failureMessage: 'No email app is available on this device.',
+    );
+  }
+
+  Future<void> emailProvider({
+    required String email,
+    required String providerName,
+  }) async {
+    if (email.trim().isEmpty) {
+      throw const SupportActionException('No support email is saved.');
+    }
+
+    await _launch(
+      providerEmailUri(email: email, providerName: providerName),
       failureMessage: 'No email app is available on this device.',
     );
   }

@@ -41,6 +41,17 @@ void main() {
     expect(uri.query, contains('%20'));
   });
 
+  test('provider email URI uses a provider-specific subject', () {
+    final uri = SupportActionService.providerEmailUri(
+      email: 'care@example.com',
+      providerName: 'Daikin Care',
+    );
+
+    expect(uri.scheme, 'mailto');
+    expect(uri.path, 'care@example.com');
+    expect(uri.queryParameters['subject'], 'Support request for Daikin Care');
+  });
+
   test('website URI adds HTTPS when the scheme is omitted', () {
     final uri = SupportActionService.websiteUri('support.example.com/help');
 
