@@ -9,6 +9,7 @@ import '../models/service_record.dart';
 import '../models/stored_document.dart';
 import '../services/appliance_repository.dart';
 import '../services/cloud_document_storage_service.dart';
+import '../services/cloud_document_sync_journal.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/warranty_notification_service.dart';
@@ -18,18 +19,22 @@ class ApplianceStore extends ChangeNotifier {
     ApplianceRepository? repository,
     WarrantyReminderScheduler? reminderScheduler,
     CloudDocumentStorage? cloudDocumentStorage,
+    CloudDocumentSyncJournal? cloudDocumentSyncJournal,
     DocumentStorageService? documentStorageService,
   }) : _repository = repository ?? FileApplianceRepository(),
        _reminderScheduler =
            reminderScheduler ?? const NoOpWarrantyReminderScheduler(),
        _cloudDocumentStorage =
            cloudDocumentStorage ?? const NoOpCloudDocumentStorage(),
+       _cloudDocumentSyncJournal =
+           cloudDocumentSyncJournal ?? MemoryCloudDocumentSyncJournal(),
        _documentStorageService =
            documentStorageService ?? DocumentStorageService();
 
   final ApplianceRepository _repository;
   final WarrantyReminderScheduler _reminderScheduler;
   final CloudDocumentStorage _cloudDocumentStorage;
+  final CloudDocumentSyncJournal _cloudDocumentSyncJournal;
   final DocumentStorageService _documentStorageService;
   List<Appliance> _appliances = [];
   bool _isLoading = false;
@@ -46,6 +51,7 @@ class ApplianceStore extends ChangeNotifier {
   CloudSyncStatus _cloudSyncStatus = const CloudSyncStatus.unavailable();
   Future<void>? _documentSyncInProgress;
   final Map<String, Future<StoredDocument>> _documentDownloads = {};
+  bool _hasPendingCloudDocumentDeletes = false;
 
   // Advances only after a successful local structured-data mutation.
   // Cloud-sync status changes, remote-watch refreshes, and local document-cache
@@ -64,6 +70,21 @@ class ApplianceStore extends ChangeNotifier {
   bool get cloudSyncAvailable =>
       _repository is CloudSyncAwareApplianceRepository;
   bool get cloudDocumentStorageAvailable => _cloudDocumentStorage.isAvailable;
+
+  bool get hasPendingCloudDocumentWork {
+    if (_hasPendingCloudDocumentDeletes) return true;
+
+    for (final appliance in _appliances) {
+      for (final document in appliance.allAttachments) {
+        if (document.needsCloudUpload ||
+            (!document.isAvailableOnDevice && document.isAvailableInCloud)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
 
   /// Monotonic revision used by automatic backup coordination.
   ///
@@ -147,7 +168,13 @@ class ApplianceStore extends ChangeNotifier {
   }
 
   Future<void> _bindOwnerResolved(String? nextOwner) async {
-    await _cloudDocumentStorage.bindOwner(nextOwner);
+    await Future.wait([
+      _cloudDocumentStorage.bindOwner(nextOwner),
+      _cloudDocumentSyncJournal.bindOwner(nextOwner),
+    ]);
+    _hasPendingCloudDocumentDeletes =
+        nextOwner != null &&
+        await _cloudDocumentSyncJournal.hasPendingDeletes();
 
     if (_repository is! OwnerScopedApplianceRepository) {
       final ownerChanged = _ownerUid != nextOwner;
@@ -498,6 +525,17 @@ class ApplianceStore extends ChangeNotifier {
     });
   }
 
+  Future<void> ensureCloudDocumentSyncComplete() async {
+    await retryCloudDocumentSync();
+
+    if (hasPendingCloudDocumentWork) {
+      throw const CloudDocumentStorageException(
+        'Some HomeVault attachments are still waiting for cloud synchronization. '
+        'Keep the app online and try again shortly.',
+      );
+    }
+  }
+
   Future<StoredDocument> uploadDocument(
     String applianceId,
     String documentId,
@@ -528,23 +566,39 @@ class ApplianceStore extends ChangeNotifier {
       );
     }
 
+    final ownerAtStart = _ownerUid;
     final uploaded = await _cloudDocumentStorage.upload(
       applianceId: applianceId,
       document: document,
     );
 
+    if (_ownerUid != ownerAtStart) {
+      throw const CloudDocumentStorageException(
+        'The document upload stopped because the signed-in account changed.',
+      );
+    }
+
+    // Register the new Storage object before publishing its metadata. If the
+    // process stops between these two operations, the durable journal will see
+    // that the path is no longer referenced after restart and safely delete it.
     try {
-      await update(appliance.replaceDocument(documentId, uploaded));
+      await _cloudDocumentSyncJournal.rememberCloudPaths([
+        uploaded.cloudStoragePath,
+      ]);
     } catch (_) {
       try {
         await _cloudDocumentStorage.delete(uploaded);
-      } catch (cleanupError, cleanupStack) {
-        await CrashReportingService.recordNonFatal(
-          cleanupError,
-          cleanupStack,
-          reason: 'Cleaning up an unreferenced cloud document upload',
-        );
+      } catch (_) {
+        // Preserve the journal error; an account cleanup can remove the object.
       }
+      rethrow;
+    }
+
+    try {
+      await update(appliance.replaceDocument(documentId, uploaded));
+    } catch (_) {
+      await _reconcileCloudDocumentJournalSafely(_appliances);
+      unawaited(retryCloudDocumentSync());
       rethrow;
     }
 
@@ -692,13 +746,24 @@ class ApplianceStore extends ChangeNotifier {
   /// files are uploaded in the background and cloud-only files are cached on
   /// this device automatically after sign-in, refresh, or a remote update.
   Future<void> _synchronizeCloudDocuments() async {
+    final ownerAtStart = _ownerUid;
+    if (ownerAtStart == null) return;
+
+    await _reconcileCloudDocumentJournalSafely(_appliances);
+    if (_ownerUid != ownerAtStart) return;
+
+    await _drainPendingCloudDeletes();
+    if (_ownerUid != ownerAtStart) return;
+
     final applianceIds = _appliances
         .map((appliance) => appliance.id)
         .toList(growable: false);
 
-    // Upload local-only files first. A successful upload leaves the document
-    // available both locally and in cloud, so it will not enter the cache pass.
+    // Upload local-only files first. The local file plus its appliance metadata
+    // is the durable upload queue: it survives an app restart until a cloud
+    // Storage path has been written back to the appliance.
     for (final applianceId in applianceIds) {
+      if (_ownerUid != ownerAtStart) return;
       final current = applianceById(applianceId);
       if (current == null) continue;
 
@@ -733,6 +798,7 @@ class ApplianceStore extends ChangeNotifier {
     // background, so users normally open documents without seeing transfer
     // states or needing to press a download button.
     for (final applianceId in applianceIds) {
+      if (_ownerUid != ownerAtStart) return;
       final current = applianceById(applianceId);
       if (current == null) continue;
 
@@ -767,6 +833,13 @@ class ApplianceStore extends ChangeNotifier {
         }
       }
     }
+
+    // Uploads can create new cloud paths, and metadata changes during the pass
+    // can make older objects stale. Reconcile once more before finishing.
+    if (_ownerUid != ownerAtStart) return;
+    await _reconcileCloudDocumentJournalSafely(_appliances);
+    if (_ownerUid != ownerAtStart) return;
+    await _drainPendingCloudDeletes();
   }
 
   StoredDocument? _documentById(Appliance appliance, String documentId) {
@@ -778,40 +851,123 @@ class ApplianceStore extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _cleanupRemovedCloudCopiesSafely(
-    Iterable<Appliance> previous,
-    Iterable<Appliance> current,
-  ) async {
-    if (!_cloudDocumentStorage.isAvailable) return;
-
-    final currentPaths = current
+  Set<String> _cloudPathsFrom(Iterable<Appliance> appliances) {
+    return appliances
         .expand((appliance) => appliance.allAttachments)
         .map((document) => document.cloudStoragePath.trim())
         .where((value) => value.isNotEmpty)
         .toSet();
+  }
 
-    final staleDocuments = previous
-        .expand((appliance) => appliance.allAttachments)
-        .where(
-          (document) =>
-              document.isAvailableInCloud &&
-              !currentPaths.contains(document.cloudStoragePath.trim()),
-        )
-        .toList(growable: false);
+  Future<void> _rememberCloudDocumentPathsSafely(
+    Iterable<Appliance> appliances,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable || _ownerUid == null) return;
 
-    for (final document in staleDocuments) {
+    try {
+      await _cloudDocumentSyncJournal.rememberCloudPaths(
+        _cloudPathsFrom(appliances),
+      );
+      await _refreshPendingCloudDeleteFlag();
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Remembering HomeVault cloud document paths',
+      );
+    }
+  }
+
+  Future<void> _reconcileCloudDocumentJournalSafely(
+    Iterable<Appliance> appliances,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable || _ownerUid == null) return;
+
+    try {
+      await _cloudDocumentSyncJournal.reconcileActiveCloudPaths(
+        _cloudPathsFrom(appliances),
+      );
+      await _refreshPendingCloudDeleteFlag();
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Reconciling HomeVault cloud document cleanup state',
+      );
+    }
+  }
+
+  Future<void> _refreshPendingCloudDeleteFlag() async {
+    final next = await _cloudDocumentSyncJournal.hasPendingDeletes();
+    if (_hasPendingCloudDocumentDeletes == next) return;
+    _hasPendingCloudDocumentDeletes = next;
+    notifyListeners();
+  }
+
+  Future<void> _drainPendingCloudDeletes() async {
+    if (!_cloudDocumentStorage.isAvailable || _ownerUid == null) return;
+
+    final ownerAtStart = _ownerUid;
+    final pendingPaths = await _cloudDocumentSyncJournal.pendingDeletePaths();
+    if (_ownerUid != ownerAtStart) return;
+    if (pendingPaths.isEmpty) {
+      if (_hasPendingCloudDocumentDeletes) {
+        _hasPendingCloudDocumentDeletes = false;
+        notifyListeners();
+      }
+      return;
+    }
+
+    if (!_hasPendingCloudDocumentDeletes) {
+      _hasPendingCloudDocumentDeletes = true;
+      notifyListeners();
+    }
+
+    for (final cloudPath in pendingPaths) {
+      if (_ownerUid != ownerAtStart) return;
+
+      // A late metadata update can make a path active again. Re-check before
+      // deleting so a queued cleanup can never remove a currently referenced
+      // Storage object.
+      if (_cloudPathsFrom(_appliances).contains(cloudPath)) {
+        await _cloudDocumentSyncJournal.reconcileActiveCloudPaths(
+          _cloudPathsFrom(_appliances),
+        );
+        continue;
+      }
+
       try {
         await _cloudDocumentStorage
-            .delete(document)
+            .deletePath(cloudPath)
             .timeout(const Duration(seconds: 8));
+        if (_ownerUid != ownerAtStart) return;
+        await _cloudDocumentSyncJournal.completeDelete(cloudPath);
       } catch (error, stack) {
         await CrashReportingService.recordNonFatal(
           error,
           stack,
-          reason: 'Deleting an unreferenced HomeVault cloud document',
+          reason: 'Retrying a queued HomeVault cloud document deletion',
         );
       }
     }
+
+    if (_ownerUid == ownerAtStart) {
+      await _refreshPendingCloudDeleteFlag();
+    }
+  }
+
+  Future<void> _cleanupRemovedCloudCopiesSafely(
+    Iterable<Appliance> previous,
+    Iterable<Appliance> current,
+  ) async {
+    if (!_cloudDocumentStorage.isAvailable || _ownerUid == null) return;
+
+    // `previous` is remembered even if this is the first run after upgrading
+    // from the old direct-delete implementation. Reconciliation then turns any
+    // no-longer-referenced paths into a durable pending delete.
+    await _rememberCloudDocumentPathsSafely(previous);
+    await _reconcileCloudDocumentJournalSafely(current);
+    await _drainPendingCloudDeletes();
   }
 
   void _markDataChanged() {
@@ -837,6 +993,12 @@ class ApplianceStore extends ChangeNotifier {
     final previousAppliances = [..._appliances];
     final updated = [..._appliances];
     updated[index] = appliance;
+
+    // Persist a durable record of currently referenced cloud objects before
+    // changing structured metadata. If the app stops immediately after the
+    // save, Phase 2 can still identify objects that became unreferenced.
+    await _rememberCloudDocumentPathsSafely(previousAppliances);
+
     final persisted = await _persistAppliances(updated);
     _appliances = persisted;
     _markDataChanged();
@@ -918,6 +1080,9 @@ class ApplianceStore extends ChangeNotifier {
     await _runWithRepositoryWatchPaused<void>(() async {
       final previousAppliances = [..._appliances];
       final replacement = List<Appliance>.from(appliances);
+
+      await _rememberCloudDocumentPathsSafely(previousAppliances);
+
       final persisted = await _persistAppliances(
         replacement,
         forceOverwrite: true,
@@ -1044,6 +1209,8 @@ class ApplianceStore extends ChangeNotifier {
     if (updated.length == _appliances.length) {
       return;
     }
+
+    await _rememberCloudDocumentPathsSafely(previousAppliances);
 
     // A user-confirmed delete is authoritative for this appliance only.
     // This allows Device B to delete the latest cloud revision even if Device A

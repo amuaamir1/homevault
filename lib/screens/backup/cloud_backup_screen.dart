@@ -75,7 +75,9 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
     }
 
     await _runBusy('Creating cloud backup...', () async {
-      await store.retryCloudDocumentSync().timeout(const Duration(minutes: 2));
+      await store.ensureCloudDocumentSyncComplete().timeout(
+        const Duration(minutes: 2),
+      );
       final snapshot = await _cloudService.createBackup(
         uid: uid,
         appliances: store.appliances,
@@ -119,7 +121,7 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
       if (mode == RestoreMode.replace && store.appliances.isNotEmpty) {
         // A destructive restore is not allowed to proceed unless the current
         // state can first be captured completely in cloud storage.
-        await store.retryCloudDocumentSync().timeout(
+        await store.ensureCloudDocumentSyncComplete().timeout(
           const Duration(minutes: 2),
         );
         await _cloudService.createBackup(

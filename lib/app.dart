@@ -96,6 +96,10 @@ class _HomeVaultAppState extends State<HomeVaultApp>
     final auth = _authController;
     if (auth?.isAuthenticated == true) {
       unawaited(auth!.validateCurrentSession());
+      // Retry any durable offline appliance/document work when the user
+      // returns to HomeVault. Firestore's live listener also retries when a
+      // server snapshot confirms connectivity has returned.
+      unawaited(_applianceStore.retryCloudSync());
     }
   }
 

@@ -35,6 +35,9 @@ class FirestoreApplianceRepository
   static const Duration _writeWait = Duration(seconds: 5);
   static const Duration _startupReadWait = Duration(seconds: 2);
   static const Duration _retryWait = Duration(seconds: 8);
+  static const Duration _automaticReconnectRetryDelay = Duration(
+    milliseconds: 300,
+  );
 
   final FirebaseFirestore _firestore;
   final FileApplianceRepository _localRepository;
@@ -49,6 +52,8 @@ class FirestoreApplianceRepository
   bool _hasCloudBaseline = false;
   DateTime? _lastSyncedAt;
   String? _installationId;
+  PendingApplianceSyncState _pendingSync = const PendingApplianceSyncState();
+  Future<void>? _automaticReconnectRetry;
   CloudSyncStatus _syncStatus = const CloudSyncStatus.unavailable();
 
   @override
@@ -105,6 +110,8 @@ class FirestoreApplianceRepository
     _hasCloudBaseline = false;
     _lastSyncedAt = null;
     _installationId = null;
+    _pendingSync = const PendingApplianceSyncState();
+    _automaticReconnectRetry = null;
 
     await _localRepository.bindOwner(_ownerUid);
     await _identityService.bindOwner(_ownerUid);
@@ -113,7 +120,13 @@ class FirestoreApplianceRepository
       _emitSyncStatus(const CloudSyncStatus.unavailable());
     } else {
       _installationId = await _identityService.installationId();
-      _emitSyncStatus(const CloudSyncStatus(state: CloudSyncState.connecting));
+      _pendingSync = await _localRepository.loadPendingSyncState();
+      _emitSyncStatus(
+        CloudSyncStatus(
+          state: CloudSyncState.connecting,
+          hasPendingWrites: _pendingSync.hasPendingChanges,
+        ),
+      );
     }
   }
 
@@ -128,6 +141,7 @@ class FirestoreApplianceRepository
       CloudSyncStatus(
         state: CloudSyncState.connecting,
         lastSyncedAt: _lastSyncedAt,
+        hasPendingWrites: _pendingSync.hasPendingChanges,
       ),
     );
 
@@ -244,13 +258,22 @@ class FirestoreApplianceRepository
         }
       }
 
+      if (!cloudSnapshot.metadata.isFromCache &&
+          !cloudSnapshot.metadata.hasPendingWrites) {
+        await _reconcilePendingWithCloud(cloudAppliances, localAppliances);
+      }
       final merged = _mergeCloudWithLocal(cloudAppliances, localAppliances);
 
       await _localRepository.saveAppliances(merged);
       _rememberCloudBaseline(cloudAppliances);
+      _updateStatusFromSnapshot(ownerAtStart, cloudSnapshot);
 
       if (_lastLoadWarning == null && localWarning != null) {
         _lastLoadWarning = localWarning;
+      }
+
+      if (_pendingSync.hasPendingChanges) {
+        _scheduleAutomaticReconnectRetry(ownerAtStart);
       }
 
       return merged;
@@ -263,18 +286,19 @@ class FirestoreApplianceRepository
         CloudSyncStatus(
           state: CloudSyncState.connecting,
           lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: _pendingSync.hasPendingChanges,
           message: 'Showing device data while cloud sync reconnects.',
         ),
       );
       return localAppliances;
     } on FirebaseException catch (error) {
       if (_isOfflineError(error)) {
-        _rememberCloudBaseline(localAppliances);
         _emitForOwner(
           ownerAtStart,
           CloudSyncStatus(
             state: CloudSyncState.offline,
             lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: _pendingSync.hasPendingChanges,
             message: 'Using the last data saved on this device.',
           ),
         );
@@ -326,11 +350,20 @@ class FirestoreApplianceRepository
         final localAppliances = await _localRepository.loadAppliances();
         final cloudAppliances = _decodeSnapshot(snapshot);
 
+        if (!snapshot.metadata.isFromCache &&
+            !snapshot.metadata.hasPendingWrites) {
+          await _reconcilePendingWithCloud(cloudAppliances, localAppliances);
+        }
         final merged = _mergeCloudWithLocal(cloudAppliances, localAppliances);
 
         await _localRepository.saveAppliances(merged);
         _rememberCloudBaseline(cloudAppliances);
+        _updateStatusFromSnapshot(ownerAtStart, snapshot);
         yield merged;
+
+        if (!snapshot.metadata.isFromCache && _pendingSync.hasPendingChanges) {
+          _scheduleAutomaticReconnectRetry(ownerAtStart);
+        }
       }
     } on FirebaseException catch (error) {
       if (_ownerUid == ownerAtStart) {
@@ -340,6 +373,7 @@ class FirestoreApplianceRepository
                 ? CloudSyncState.offline
                 : CloudSyncState.error,
             lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: _pendingSync.hasPendingChanges,
             message: _firebaseMessage(error),
           ),
         );
@@ -351,6 +385,7 @@ class FirestoreApplianceRepository
           CloudSyncStatus(
             state: CloudSyncState.error,
             lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: _pendingSync.hasPendingChanges,
             message: 'Cloud sync listener stopped unexpectedly.',
           ),
         );
@@ -371,6 +406,7 @@ class FirestoreApplianceRepository
     Set<String> authoritativeDeleteIds = const <String>{},
   }) async {
     final ownerAtStart = _requiredOwnerUid;
+    final localBeforeSave = await _localRepository.loadAppliances();
 
     if (!_hasCloudBaseline) {
       try {
@@ -381,28 +417,40 @@ class FirestoreApplianceRepository
         _rememberCloudBaseline(_decodeSnapshot(snapshot));
       } on TimeoutException {
         await _localRepository.saveAppliances(appliances);
+        await _queuePendingDifference(
+          ownerAtStart,
+          previous: localBeforeSave,
+          desired: appliances,
+          authoritativeDeleteIds: authoritativeDeleteIds,
+        );
         _emitForOwner(
           ownerAtStart,
           CloudSyncStatus(
             state: CloudSyncState.offline,
             lastSyncedAt: _lastSyncedAt,
-            hasPendingWrites: true,
+            hasPendingWrites: _pendingSync.hasPendingChanges,
             message:
-                'Changes are saved on this device and need cloud verification.',
+                'Changes are saved on this device and will sync automatically.',
           ),
         );
         return appliances;
       } on FirebaseException catch (error) {
         if (_isOfflineError(error)) {
           await _localRepository.saveAppliances(appliances);
+          await _queuePendingDifference(
+            ownerAtStart,
+            previous: localBeforeSave,
+            desired: appliances,
+            authoritativeDeleteIds: authoritativeDeleteIds,
+          );
           _emitForOwner(
             ownerAtStart,
             CloudSyncStatus(
               state: CloudSyncState.offline,
               lastSyncedAt: _lastSyncedAt,
-              hasPendingWrites: true,
+              hasPendingWrites: _pendingSync.hasPendingChanges,
               message:
-                  'Changes are saved on this device and need cloud verification.',
+                  'Changes are saved on this device and will sync automatically.',
             ),
           );
           return appliances;
@@ -429,6 +477,13 @@ class FirestoreApplianceRepository
 
     if (changedList.isEmpty && deletedList.isEmpty) {
       await _localRepository.saveAppliances(appliances);
+      await _reconcilePendingAgainstRememberedBaseline(
+        ownerAtStart,
+        appliances,
+      );
+      if (!_pendingSync.hasPendingChanges) {
+        _markSynced(ownerAtStart);
+      }
       return appliances;
     }
 
@@ -531,6 +586,11 @@ class FirestoreApplianceRepository
 
       await _localRepository.saveAppliances(resolved);
       _rememberCloudBaseline(resolved);
+      await _clearPendingSync(
+        ownerAtStart,
+        upsertIds: changedList,
+        deleteIds: deletedList,
+      );
       _lastLoadWarning = null;
       _markSynced(ownerAtStart);
       return resolved;
@@ -540,39 +600,69 @@ class FirestoreApplianceRepository
           .timeout(_retryWait);
       final cloudAppliances = _decodeSnapshot(snapshot);
       final localAppliances = await _localRepository.loadAppliances();
+
+      if (!snapshot.metadata.isFromCache &&
+          !snapshot.metadata.hasPendingWrites) {
+        await _reconcilePendingWithCloud(cloudAppliances, localAppliances);
+      }
       final refreshed = _mergeCloudWithLocal(cloudAppliances, localAppliances);
       await _localRepository.saveAppliances(refreshed);
       _rememberCloudBaseline(cloudAppliances);
-      _markSynced(ownerAtStart);
+
+      if (_pendingSync.hasPendingChanges) {
+        _emitForOwner(
+          ownerAtStart,
+          CloudSyncStatus(
+            state: CloudSyncState.error,
+            lastSyncedAt: _lastSyncedAt,
+            hasPendingWrites: true,
+            message:
+                'A saved offline change conflicts with a newer cloud update.',
+          ),
+        );
+      } else {
+        _markSynced(ownerAtStart);
+      }
+
       rethrow;
     } on TimeoutException {
       await _localRepository.saveAppliances(appliances);
+      await _queuePendingSync(
+        ownerAtStart,
+        upsertIds: changedList,
+        deleteIds: deletedList,
+        authoritativeDeleteIds: authoritativeDeleteIds,
+      );
       _lastLoadWarning =
-          'Changes are saved locally and need cloud verification.';
+          'Changes are saved locally and will sync automatically.';
       _emitForOwner(
         ownerAtStart,
         CloudSyncStatus(
           state: CloudSyncState.offline,
           lastSyncedAt: _lastSyncedAt,
-          hasPendingWrites: true,
-          message:
-              'Changes are saved locally and will be checked before cloud upload.',
+          hasPendingWrites: _pendingSync.hasPendingChanges,
+          message: 'Changes are saved locally and will sync automatically.',
         ),
       );
       return appliances;
     } on FirebaseException catch (error) {
       if (_isOfflineError(error)) {
         await _localRepository.saveAppliances(appliances);
+        await _queuePendingSync(
+          ownerAtStart,
+          upsertIds: changedList,
+          deleteIds: deletedList,
+          authoritativeDeleteIds: authoritativeDeleteIds,
+        );
         _lastLoadWarning =
-            'Changes are saved locally and need cloud verification.';
+            'Changes are saved locally and will sync automatically.';
         _emitForOwner(
           ownerAtStart,
           CloudSyncStatus(
             state: CloudSyncState.offline,
             lastSyncedAt: _lastSyncedAt,
-            hasPendingWrites: true,
-            message:
-                'Changes are saved locally and will be checked before cloud upload.',
+            hasPendingWrites: _pendingSync.hasPendingChanges,
+            message: 'Changes are saved locally and will sync automatically.',
           ),
         );
         return appliances;
@@ -583,7 +673,7 @@ class FirestoreApplianceRepository
         CloudSyncStatus(
           state: CloudSyncState.error,
           lastSyncedAt: _lastSyncedAt,
-          hasPendingWrites: true,
+          hasPendingWrites: _pendingSync.hasPendingChanges,
           message: _firebaseMessage(error),
         ),
       );
@@ -600,20 +690,39 @@ class FirestoreApplianceRepository
       CloudSyncStatus(
         state: CloudSyncState.connecting,
         lastSyncedAt: _lastSyncedAt,
-        hasPendingWrites: _syncStatus.hasPendingWrites,
+        hasPendingWrites: _pendingSync.hasPendingChanges,
       ),
     );
 
     try {
-      // Re-send any local structured-data difference that was not known to be
-      // queued in Firestore, then require a server read as proof of connectivity.
       final localAppliances = await _localRepository.loadAppliances();
-      await saveAppliances(localAppliances);
+      final pendingAtStart = _pendingSync;
+
+      if (pendingAtStart.hasPendingChanges) {
+        await saveAppliancesProtected(
+          localAppliances,
+          authoritativeDeleteIds: pendingAtStart.authoritativeDeleteIds,
+        );
+      } else {
+        // Preserve the previous retry behavior for upgrades from builds that
+        // predate the durable pending-sync journal.
+        await saveAppliances(localAppliances);
+      }
 
       final snapshot = await _appliancesCollection
           .get(const GetOptions(source: Source.server))
           .timeout(_retryWait);
 
+      final cloudAppliances = _decodeSnapshot(snapshot);
+      final latestLocal = await _localRepository.loadAppliances();
+      if (!snapshot.metadata.isFromCache &&
+          !snapshot.metadata.hasPendingWrites) {
+        await _reconcilePendingWithCloud(cloudAppliances, latestLocal);
+      }
+
+      final merged = _mergeCloudWithLocal(cloudAppliances, latestLocal);
+      await _localRepository.saveAppliances(merged);
+      _rememberCloudBaseline(cloudAppliances);
       _updateStatusFromSnapshot(ownerAtStart, snapshot);
     } on TimeoutException {
       _emitForOwner(
@@ -621,7 +730,7 @@ class FirestoreApplianceRepository
         CloudSyncStatus(
           state: CloudSyncState.offline,
           lastSyncedAt: _lastSyncedAt,
-          hasPendingWrites: _syncStatus.hasPendingWrites,
+          hasPendingWrites: _pendingSync.hasPendingChanges,
           message: 'Cloud connection could not be confirmed.',
         ),
       );
@@ -634,12 +743,209 @@ class FirestoreApplianceRepository
               ? CloudSyncState.offline
               : CloudSyncState.error,
           lastSyncedAt: _lastSyncedAt,
-          hasPendingWrites: _syncStatus.hasPendingWrites,
+          hasPendingWrites: _pendingSync.hasPendingChanges,
           message: _firebaseMessage(error),
         ),
       );
       rethrow;
     }
+  }
+
+  Future<void> _queuePendingDifference(
+    String ownerAtStart, {
+    required List<Appliance> previous,
+    required List<Appliance> desired,
+    Set<String> authoritativeDeleteIds = const <String>{},
+  }) async {
+    final previousFingerprints = <String, String>{
+      for (final appliance in previous) appliance.id: _fingerprint(appliance),
+    };
+    final desiredFingerprints = <String, String>{
+      for (final appliance in desired) appliance.id: _fingerprint(appliance),
+    };
+
+    final upsertIds = desiredFingerprints.keys
+        .where((id) => previousFingerprints[id] != desiredFingerprints[id])
+        .toSet();
+    final deleteIds = previousFingerprints.keys
+        .where((id) => !desiredFingerprints.containsKey(id))
+        .toSet();
+
+    await _queuePendingSync(
+      ownerAtStart,
+      upsertIds: upsertIds,
+      deleteIds: deleteIds,
+      authoritativeDeleteIds: authoritativeDeleteIds,
+    );
+  }
+
+  Future<void> _queuePendingSync(
+    String ownerAtStart, {
+    Iterable<String> upsertIds = const <String>[],
+    Iterable<String> deleteIds = const <String>[],
+    Iterable<String> authoritativeDeleteIds = const <String>[],
+  }) async {
+    if (_ownerUid != ownerAtStart ||
+        _localRepository.ownerUid != ownerAtStart) {
+      return;
+    }
+
+    final next = _pendingSync.queue(
+      upsertIds: upsertIds,
+      deleteIds: deleteIds,
+      authoritativeDeletes: authoritativeDeleteIds,
+    );
+
+    if (identical(next, _pendingSync) ||
+        _samePendingSyncState(next, _pendingSync)) {
+      return;
+    }
+
+    await _localRepository.savePendingSyncState(next);
+    if (_ownerUid == ownerAtStart) {
+      _pendingSync = next;
+    }
+  }
+
+  Future<void> _clearPendingSync(
+    String ownerAtStart, {
+    Iterable<String> upsertIds = const <String>[],
+    Iterable<String> deleteIds = const <String>[],
+  }) async {
+    if (_ownerUid != ownerAtStart ||
+        _localRepository.ownerUid != ownerAtStart) {
+      return;
+    }
+
+    final next = _pendingSync.clear(upsertIds: upsertIds, deleteIds: deleteIds);
+
+    if (_samePendingSyncState(next, _pendingSync)) {
+      return;
+    }
+
+    await _localRepository.savePendingSyncState(next);
+    if (_ownerUid == ownerAtStart) {
+      _pendingSync = next;
+    }
+  }
+
+  Future<void> _reconcilePendingWithCloud(
+    List<Appliance> cloudAppliances,
+    List<Appliance> localAppliances,
+  ) async {
+    final ownerAtStart = _requiredOwnerUid;
+    if (!_pendingSync.hasPendingChanges) return;
+
+    final cloudById = <String, Appliance>{
+      for (final appliance in cloudAppliances) appliance.id: appliance,
+    };
+    final localById = <String, Appliance>{
+      for (final appliance in localAppliances) appliance.id: appliance,
+    };
+
+    final satisfiedUpserts = <String>{};
+    for (final id in _pendingSync.pendingUpsertIds) {
+      final cloud = cloudById[id];
+      final local = localById[id];
+      if (cloud != null &&
+          local != null &&
+          _fingerprint(cloud) == _fingerprint(local)) {
+        satisfiedUpserts.add(id);
+      }
+    }
+
+    final satisfiedDeletes = _pendingSync.pendingDeleteIds
+        .where((id) => !cloudById.containsKey(id))
+        .toSet();
+
+    if (satisfiedUpserts.isEmpty && satisfiedDeletes.isEmpty) {
+      return;
+    }
+
+    await _clearPendingSync(
+      ownerAtStart,
+      upsertIds: satisfiedUpserts,
+      deleteIds: satisfiedDeletes,
+    );
+  }
+
+  Future<void> _reconcilePendingAgainstRememberedBaseline(
+    String ownerAtStart,
+    List<Appliance> desired,
+  ) async {
+    if (!_pendingSync.hasPendingChanges || !_hasCloudBaseline) return;
+
+    final desiredById = <String, Appliance>{
+      for (final appliance in desired) appliance.id: appliance,
+    };
+
+    final satisfiedUpserts = <String>{};
+    for (final id in _pendingSync.pendingUpsertIds) {
+      final appliance = desiredById[id];
+      final cloudFingerprint = _lastCloudFingerprints[id];
+      if (appliance != null &&
+          cloudFingerprint != null &&
+          _fingerprint(appliance) == cloudFingerprint) {
+        satisfiedUpserts.add(id);
+      }
+    }
+
+    final satisfiedDeletes = _pendingSync.pendingDeleteIds
+        .where((id) => !_lastCloudFingerprints.containsKey(id))
+        .toSet();
+
+    await _clearPendingSync(
+      ownerAtStart,
+      upsertIds: satisfiedUpserts,
+      deleteIds: satisfiedDeletes,
+    );
+  }
+
+  bool _samePendingSyncState(
+    PendingApplianceSyncState first,
+    PendingApplianceSyncState second,
+  ) {
+    return _sameStringSet(first.pendingUpsertIds, second.pendingUpsertIds) &&
+        _sameStringSet(first.pendingDeleteIds, second.pendingDeleteIds) &&
+        _sameStringSet(
+          first.authoritativeDeleteIds,
+          second.authoritativeDeleteIds,
+        );
+  }
+
+  bool _sameStringSet(Set<String> first, Set<String> second) {
+    return first.length == second.length && first.containsAll(second);
+  }
+
+  void _scheduleAutomaticReconnectRetry(String ownerAtStart) {
+    if (_ownerUid != ownerAtStart ||
+        !_pendingSync.hasPendingChanges ||
+        _automaticReconnectRetry != null) {
+      return;
+    }
+
+    late final Future<void> operation;
+    operation = Future<void>.delayed(_automaticReconnectRetryDelay, () async {
+      if (_ownerUid != ownerAtStart || !_pendingSync.hasPendingChanges) {
+        return;
+      }
+
+      try {
+        await retrySync();
+      } catch (_) {
+        // A conflict remains queued for explicit user review, while an offline
+        // failure will be retried on the next server snapshot/app resume.
+      }
+    });
+
+    _automaticReconnectRetry = operation;
+    unawaited(
+      operation.whenComplete(() {
+        if (identical(_automaticReconnectRetry, operation)) {
+          _automaticReconnectRetry = null;
+        }
+      }),
+    );
   }
 
   void _updateStatusFromSnapshot(
@@ -648,12 +954,20 @@ class FirestoreApplianceRepository
   ) {
     if (_ownerUid != ownerAtStart) return;
 
-    if (snapshot.metadata.hasPendingWrites) {
+    final hasPendingWrites =
+        snapshot.metadata.hasPendingWrites || _pendingSync.hasPendingChanges;
+
+    if (hasPendingWrites) {
       _emitSyncStatus(
         CloudSyncStatus(
-          state: CloudSyncState.syncing,
+          state: snapshot.metadata.isFromCache
+              ? CloudSyncState.offline
+              : CloudSyncState.syncing,
           lastSyncedAt: _lastSyncedAt,
           hasPendingWrites: true,
+          message: snapshot.metadata.isFromCache
+              ? 'Changes are saved on this device and will sync automatically.'
+              : null,
         ),
       );
       return;
@@ -675,6 +989,17 @@ class FirestoreApplianceRepository
 
   void _markSynced(String ownerAtStart) {
     if (_ownerUid != ownerAtStart) return;
+
+    if (_pendingSync.hasPendingChanges) {
+      _emitSyncStatus(
+        CloudSyncStatus(
+          state: CloudSyncState.syncing,
+          lastSyncedAt: _lastSyncedAt,
+          hasPendingWrites: true,
+        ),
+      );
+      return;
+    }
 
     _lastSyncedAt = DateTime.now();
     _emitSyncStatus(
@@ -765,10 +1090,39 @@ class FirestoreApplianceRepository
     final localById = <String, Appliance>{
       for (final appliance in localAppliances) appliance.id: appliance,
     };
+    final cloudIds = cloudAppliances.map((appliance) => appliance.id).toSet();
+    final merged = <Appliance>[];
 
-    return cloudAppliances
-        .map((cloud) => _mergeLocalAttachments(cloud, localById[cloud.id]))
-        .toList(growable: false);
+    for (final cloud in cloudAppliances) {
+      if (_pendingSync.isPendingDelete(cloud.id)) {
+        // A user-confirmed local delete must remain deleted on this device
+        // while the cloud transaction is waiting for connectivity.
+        continue;
+      }
+
+      final local = localById[cloud.id];
+      if (_pendingSync.isPendingUpsert(cloud.id) && local != null) {
+        // Preserve the user's locally saved edit until conflict-protected retry
+        // either uploads it or determines that the cloud changed meanwhile.
+        merged.add(local);
+        continue;
+      }
+
+      merged.add(_mergeLocalAttachments(cloud, local));
+    }
+
+    for (final id in _pendingSync.pendingUpsertIds) {
+      if (cloudIds.contains(id)) continue;
+      final local = localById[id];
+      if (local != null) {
+        // Offline-created appliances are not allowed to disappear merely
+        // because a reconnect snapshot arrives before the queued upload runs.
+        merged.add(local);
+      }
+    }
+
+    merged.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return List<Appliance>.unmodifiable(merged);
   }
 
   Appliance _mergeLocalAttachments(Appliance cloud, Appliance? local) {

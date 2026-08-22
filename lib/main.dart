@@ -7,6 +7,7 @@ import 'firebase_options.dart';
 import 'profile/profile_controller.dart';
 import 'services/appliance_repository.dart';
 import 'services/cloud_document_storage_service.dart';
+import 'services/cloud_document_sync_journal.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/firestore_appliance_repository.dart';
 import 'services/warranty_notification_service.dart';
@@ -57,6 +58,7 @@ Future<void> main() async {
           ),
           reminderScheduler: notificationService,
           cloudDocumentStorage: FirebaseCloudDocumentStorage(),
+          cloudDocumentSyncJournal: FileCloudDocumentSyncJournal(),
         )
       : ApplianceStore(reminderScheduler: notificationService);
 

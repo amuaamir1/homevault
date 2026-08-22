@@ -22,6 +22,8 @@ abstract class CloudDocumentStorage {
   });
 
   Future<void> delete(StoredDocument document);
+
+  Future<void> deletePath(String cloudStoragePath);
 }
 
 class NoOpCloudDocumentStorage implements CloudDocumentStorage {
@@ -55,6 +57,9 @@ class NoOpCloudDocumentStorage implements CloudDocumentStorage {
 
   @override
   Future<void> delete(StoredDocument document) async {}
+
+  @override
+  Future<void> deletePath(String cloudStoragePath) async {}
 }
 
 class FirebaseCloudDocumentStorage implements CloudDocumentStorage {
@@ -180,9 +185,23 @@ class FirebaseCloudDocumentStorage implements CloudDocumentStorage {
   }
 
   @override
-  Future<void> delete(StoredDocument document) async {
-    final cloudPath = document.cloudStoragePath.trim();
+  Future<void> delete(StoredDocument document) {
+    return deletePath(document.cloudStoragePath);
+  }
+
+  @override
+  Future<void> deletePath(String cloudStoragePath) async {
+    final cloudPath = cloudStoragePath.trim();
     if (cloudPath.isEmpty) return;
+
+    final ownerUid = _requiredOwnerUid;
+    final expectedPrefix = 'users/$ownerUid/appliances/';
+    if (!cloudPath.startsWith(expectedPrefix) ||
+        !cloudPath.contains('/documents/')) {
+      throw const CloudDocumentStorageException(
+        'This cloud document belongs to a different HomeVault account.',
+      );
+    }
 
     try {
       await _storage.ref().child(cloudPath).delete();

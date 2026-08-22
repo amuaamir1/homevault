@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_scope.dart';
 import '../models/backup_models.dart';
+import '../models/cloud_sync_status.dart';
 import '../services/cloud_backup_service.dart';
 import '../services/crash_reporting_service.dart';
 import '../state/app_scope.dart';
@@ -38,6 +39,7 @@ class _CloudBackupStartupCoordinatorState
 
   Timer? _dataChangeTimer;
   bool _dataBackupInProgress = false;
+  bool _retryPendingBackupWhenCloudReady = false;
 
   @override
   void initState() {
@@ -76,6 +78,21 @@ class _CloudBackupStartupCoordinatorState
       }
     }
 
+    final cloudReady =
+        store.cloudSyncStatus.state == CloudSyncState.synced &&
+        !store.cloudSyncStatus.hasPendingWrites &&
+        !store.hasPendingCloudDocumentWork;
+
+    if (_retryPendingBackupWhenCloudReady &&
+        cloudReady &&
+        _pendingDataRevision > _lastBackedUpDataRevision &&
+        store.appliances.isNotEmpty &&
+        _dataChangeTimer == null &&
+        !_dataBackupInProgress) {
+      _retryPendingBackupWhenCloudReady = false;
+      _queueDataChangeBackup();
+    }
+
     if (store.appliances.isNotEmpty) {
       _scheduleDailyAutomaticBackupIfNeeded(uid);
     }
@@ -87,6 +104,7 @@ class _CloudBackupStartupCoordinatorState
     _lastBackedUpDataRevision = 0;
     _pendingDataRevision = 0;
     _attemptKey = null;
+    _retryPendingBackupWhenCloudReady = false;
     _dataChangeTimer?.cancel();
     _dataChangeTimer = null;
   }
@@ -111,7 +129,9 @@ class _CloudBackupStartupCoordinatorState
   Future<void> _runDailyAutomaticBackup(String uid) async {
     try {
       final store = AppScope.read(context);
-      await store.retryCloudDocumentSync().timeout(const Duration(minutes: 2));
+      await store.ensureCloudDocumentSyncComplete().timeout(
+        const Duration(minutes: 2),
+      );
       if (!mounted || AuthScope.read(context).user?.uid != uid) return;
 
       final service = _service ??= CloudBackupService();
@@ -128,6 +148,7 @@ class _CloudBackupStartupCoordinatorState
       );
 
       _lastBackedUpDataRevision = latestStore.dataChangeRevision;
+      _retryPendingBackupWhenCloudReady = false;
       if (_pendingDataRevision <= _lastBackedUpDataRevision) {
         _pendingDataRevision = 0;
       }
@@ -157,7 +178,9 @@ class _CloudBackupStartupCoordinatorState
 
       // Let pending invoice/photo/warranty/service attachments reach cloud
       // storage before building the full backup ZIP.
-      await store.retryCloudDocumentSync().timeout(const Duration(minutes: 2));
+      await store.ensureCloudDocumentSyncComplete().timeout(
+        const Duration(minutes: 2),
+      );
 
       if (!mounted || AuthScope.read(context).user?.uid != uid) return;
 
@@ -175,6 +198,7 @@ class _CloudBackupStartupCoordinatorState
       );
 
       _lastBackedUpDataRevision = revisionBeingBackedUp;
+      _retryPendingBackupWhenCloudReady = false;
       if (_pendingDataRevision <= revisionBeingBackedUp) {
         _pendingDataRevision = 0;
       }
@@ -187,9 +211,21 @@ class _CloudBackupStartupCoordinatorState
         reason: 'Creating a HomeVault cloud backup after saved data changed',
       );
 
-      // Avoid an immediate retry loop when the same revision cannot be backed
-      // up (for example because an attachment is temporarily unavailable).
-      if (_pendingDataRevision <= requestedRevision) {
+      final latestStore = mounted ? AppScope.read(context) : null;
+      final waitingForCloud =
+          latestStore != null &&
+          (latestStore.cloudSyncStatus.state == CloudSyncState.offline ||
+              latestStore.cloudSyncStatus.state == CloudSyncState.connecting ||
+              latestStore.cloudSyncStatus.hasPendingWrites ||
+              latestStore.hasPendingCloudDocumentWork);
+
+      if (waitingForCloud) {
+        // Keep this revision pending. When structured sync confirms that the
+        // connection has recovered, didChangeDependencies queues one retry.
+        _retryPendingBackupWhenCloudReady = true;
+      } else if (_pendingDataRevision <= requestedRevision) {
+        // Avoid a retry loop for non-connectivity failures such as a missing
+        // local attachment. The daily fallback or a later data change retries.
         _pendingDataRevision = 0;
       }
     } finally {
@@ -199,6 +235,7 @@ class _CloudBackupStartupCoordinatorState
       // fresh backup. Successful backup may already include it, in which case
       // the revision comparison prevents a duplicate snapshot.
       if (mounted &&
+          !_retryPendingBackupWhenCloudReady &&
           _pendingDataRevision > _lastBackedUpDataRevision &&
           _activeUid == uid) {
         _queueDataChangeBackup();

@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/stored_document.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/services/cloud_document_storage_service.dart';
+import 'package:homevault/services/cloud_document_sync_journal.dart';
 import 'package:homevault/services/document_storage_service.dart';
 import 'package:homevault/state/appliance_store.dart';
 
@@ -11,6 +14,8 @@ class _FakeCloudDocumentStorage implements CloudDocumentStorage {
   final List<String> uploadedIds = [];
   final List<String> downloadedIds = [];
   final List<String> deletedPaths = [];
+  bool failUploads = false;
+  bool failDeletes = false;
 
   @override
   bool get isAvailable => true;
@@ -26,6 +31,11 @@ class _FakeCloudDocumentStorage implements CloudDocumentStorage {
     required StoredDocument document,
   }) async {
     uploadedIds.add(document.id);
+    if (failUploads) {
+      throw const CloudDocumentStorageException(
+        'Cloud document storage is temporarily unavailable.',
+      );
+    }
     return document.copyWith(
       cloudStoragePath:
           'users/$ownerUid/appliances/$applianceId/documents/${document.id}/file.pdf',
@@ -43,8 +53,18 @@ class _FakeCloudDocumentStorage implements CloudDocumentStorage {
   }
 
   @override
-  Future<void> delete(StoredDocument document) async {
-    deletedPaths.add(document.cloudStoragePath);
+  Future<void> delete(StoredDocument document) {
+    return deletePath(document.cloudStoragePath);
+  }
+
+  @override
+  Future<void> deletePath(String cloudStoragePath) async {
+    deletedPaths.add(cloudStoragePath);
+    if (failDeletes) {
+      throw const CloudDocumentStorageException(
+        'Cloud document storage is temporarily unavailable.',
+      );
+    }
   }
 }
 
@@ -201,4 +221,107 @@ void main() {
 
     store.dispose();
   });
+
+  test(
+    'local-only upload survives store restart and retries automatically',
+    () async {
+      final repository = MemoryApplianceRepository(
+        initialAppliances: [_appliance(_document())],
+      );
+      final journal = MemoryCloudDocumentSyncJournal();
+      final offlineStorage = _FakeCloudDocumentStorage()..failUploads = true;
+      final firstStore = ApplianceStore(
+        repository: repository,
+        cloudDocumentStorage: offlineStorage,
+        cloudDocumentSyncJournal: journal,
+        documentStorageService: _FakeDocumentStorageService(),
+      );
+
+      await firstStore.bindOwner('user-1');
+      await firstStore.retryCloudDocumentSync();
+
+      expect(
+        firstStore.appliances.single.invoiceDocument!.needsCloudUpload,
+        isTrue,
+      );
+      firstStore.dispose();
+
+      final onlineStorage = _FakeCloudDocumentStorage();
+      final secondStore = ApplianceStore(
+        repository: repository,
+        cloudDocumentStorage: onlineStorage,
+        cloudDocumentSyncJournal: journal,
+        documentStorageService: _FakeDocumentStorageService(),
+      );
+
+      await secondStore.bindOwner('user-1');
+      await secondStore.retryCloudDocumentSync();
+
+      final uploaded = secondStore.appliances.single.invoiceDocument!;
+      expect(onlineStorage.uploadedIds, contains('invoice-1'));
+      expect(uploaded.isAvailableInCloud, isTrue);
+      expect(secondStore.hasPendingCloudDocumentWork, isFalse);
+
+      secondStore.dispose();
+    },
+  );
+
+  test(
+    'failed cloud delete survives restart and is retried from journal',
+    () async {
+      final tempDirectory = await Directory.systemTemp.createTemp(
+        'homevault-document-sync-',
+      );
+      addTearDown(() async {
+        if (await tempDirectory.exists()) {
+          await tempDirectory.delete(recursive: true);
+        }
+      });
+
+      const cloudPath =
+          'users/user-1/appliances/appliance-1/documents/invoice-1/file.pdf';
+      final repository = MemoryApplianceRepository(
+        initialAppliances: [_appliance(_document(cloudPath: cloudPath))],
+      );
+
+      final offlineStorage = _FakeCloudDocumentStorage()..failDeletes = true;
+      final firstJournal = FileCloudDocumentSyncJournal(
+        documentsDirectoryProvider: () async => tempDirectory,
+      );
+      final firstStore = ApplianceStore(
+        repository: repository,
+        cloudDocumentStorage: offlineStorage,
+        cloudDocumentSyncJournal: firstJournal,
+        documentStorageService: _FakeDocumentStorageService(),
+      );
+
+      await firstStore.bindOwner('user-1');
+      await firstStore.removeDocument('appliance-1', 'invoice-1');
+
+      expect(firstStore.appliances.single.invoiceDocument, isNull);
+      expect(await firstJournal.pendingDeletePaths(), contains(cloudPath));
+      expect(firstStore.hasPendingCloudDocumentWork, isTrue);
+      firstStore.dispose();
+
+      final onlineStorage = _FakeCloudDocumentStorage();
+      final secondJournal = FileCloudDocumentSyncJournal(
+        documentsDirectoryProvider: () async => tempDirectory,
+      );
+      final secondStore = ApplianceStore(
+        repository: repository,
+        cloudDocumentStorage: onlineStorage,
+        cloudDocumentSyncJournal: secondJournal,
+        documentStorageService: _FakeDocumentStorageService(),
+      );
+
+      await secondStore.bindOwner('user-1');
+      await secondStore.retryCloudDocumentSync();
+
+      expect(onlineStorage.deletedPaths, contains(cloudPath));
+      expect(await secondJournal.pendingDeletePaths(), isEmpty);
+      expect(secondStore.hasPendingCloudDocumentWork, isFalse);
+
+      secondStore.dispose();
+    },
+  );
 }

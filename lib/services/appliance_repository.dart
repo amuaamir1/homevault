@@ -44,6 +44,110 @@ abstract class ConflictProtectedApplianceRepository {
   });
 }
 
+class PendingApplianceSyncState {
+  const PendingApplianceSyncState({
+    this.pendingUpsertIds = const <String>{},
+    this.pendingDeleteIds = const <String>{},
+    this.authoritativeDeleteIds = const <String>{},
+  });
+
+  factory PendingApplianceSyncState.fromJson(Map<String, dynamic> json) {
+    final pendingUpserts = _stringSet(json['pendingUpsertIds']);
+    final pendingDeletes = _stringSet(json['pendingDeleteIds']);
+    final authoritativeDeletes = _stringSet(
+      json['authoritativeDeleteIds'],
+    ).intersection(pendingDeletes);
+
+    return PendingApplianceSyncState(
+      pendingUpsertIds: pendingUpserts.difference(pendingDeletes),
+      pendingDeleteIds: pendingDeletes,
+      authoritativeDeleteIds: authoritativeDeletes,
+    );
+  }
+
+  final Set<String> pendingUpsertIds;
+  final Set<String> pendingDeleteIds;
+  final Set<String> authoritativeDeleteIds;
+
+  bool get hasPendingChanges =>
+      pendingUpsertIds.isNotEmpty || pendingDeleteIds.isNotEmpty;
+
+  bool isPendingUpsert(String applianceId) =>
+      pendingUpsertIds.contains(applianceId);
+
+  bool isPendingDelete(String applianceId) =>
+      pendingDeleteIds.contains(applianceId);
+
+  PendingApplianceSyncState queue({
+    Iterable<String> upsertIds = const <String>[],
+    Iterable<String> deleteIds = const <String>[],
+    Iterable<String> authoritativeDeletes = const <String>[],
+  }) {
+    final nextUpserts = <String>{...pendingUpsertIds, ...upsertIds};
+    final nextDeletes = <String>{...pendingDeleteIds, ...deleteIds};
+
+    // A newer operation for the same ID wins locally. Re-adding an appliance
+    // cancels its pending delete; deleting it cancels its pending upsert.
+    nextUpserts.removeAll(deleteIds);
+    nextDeletes.removeAll(upsertIds);
+
+    final nextAuthoritativeDeletes = <String>{
+      ...authoritativeDeleteIds,
+      ...authoritativeDeletes,
+    }..retainAll(nextDeletes);
+
+    return PendingApplianceSyncState(
+      pendingUpsertIds: Set<String>.unmodifiable(nextUpserts),
+      pendingDeleteIds: Set<String>.unmodifiable(nextDeletes),
+      authoritativeDeleteIds: Set<String>.unmodifiable(
+        nextAuthoritativeDeletes,
+      ),
+    );
+  }
+
+  PendingApplianceSyncState clear({
+    Iterable<String> upsertIds = const <String>[],
+    Iterable<String> deleteIds = const <String>[],
+  }) {
+    final nextUpserts = <String>{...pendingUpsertIds}..removeAll(upsertIds);
+    final nextDeletes = <String>{...pendingDeleteIds}..removeAll(deleteIds);
+    final nextAuthoritativeDeletes = <String>{...authoritativeDeleteIds}
+      ..retainAll(nextDeletes);
+
+    return PendingApplianceSyncState(
+      pendingUpsertIds: Set<String>.unmodifiable(nextUpserts),
+      pendingDeleteIds: Set<String>.unmodifiable(nextDeletes),
+      authoritativeDeleteIds: Set<String>.unmodifiable(
+        nextAuthoritativeDeletes,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final upserts = pendingUpsertIds.toList(growable: false)..sort();
+    final deletes = pendingDeleteIds.toList(growable: false)..sort();
+    final authoritativeDeletes = authoritativeDeleteIds.toList(growable: false)
+      ..sort();
+
+    return {
+      'schemaVersion': 1,
+      'pendingUpsertIds': upserts,
+      'pendingDeleteIds': deletes,
+      'authoritativeDeleteIds': authoritativeDeletes,
+    };
+  }
+
+  static Set<String> _stringSet(Object? value) {
+    if (value is! List) return const <String>{};
+
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+  }
+}
+
 class FileApplianceRepository
     implements
         ApplianceRepository,
@@ -104,6 +208,11 @@ class FileApplianceRepository
   Future<File> _dataFile() async {
     final directory = await _dataDirectory();
     return File(path.join(directory.path, 'appliances.json'));
+  }
+
+  Future<File> _pendingSyncFile() async {
+    final directory = await _dataDirectory();
+    return File(path.join(directory.path, 'pending_structured_sync.json'));
   }
 
   Future<File> _legacyDataFile() async {
@@ -221,6 +330,78 @@ class FileApplianceRepository
       if (error is ApplianceStorageException) rethrow;
       throw ApplianceStorageException(
         'HomeVault could not save the appliance data.',
+        error,
+      );
+    }
+  }
+
+  Future<PendingApplianceSyncState> loadPendingSyncState() async {
+    try {
+      final file = await _pendingSyncFile();
+      if (!await file.exists()) {
+        return const PendingApplianceSyncState();
+      }
+
+      final contents = await file.readAsString();
+      if (contents.trim().isEmpty) {
+        return const PendingApplianceSyncState();
+      }
+
+      final decoded = jsonDecode(contents);
+      if (decoded is! Map) {
+        throw const FormatException(
+          'The pending cloud-sync state has an invalid format.',
+        );
+      }
+
+      final data = Map<String, dynamic>.from(decoded);
+      final storedOwner = '${data['ownerFingerprint'] ?? ''}'.trim();
+      if (storedOwner.isNotEmpty && storedOwner != _ownerFingerprint) {
+        throw const ApplianceStorageException(
+          'This pending cloud-sync state belongs to a different HomeVault account.',
+        );
+      }
+
+      return PendingApplianceSyncState.fromJson(data);
+    } on ApplianceStorageException {
+      rethrow;
+    } catch (_) {
+      _lastLoadWarning =
+          'HomeVault recovered from damaged local cloud-sync metadata.';
+      return const PendingApplianceSyncState();
+    }
+  }
+
+  Future<void> savePendingSyncState(PendingApplianceSyncState state) async {
+    try {
+      final file = await _pendingSyncFile();
+      final temporaryFile = File('${file.path}.tmp');
+
+      if (!state.hasPendingChanges) {
+        if (await temporaryFile.exists()) {
+          await temporaryFile.delete();
+        }
+        if (await file.exists()) {
+          await file.delete();
+        }
+        return;
+      }
+
+      final payload = jsonEncode({
+        ...state.toJson(),
+        'ownerFingerprint': _ownerFingerprint,
+        'savedAt': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      await temporaryFile.writeAsString(payload, flush: true);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await temporaryFile.rename(file.path);
+    } catch (error) {
+      if (error is ApplianceStorageException) rethrow;
+      throw ApplianceStorageException(
+        'HomeVault could not save pending cloud-sync changes.',
         error,
       );
     }
