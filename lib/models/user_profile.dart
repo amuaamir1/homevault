@@ -36,7 +36,6 @@ class UserProfile {
   bool get isComplete {
     return uid.trim().isNotEmpty &&
         fullName.trim().isNotEmpty &&
-        phoneNumber.trim().isNotEmpty &&
         addressLine1.trim().isNotEmpty &&
         state.trim().isNotEmpty &&
         city.trim().isNotEmpty &&

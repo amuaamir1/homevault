@@ -78,12 +78,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final profileController = ProfileScope.read(context);
     final existing = profileController.profile;
+    final mobile = _phoneController.text.trim();
     final profile = UserProfile(
       uid: authUser.uid,
       fullName: _nameController.text.trim(),
-      phoneNumber: AuthController.normalizeIndianMobileNumber(
-        _phoneController.text,
-      )!,
+      phoneNumber: mobile.isEmpty
+          ? ''
+          : AuthController.normalizeIndianMobileNumber(mobile)!,
       email: authUser.email.trim(),
       addressLine1: _addressLine1Controller.text.trim(),
       addressLine2: _addressLine2Controller.text.trim(),
@@ -236,7 +237,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String? _validateMobile(String? value) {
-    if (AuthController.normalizeIndianMobileNumber(value ?? '') == null) {
+    final mobile = (value ?? '').trim();
+    if (mobile.isEmpty) return null;
+    if (AuthController.normalizeIndianMobileNumber(mobile) == null) {
       return 'Enter a valid 10-digit Indian mobile number.';
     }
     return null;
@@ -331,7 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             autofillHints: const [AutofillHints.telephoneNumber],
             decoration: const InputDecoration(
-              labelText: 'Mobile number *',
+              labelText: 'Mobile number',
               hintText: '9876543210',
               prefixIcon: Icon(Icons.phone_android_outlined),
               prefixText: '+91 ',
