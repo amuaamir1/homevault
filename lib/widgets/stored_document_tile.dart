@@ -9,6 +9,7 @@ class StoredDocumentTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onOpen,
+    this.onDetails,
     this.onEdit,
     this.onDelete,
   });
@@ -17,6 +18,7 @@ class StoredDocumentTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onOpen;
+  final VoidCallback? onDetails;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -36,20 +38,26 @@ class StoredDocumentTile extends StatelessWidget {
   bool get _canOpen =>
       document.isAvailableOnDevice || document.isAvailableInCloud;
 
-  String get _fileStatusText => _canOpen
-      ? document.formattedSize
-      : '${document.formattedSize} • File unavailable';
+  String get _availabilityText {
+    if (document.isAvailableOnDevice && document.isAvailableInCloud) {
+      return 'On device + cloud';
+    }
+    if (document.isAvailableOnDevice) return 'On device';
+    if (document.isAvailableInCloud) return 'Cloud only';
+    return 'File unavailable';
+  }
 
   @override
   Widget build(BuildContext context) {
     final reference = document.reference.trim();
     final fileDetails = [
       document.fileName,
-      _fileStatusText,
+      document.formattedSize,
+      _availabilityText,
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
 
-    final hasActions = onEdit != null || onDelete != null;
+    final hasActions = onDetails != null || onEdit != null || onDelete != null;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -71,6 +79,9 @@ class StoredDocumentTile extends StatelessWidget {
                 switch (action) {
                   case 'open':
                     onOpen();
+                    break;
+                  case 'details':
+                    onDetails?.call();
                     break;
                   case 'edit':
                     onEdit?.call();
@@ -97,6 +108,14 @@ class StoredDocumentTile extends StatelessWidget {
                       title: Text('File unavailable'),
                     ),
                   ),
+                if (onDetails != null)
+                  const PopupMenuItem(
+                    value: 'details',
+                    child: ListTile(
+                      leading: Icon(Icons.info_outline),
+                      title: Text('View details'),
+                    ),
+                  ),
                 if (onEdit != null)
                   const PopupMenuItem(
                     value: 'edit',
@@ -115,7 +134,7 @@ class StoredDocumentTile extends StatelessWidget {
                   ),
               ],
             ),
-      onTap: _canOpen ? onOpen : null,
+      onTap: _canOpen ? onOpen : onDetails,
     );
   }
 }
