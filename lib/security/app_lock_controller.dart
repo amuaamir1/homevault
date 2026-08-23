@@ -80,9 +80,21 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _notifySafely();
   }
 
-  Future<void> bindUser(String? uid) async {
+  Future<void> bindUser(
+    String? uid, {
+    bool unlockAfterAccountAuthentication = false,
+  }) async {
     if (_isTestBypass) return;
-    if (uid == _boundUid && !_isInitializing) return;
+    if (uid == _boundUid && !_isInitializing) {
+      // A Firebase auth-state event can bind the UID just before the explicit
+      // Email/Google/Apple sign-in Future completes. If the one-shot account
+      // authentication unlock arrives on that second synchronization, honor
+      // it instead of discarding it via the same-UID fast path.
+      if (unlockAfterAccountAuthentication) {
+        await this.unlockAfterAccountAuthentication();
+      }
+      return;
+    }
 
     if (uid == null || uid.trim().isEmpty) {
       _boundUid = null;
@@ -115,7 +127,11 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _pinSetupCompleted =
           _hasPin || await _securityService.hasCompletedPinSetup();
       _pinAttemptStatus = await _securityService.getAttemptStatus();
-      _isUnlocked = !_hasPin;
+      if (unlockAfterAccountAuthentication && _hasPin) {
+        await _securityService.clearFailedAttempts();
+        _pinAttemptStatus = const PinAttemptStatus();
+      }
+      _isUnlocked = !_hasPin || unlockAfterAccountAuthentication;
       await _loadBiometricState();
     } finally {
       _isInitializing = false;

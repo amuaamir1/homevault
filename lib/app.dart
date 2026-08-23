@@ -160,16 +160,20 @@ class _HomeVaultAppState extends State<HomeVaultApp>
       return;
     }
 
+    // Explicit Email/password or Google authentication unlocks HomeVault
+    // for this session only. Consume the one-shot intent before binding
+    // so an existing PIN is retained without briefly rendering PIN Login.
+    final unlockAfterAccountAuthentication = auth.consumeAccountSignInUnlock();
+
     await Future.wait([
-      _appLockController.bindUser(user.uid),
+      _appLockController.bindUser(
+        user.uid,
+        unlockAfterAccountAuthentication: unlockAfterAccountAuthentication,
+      ),
       _applianceStore.bindOwner(user.uid),
       DocumentStorageService.bindOwner(user.uid),
       CrashReportingService.setAuthenticatedUser(user.uid),
     ]);
-
-    if (auth.consumeAccountSignInUnlock()) {
-      await _appLockController.unlockAfterAccountAuthentication();
-    }
 
     if (epoch != _authenticationEpoch || auth.user?.uid != user.uid) return;
 
