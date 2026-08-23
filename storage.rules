@@ -12,24 +12,54 @@ service firebase.storage {
         || request.resource.contentType == 'image/png';
     }
 
+    function validBackupUpload(backupId, fileName) {
+      return fileName == 'homevault-backup.zip'
+        && backupId.matches('^backup_[0-9]+$')
+        && request.resource.size > 0
+        && request.resource.size <= 250 * 1024 * 1024
+        && request.resource.contentType == 'application/zip'
+        && request.resource.metadata.homevaultBackupId == backupId
+        && request.resource.metadata.source in [
+          'automatic',
+          'manual',
+          'preRestoreSafety'
+        ];
+    }
+
+    function validDocumentUpload(fileName) {
+      return fileName.matches('^[a-f0-9]{24}_[A-Za-z0-9._-]+$')
+        && request.resource.size > 0
+        && request.resource.size <= 15 * 1024 * 1024
+        && allowedDocumentType()
+        && request.resource.metadata.applianceId is string
+        && request.resource.metadata.applianceId.size() > 0
+        && request.resource.metadata.applianceId.size() <= 256
+        && request.resource.metadata.documentId is string
+        && request.resource.metadata.documentId.size() > 0
+        && request.resource.metadata.documentId.size() <= 512
+        && request.resource.metadata.originalFileName is string
+        && request.resource.metadata.originalFileName.size() > 0
+        && request.resource.metadata.originalFileName.size() <= 512;
+    }
+
+    // Owners may read/list/delete only inside their own private storage tree.
     match /users/{userId}/{allPaths=**} {
       allow read, delete: if signedInAs(userId);
     }
 
     match /users/{userId}/backups/{backupId}/{fileName} {
       allow create, update: if signedInAs(userId)
-        && request.resource.size <= 250 * 1024 * 1024
-        && request.resource.contentType == 'application/zip';
+        && validBackupUpload(backupId, fileName);
     }
 
     match /users/{userId}/appliances/{applianceId}/documents/{documentId}/{fileName} {
-      allow read: if signedInAs(userId);
-
       allow create, update: if signedInAs(userId)
-        && request.resource.size <= 15 * 1024 * 1024
-        && allowedDocumentType();
+        && validDocumentUpload(fileName);
+    }
 
-      allow delete: if signedInAs(userId);
+    // Explicit deny-by-default guard for paths outside the HomeVault user tree.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
