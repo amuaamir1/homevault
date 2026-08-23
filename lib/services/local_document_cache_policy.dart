@@ -181,7 +181,9 @@ class MemoryLocalDocumentCachePolicy implements LocalDocumentCachePolicy {
     if (scope == null) return;
     final paths = _evictedByOwner.putIfAbsent(scope, () => <String>{});
     paths.addAll(
-      cloudPaths.map((value) => value.trim()).where((value) => value.isNotEmpty),
+      cloudPaths
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty),
     );
   }
 
@@ -192,7 +194,9 @@ class MemoryLocalDocumentCachePolicy implements LocalDocumentCachePolicy {
     final paths = _evictedByOwner[scope];
     if (paths == null) return;
     paths.removeAll(
-      cloudPaths.map((value) => value.trim()).where((value) => value.isNotEmpty),
+      cloudPaths
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty),
     );
     if (paths.isEmpty) _evictedByOwner.remove(scope);
   }

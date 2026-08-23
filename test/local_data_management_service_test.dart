@@ -66,42 +66,48 @@ void main() {
     expect(summary.totalManagedBytes, 2800);
   });
 
-  test('clearing safety backups stays inside the signed-in owner scope', () async {
-    final root = await Directory.systemTemp.createTemp('homevault-p18-safety-');
-    addTearDown(() => root.delete(recursive: true));
+  test(
+    'clearing safety backups stays inside the signed-in owner scope',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'homevault-p18-safety-',
+      );
+      addTearDown(() => root.delete(recursive: true));
 
-    const ownerA = 'owner-a';
-    const ownerB = 'owner-b';
-    final ownerADirectory = Directory(
-      path.join(
-        root.path,
-        'homevault',
-        'safety_backups',
-        securityScopeKey(ownerA),
-      ),
-    );
-    final ownerBDirectory = Directory(
-      path.join(
-        root.path,
-        'homevault',
-        'safety_backups',
-        securityScopeKey(ownerB),
-      ),
-    );
-    await ownerADirectory.create(recursive: true);
-    await ownerBDirectory.create(recursive: true);
-    await File(path.join(ownerADirectory.path, 'Safety_A.zip'))
-        .writeAsBytes(List<int>.filled(256, 1));
-    final ownerBFile = File(path.join(ownerBDirectory.path, 'Safety_B.zip'));
-    await ownerBFile.writeAsBytes(List<int>.filled(512, 1));
+      const ownerA = 'owner-a';
+      const ownerB = 'owner-b';
+      final ownerADirectory = Directory(
+        path.join(
+          root.path,
+          'homevault',
+          'safety_backups',
+          securityScopeKey(ownerA),
+        ),
+      );
+      final ownerBDirectory = Directory(
+        path.join(
+          root.path,
+          'homevault',
+          'safety_backups',
+          securityScopeKey(ownerB),
+        ),
+      );
+      await ownerADirectory.create(recursive: true);
+      await ownerBDirectory.create(recursive: true);
+      await File(
+        path.join(ownerADirectory.path, 'Safety_A.zip'),
+      ).writeAsBytes(List<int>.filled(256, 1));
+      final ownerBFile = File(path.join(ownerBDirectory.path, 'Safety_B.zip'));
+      await ownerBFile.writeAsBytes(List<int>.filled(512, 1));
 
-    final service = LocalDataManagementService(
-      documentsDirectoryProvider: () async => root,
-    );
-    final result = await service.clearSafetyBackups(ownerA);
+      final service = LocalDataManagementService(
+        documentsDirectoryProvider: () async => root,
+      );
+      final result = await service.clearSafetyBackups(ownerA);
 
-    expect(result.itemCount, 1);
-    expect(result.bytesFreed, 256);
-    expect(await ownerBFile.exists(), isTrue);
-  });
+      expect(result.itemCount, 1);
+      expect(result.bytesFreed, 256);
+      expect(await ownerBFile.exists(), isTrue);
+    },
+  );
 }

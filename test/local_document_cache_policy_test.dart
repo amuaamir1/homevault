@@ -34,8 +34,9 @@ void main() {
     );
     addTearDown(() => root.delete(recursive: true));
 
-    FileLocalDocumentCachePolicy createPolicy() =>
-        FileLocalDocumentCachePolicy(documentsDirectoryProvider: () async => root);
+    FileLocalDocumentCachePolicy createPolicy() => FileLocalDocumentCachePolicy(
+      documentsDirectoryProvider: () async => root,
+    );
 
     final first = createPolicy();
     await first.bindOwner('owner-a');

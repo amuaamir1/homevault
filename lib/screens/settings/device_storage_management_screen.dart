@@ -101,9 +101,9 @@ class _DeviceStorageManagementScreenState
                 '${formatManagedBytes(result.bytesFreed)} freed.'
           : '${result.itemCount} copy/copies released. '
                 '${result.failedItems} file(s) could not be removed and can be cleaned up later.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       await _refresh();
     } catch (error) {
       if (!mounted) return;
@@ -251,7 +251,8 @@ class _DeviceStorageManagementScreenState
                   title: 'Cloud-backed local documents',
                   count: summary.cloudBackedDocumentCount,
                   bytes: summary.cloudBackedDocumentBytes,
-                  subtitle: 'Safe to release from this device and download again later.',
+                  subtitle:
+                      'Safe to release from this device and download again later.',
                 ),
                 const SizedBox(height: 8),
                 _StorageTile(
@@ -269,7 +270,8 @@ class _DeviceStorageManagementScreenState
                   title: 'Local safety backups',
                   count: summary.safetyBackupCount,
                   bytes: summary.safetyBackupBytes,
-                  subtitle: 'Automatic local restore points created before destructive restores.',
+                  subtitle:
+                      'Automatic local restore points created before destructive restores.',
                 ),
                 const SizedBox(height: 8),
                 Card(
@@ -278,23 +280,27 @@ class _DeviceStorageManagementScreenState
                     title: const Text('Total managed file storage'),
                     trailing: Text(
                       formatManagedBytes(summary.totalManagedBytes),
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
                 Text(
                   'Cleanup actions',
-                  style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Card(
                   child: Column(
                     children: [
                       ListTile(
-                        key: const ValueKey('clearDownloadedDocumentCopiesTile'),
+                        key: const ValueKey(
+                          'clearDownloadedDocumentCopiesTile',
+                        ),
                         leading: const Icon(Icons.phonelink_erase_outlined),
                         title: const Text('Release downloaded document copies'),
                         subtitle: const Text(
@@ -366,8 +372,9 @@ class _StorageTile extends StatelessWidget {
         isThreeLine: true,
         trailing: Text(
           formatManagedBytes(bytes),
-          style: Theme.of(context).textTheme.titleSmall
-              ?.copyWith(fontWeight: FontWeight.w800),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
     );
