@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "homevault-aamir-india-1701"
+    "default": "homevault-aamir-india-1701",
+    "development": "homevault-aamir-india-1701"
   },
   "targets": {},
   "etags": {}

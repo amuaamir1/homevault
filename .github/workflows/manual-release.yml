@@ -65,13 +65,17 @@ jobs:
         shell: bash
         env:
           FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION }}
-          FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
-          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          DEV_FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
+          DEV_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          PROD_FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.PROD_FIREBASE_OPTIONS_DART_BASE64 }}
+          PROD_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.PROD_GOOGLE_SERVICES_JSON_BASE64 }}
+          PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           GDRIVE_RCLONE_CONFIG_BASE64: ${{ secrets.GDRIVE_RCLONE_CONFIG_BASE64 }}
+          PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
 
@@ -81,8 +85,6 @@ jobs:
           }
 
           for name in \
-            FIREBASE_OPTIONS_DART_BASE64 \
-            GOOGLE_SERVICES_JSON_BASE64 \
             ANDROID_KEYSTORE_BASE64 \
             ANDROID_STORE_PASSWORD \
             ANDROID_KEY_PASSWORD \
@@ -95,6 +97,26 @@ jobs:
             fi
           done
 
+          if [ "$PRERELEASE" = "true" ]; then
+            for name in DEV_FIREBASE_OPTIONS_DART_BASE64 DEV_GOOGLE_SERVICES_JSON_BASE64; do
+              if [ -z "${!name}" ]; then
+                echo "::error::Development Firebase secret $name is missing."
+                exit 1
+              fi
+            done
+          else
+            for name in PROD_FIREBASE_OPTIONS_DART_BASE64 PROD_GOOGLE_SERVICES_JSON_BASE64 PRODUCTION_FIREBASE_PROJECT_ID; do
+              if [ -z "${!name}" ]; then
+                echo "::error::Production Firebase setting $name is missing."
+                exit 1
+              fi
+            done
+            if [ "$PRODUCTION_FIREBASE_PROJECT_ID" = "homevault-aamir-india-1701" ]; then
+              echo "::error::Production Firebase cannot use the development project."
+              exit 1
+            fi
+          fi
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -102,18 +124,53 @@ jobs:
           flutter-version: ${{ vars.FLUTTER_VERSION }}
           cache: true
 
-      - name: Restore Firebase configuration
+      - name: Restore environment-specific Firebase configuration
         shell: bash
         env:
-          FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
-          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          DEV_FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
+          DEV_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          PROD_FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.PROD_FIREBASE_OPTIONS_DART_BASE64 }}
+          PROD_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.PROD_GOOGLE_SERVICES_JSON_BASE64 }}
+          PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
+          PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
           mkdir -p lib android/app
-          printf '%s' "$FIREBASE_OPTIONS_DART_BASE64" | base64 --decode > lib/firebase_options.dart
-          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
+
+          if [ "$PRERELEASE" = "true" ]; then
+            firebase_dart="$DEV_FIREBASE_OPTIONS_DART_BASE64"
+            google_services="$DEV_GOOGLE_SERVICES_JSON_BASE64"
+          else
+            firebase_dart="$PROD_FIREBASE_OPTIONS_DART_BASE64"
+            google_services="$PROD_GOOGLE_SERVICES_JSON_BASE64"
+          fi
+
+          printf '%s' "$firebase_dart" | base64 --decode > lib/firebase_options.dart
+          printf '%s' "$google_services" | base64 --decode > android/app/google-services.json
           test -s lib/firebase_options.dart
           test -s android/app/google-services.json
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          if os.environ["PRERELEASE"] == "true":
+              expected = "homevault-aamir-india-1701"
+          else:
+              expected = os.environ["PRODUCTION_FIREBASE_PROJECT_ID"]
+
+          google = json.loads(Path("android/app/google-services.json").read_text())
+          actual_google = google["project_info"]["project_id"]
+          dart = Path("lib/firebase_options.dart").read_text()
+          dart_projects = set(re.findall(r"projectId\s*:\s*['\"]([^'\"]+)['\"]", dart))
+
+          if actual_google != expected or expected not in dart_projects:
+              raise SystemExit("Firebase client configuration does not match the selected release environment.")
+          if os.environ["PRERELEASE"] != "true" and expected == "homevault-aamir-india-1701":
+              raise SystemExit("Production release cannot target the development Firebase project.")
+          PY
 
       - name: Restore Android release signing
         shell: bash
@@ -370,14 +427,39 @@ jobs:
       - name: Automated tests
         run: flutter test
 
-      - name: Build signed release APK
+      - name: Build signed environment-safe release APK
         shell: bash
+        env:
+          PRERELEASE: ${{ inputs.prerelease }}
+          PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
         run: |
           set -euo pipefail
-          flutter build apk \
-            --release \
-            --build-name="$VERSION_NAME" \
+
+          if [ "$PRERELEASE" = "true" ]; then
+            export HOMEVAULT_FIREBASE_PROJECT_ID="homevault-aamir-india-1701"
+            export HOMEVAULT_ALLOW_NON_PROD_RELEASE="true"
+            firebase_env="development"
+            extra_define="--dart-define=HOMEVAULT_ALLOW_NON_PROD_RELEASE=true"
+          else
+            export HOMEVAULT_FIREBASE_PROJECT_ID="$PRODUCTION_FIREBASE_PROJECT_ID"
+            unset HOMEVAULT_ALLOW_NON_PROD_RELEASE || true
+            firebase_env="production"
+            extra_define=""
+          fi
+
+          build_args=(
+            build apk
+            --release
+            --build-name="$VERSION_NAME"
             --build-number="$BUILD_NUMBER"
+            --dart-define="HOMEVAULT_ENV=$firebase_env"
+            --dart-define="HOMEVAULT_FIREBASE_PROJECT_ID=$HOMEVAULT_FIREBASE_PROJECT_ID"
+          )
+          if [ -n "$extra_define" ]; then
+            build_args+=("$extra_define")
+          fi
+
+          flutter "${build_args[@]}"
 
       - name: Prepare release assets
         shell: bash

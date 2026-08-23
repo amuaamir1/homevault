@@ -100,6 +100,21 @@ jobs:
           test -s lib/firebase_options.dart
           test -s android/app/google-services.json
 
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          expected = "homevault-aamir-india-1701"
+          google = json.loads(Path("android/app/google-services.json").read_text())
+          actual_google = google["project_info"]["project_id"]
+          dart = Path("lib/firebase_options.dart").read_text()
+          dart_projects = set(re.findall(r"projectId\s*:\s*['\"]([^'\"]+)['\"]", dart))
+
+          if actual_google != expected or expected not in dart_projects:
+              raise SystemExit("Developer release Firebase configuration is not the HomeVault development project.")
+          PY
+
       - name: Restore Android release signing
         shell: bash
         env:
@@ -480,14 +495,20 @@ jobs:
       - name: Automated tests
         run: flutter test
 
-      - name: Build signed release APK
+      - name: Build signed development release APK
         shell: bash
+        env:
+          HOMEVAULT_FIREBASE_PROJECT_ID: homevault-aamir-india-1701
+          HOMEVAULT_ALLOW_NON_PROD_RELEASE: 'true'
         run: |
           set -euo pipefail
           flutter build apk \
             --release \
             --build-name="$VERSION_NAME" \
-            --build-number="$BUILD_NUMBER"
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=HOMEVAULT_ENV=development \
+            --dart-define=HOMEVAULT_FIREBASE_PROJECT_ID="$HOMEVAULT_FIREBASE_PROJECT_ID" \
+            --dart-define=HOMEVAULT_ALLOW_NON_PROD_RELEASE=true
 
       - name: Prepare release assets
         shell: bash

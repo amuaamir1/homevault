@@ -13,6 +13,13 @@
 migrate_working_dir/
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+**/*service-account*.json
+**/*service_account*.json
+**/*adminsdk*.json
 
 # IntelliJ related
 *.iml
@@ -48,24 +55,14 @@ app.*.map.json
 android/key.properties
 
 # Firebase client configuration is recreated from trusted local/CI settings.
-android/app/google-services.json
-android/app/google-services.json.*
-lib/firebase_options.dart
-lib/firebase_options.dart.*
+android/app/**/google-services.json
+android/app/**/google-services.json.*
+lib/firebase_options*.dart
+lib/firebase_options*.dart.*
 
-# Firebase generated/local configuration
-android/app/google-services.json
-android/app/google-services.json.backup
-lib/firebase_options.dart
+# Firebase generated/local configuration is ignored by the wildcard rules above.
 
 # Environment files
 .env
 .env.*
 !.env.example
-*.keystore
-*.p12
-*.pfx
-*.pem
-**/*service-account*.json
-**/*service_account*.json
-**/*adminsdk*.json
