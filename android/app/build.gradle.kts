@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -21,6 +22,81 @@ if (keystorePropertiesFile.exists()) {
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 val releaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("release", ignoreCase = true)
+}
+
+val developmentFirebaseProjectId = "homevault-aamir-india-1701"
+val expectedReleaseFirebaseProjectId =
+    System.getenv("HOMEVAULT_FIREBASE_PROJECT_ID")?.trim().orEmpty()
+val allowNonProductionRelease =
+    System.getenv("HOMEVAULT_ALLOW_NON_PROD_RELEASE")
+        ?.equals("true", ignoreCase = true) == true
+
+fun readGoogleServicesProjectId(file: java.io.File): String {
+    if (!file.exists()) {
+        throw GradleException(
+            "Firebase Android configuration is missing: ${file.path}"
+        )
+    }
+
+    val parsed = JsonSlurper().parse(file) as? Map<*, *>
+        ?: throw GradleException("google-services.json is malformed.")
+    val projectInfo = parsed["project_info"] as? Map<*, *>
+        ?: throw GradleException("google-services.json has no project_info.")
+    return projectInfo["project_id"]?.toString()?.trim().orEmpty()
+}
+
+fun googleServicesContainsApplicationId(
+    file: java.io.File,
+    applicationId: String,
+): Boolean {
+    val parsed = JsonSlurper().parse(file) as? Map<*, *> ?: return false
+    val clients = parsed["client"] as? List<*> ?: return false
+    return clients.any { clientValue ->
+        val client = clientValue as? Map<*, *> ?: return@any false
+        val clientInfo = client["client_info"] as? Map<*, *> ?: return@any false
+        val androidClientInfo =
+            clientInfo["android_client_info"] as? Map<*, *> ?: return@any false
+        androidClientInfo["package_name"]?.toString() == applicationId
+    }
+}
+
+if (releaseBuildRequested) {
+    val googleServicesFile = rootProject.file("app/google-services.json")
+
+    if (expectedReleaseFirebaseProjectId.isBlank()) {
+        throw GradleException(
+            "Release Firebase project is not declared. Set " +
+            "HOMEVAULT_FIREBASE_PROJECT_ID before building a release."
+        )
+    }
+
+    val configuredProjectId = readGoogleServicesProjectId(googleServicesFile)
+    if (configuredProjectId != expectedReleaseFirebaseProjectId) {
+        throw GradleException(
+            "Release Firebase configuration does not match " +
+            "HOMEVAULT_FIREBASE_PROJECT_ID."
+        )
+    }
+
+    if (!googleServicesContainsApplicationId(
+            googleServicesFile,
+            "com.amuaamir.homevault",
+        )
+    ) {
+        throw GradleException(
+            "google-services.json is not registered for com.amuaamir.homevault."
+        )
+    }
+
+    if (configuredProjectId == developmentFirebaseProjectId &&
+        !allowNonProductionRelease
+    ) {
+        throw GradleException(
+            "Release build is targeting the HomeVault development Firebase project. " +
+            "Use the production build workflow, or explicitly set " +
+            "HOMEVAULT_ALLOW_NON_PROD_RELEASE=true for an internal beta release."
+        )
+    }
 }
 
 if (releaseBuildRequested && !hasReleaseKeystore) {

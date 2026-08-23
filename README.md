@@ -38,16 +38,21 @@ flutter test
 flutter run
 ```
 
-## Build a release APK
+## Firebase environments and release builds
+
+HomeVault uses the Firebase environment safeguards documented in
+`docs/FIREBASE_ENVIRONMENTS.md`. The existing Firebase project is Development;
+Production uses a separate Firebase project and external client configuration.
+
+Do not use a bare `flutter build apk --release` for production. Production
+builds must go through:
 
 ```powershell
-flutter build apk --release
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\firebase\Build-HomeVault-Production.ps1 -ProductionProjectId <production-project-id>
 ```
 
-Output:
-
-```text
-build\app\outputs\flutter-apk\app-release.apk
-```
+The production build script validates the Firebase project, temporarily activates
+the external Production client configuration, builds with fail-closed environment
+defines, and restores the local Development configuration afterward.
 
 HomeVault appliance records and attached files remain in private application storage unless the user creates a backup. Do not uninstall the app or clear Android storage before exporting a backup.

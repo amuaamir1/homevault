@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'auth/auth_controller.dart';
+import 'firebase/homevault_firebase_environment.dart';
 import 'firebase_options.dart';
 import 'profile/profile_controller.dart';
 import 'services/appliance_repository.dart';
@@ -21,9 +22,10 @@ Future<void> main() async {
   ProfileController? profileController;
 
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    final firebaseOptions = DefaultFirebaseOptions.currentPlatform;
+    HomeVaultFirebaseEnvironmentConfig.validateFirebaseOptions(firebaseOptions);
+
+    await Firebase.initializeApp(options: firebaseOptions);
 
     await CrashReportingService.initialize();
     CrashReportingService.installGlobalHandlers();

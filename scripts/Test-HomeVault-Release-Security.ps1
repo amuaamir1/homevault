@@ -33,6 +33,16 @@ if ($git -and (Test-Path (Join-Path $ProjectRoot '.git'))) {
             Add-Pass 'No sensitive credential filenames are tracked by Git'
         }
 
+        $firebaseClientConfigPattern = '(?i)(^|/)firebase_options[^/]*\.dart$|(^|/)google-services\.json$'
+        $trackedFirebaseConfigs = @(
+            $tracked | Where-Object { $_ -match $firebaseClientConfigPattern }
+        )
+        if ($trackedFirebaseConfigs.Count -gt 0) {
+            Add-Failure "Firebase environment config file(s) are tracked by Git: $($trackedFirebaseConfigs -join ', ')"
+        } else {
+            Add-Pass 'Firebase environment client configs are not tracked by Git'
+        }
+
         $patterns = @(
             '-----BEGIN PRIVATE KEY-----',
             '-----BEGIN RSA PRIVATE KEY-----',
@@ -80,6 +90,8 @@ $requiredIgnorePatterns = @(
     '*.pem',
     '*.key',
     '.env',
+    'android/app/**/google-services.json',
+    'lib/firebase_options*.dart',
     '**/*service-account*.json',
     '**/*adminsdk*.json'
 )

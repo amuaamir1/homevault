@@ -250,12 +250,19 @@ class AuthController extends ChangeNotifier {
       reason: 'Signing in with email and password',
       fallback: 'Sign-in failed. Check your email and password.',
       operation: () async {
-        _user = await _service!.signInWithEmailAndPassword(
-          email: normalizedEmail,
-          password: password,
-        );
+        // Arm before calling Firebase. authStateChanges() can publish the
+        // signed-in user before the service Future completes.
         _unlockAfterAccountSignIn = true;
-        _markSensitiveAuthentication();
+        try {
+          _user = await _service!.signInWithEmailAndPassword(
+            email: normalizedEmail,
+            password: password,
+          );
+          _markSensitiveAuthentication();
+        } catch (_) {
+          _unlockAfterAccountSignIn = false;
+          rethrow;
+        }
       },
     );
   }
@@ -265,9 +272,15 @@ class AuthController extends ChangeNotifier {
       reason: 'Signing in with Google',
       fallback: 'Google sign-in failed. Please try again.',
       operation: () async {
-        _user = await _service!.signInWithGoogle();
+        // Pre-arm for the Firebase auth-state event emitted by Google sign-in.
         _unlockAfterAccountSignIn = true;
-        _markSensitiveAuthentication();
+        try {
+          _user = await _service!.signInWithGoogle();
+          _markSensitiveAuthentication();
+        } catch (_) {
+          _unlockAfterAccountSignIn = false;
+          rethrow;
+        }
       },
     );
   }
@@ -277,9 +290,15 @@ class AuthController extends ChangeNotifier {
       reason: 'Signing in with Apple',
       fallback: 'Apple sign-in failed. Please try again.',
       operation: () async {
-        _user = await _service!.signInWithApple();
+        // Pre-arm for the Firebase auth-state event emitted by Apple sign-in.
         _unlockAfterAccountSignIn = true;
-        _markSensitiveAuthentication();
+        try {
+          _user = await _service!.signInWithApple();
+          _markSensitiveAuthentication();
+        } catch (_) {
+          _unlockAfterAccountSignIn = false;
+          rethrow;
+        }
       },
     );
   }
