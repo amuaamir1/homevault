@@ -22,8 +22,6 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   bool _isChecking = false;
   bool _autoBiometricRequested = false;
   String? _errorText;
-  int _failedAttempts = 0;
-  DateTime? _lockedUntil;
   Timer? _countdownTimer;
 
   @override
@@ -31,6 +29,13 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     super.didChangeDependencies();
 
     final controller = AppLockScope.of(context);
+    if (controller.isPinTemporarilyLocked &&
+        _countdownTimer?.isActive != true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startCountdown();
+      });
+    }
+
     if (!_autoBiometricRequested &&
         controller.isBiometricEnabled &&
         controller.isBiometricAvailable) {
@@ -48,21 +53,10 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     super.dispose();
   }
 
-  bool get _isTemporarilyLocked {
-    final lockedUntil = _lockedUntil;
-    return lockedUntil != null && DateTime.now().isBefore(lockedUntil);
-  }
-
-  int get _lockSecondsRemaining {
-    final lockedUntil = _lockedUntil;
-    if (lockedUntil == null) return 0;
-    final seconds = lockedUntil.difference(DateTime.now()).inSeconds + 1;
-    return seconds < 0 ? 0 : seconds;
-  }
-
   Future<void> _unlock() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (_isTemporarilyLocked || _isChecking) return;
+    final lockController = AppLockScope.read(context);
+    if (lockController.isPinTemporarilyLocked || _isChecking) return;
 
     final pin = _pinController.text;
     if (!PinSecurityService.isValidPin(pin)) {
@@ -78,19 +72,17 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
     final sessionValid = await AuthScope.read(context).validateCurrentSession();
     if (!mounted || !sessionValid) return;
 
-    final isValid = await AppLockScope.read(context).unlock(pin);
+    final isValid = await lockController.unlock(pin);
     if (!mounted || isValid) return;
 
-    _failedAttempts += 1;
     _pinController.clear();
 
-    if (_failedAttempts >= 5) {
-      _failedAttempts = 0;
-      _lockedUntil = DateTime.now().add(const Duration(seconds: 30));
+    if (lockController.isPinTemporarilyLocked) {
       _startCountdown();
       setState(() {
         _isChecking = false;
-        _errorText = 'Too many attempts. Try again in 30 seconds.';
+        _errorText =
+            'Too many incorrect PIN attempts. PIN entry is temporarily locked.';
       });
       return;
     }
@@ -102,7 +94,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   }
 
   Future<void> _unlockWithBiometrics({bool automatic = false}) async {
-    if (_isTemporarilyLocked || _isChecking) return;
+    if (_isChecking) return;
 
     setState(() {
       _isChecking = true;
@@ -125,18 +117,18 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   }
 
   void _startCountdown() {
-    _countdownTimer?.cancel();
+    if (_countdownTimer?.isActive == true) return;
+
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
-      if (!_isTemporarilyLocked) {
+
+      final controller = AppLockScope.read(context);
+      if (!controller.isPinTemporarilyLocked) {
         timer.cancel();
-        setState(() {
-          _lockedUntil = null;
-          _errorText = null;
-        });
+        setState(() => _errorText = null);
       } else {
         setState(() {});
       }
@@ -153,8 +145,9 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final locked = _isTemporarilyLocked;
     final lockController = AppLockScope.of(context);
+    final locked = lockController.isPinTemporarilyLocked;
+    final lockSecondsRemaining = lockController.pinLockSecondsRemaining;
     final firstName = ProfileScope.of(context).profile?.firstName ?? '';
     final welcomeText = firstName.isEmpty
         ? 'Unlock HomeVault'
@@ -207,7 +200,11 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                       autofillHints: const [AutofillHints.password],
                       decoration: InputDecoration(
                         labelText: 'PIN',
-                        errorText: _errorText,
+                        errorText:
+                            _errorText ??
+                            (locked
+                                ? 'PIN entry is temporarily locked.'
+                                : null),
                         prefixIcon: const Icon(Icons.pin_outlined),
                         suffixIcon: IconButton(
                           tooltip: _hidePin ? 'Show PIN' : 'Hide PIN',
@@ -232,7 +229,7 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                           : const Icon(Icons.login),
                       label: Text(
                         locked
-                            ? 'Try again in $_lockSecondsRemaining seconds'
+                            ? 'Try again in $lockSecondsRemaining seconds'
                             : _isChecking
                             ? 'Checking...'
                             : 'Unlock with PIN',
@@ -242,17 +239,13 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
                         lockController.isBiometricAvailable) ...[
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        onPressed: locked || _isChecking
-                            ? null
-                            : _unlockWithBiometrics,
+                        onPressed: _isChecking ? null : _unlockWithBiometrics,
                         icon: const Icon(Icons.fingerprint),
                         label: Text('Use ${lockController.biometricLabel}'),
                       ),
                     ],
                     TextButton(
-                      onPressed: locked || _isChecking
-                          ? null
-                          : _resetWithPassword,
+                      onPressed: _isChecking ? null : _resetWithPassword,
                       child: const Text('Forgot PIN? Verify account password'),
                     ),
                   ],

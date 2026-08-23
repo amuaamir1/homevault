@@ -47,6 +47,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool _isAuthenticatingBiometric = false;
   String _biometricLabel = 'biometric unlock';
   String? _biometricErrorMessage;
+  PinAttemptStatus _pinAttemptStatus = const PinAttemptStatus();
   DateTime? _backgroundedAt;
 
   bool get isInitializing => _isInitializing;
@@ -58,6 +59,11 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool get isAuthenticatingBiometric => _isAuthenticatingBiometric;
   String get biometricLabel => _biometricLabel;
   String? get biometricErrorMessage => _biometricErrorMessage;
+  PinAttemptStatus get pinAttemptStatus => _pinAttemptStatus;
+  bool get isPinTemporarilyLocked =>
+      _pinAttemptStatus.isLockedAt(DateTime.now());
+  int get pinLockSecondsRemaining =>
+      _pinAttemptStatus.secondsRemainingAt(DateTime.now());
   Duration get lockAfter => _lockAfter;
   AutoLockOption get autoLockOption => _autoLockOption;
   String? get boundUid => _boundUid;
@@ -86,6 +92,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _isBiometricEnabled = false;
       _isBiometricAvailable = false;
       _biometricErrorMessage = null;
+      _pinAttemptStatus = const PinAttemptStatus();
       _backgroundedAt = null;
       _isInitializing = false;
       _notifySafely();
@@ -107,6 +114,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _hasPin = await _securityService.hasPin();
       _pinSetupCompleted =
           _hasPin || await _securityService.hasCompletedPinSetup();
+      _pinAttemptStatus = await _securityService.getAttemptStatus();
       _isUnlocked = !_hasPin;
       await _loadBiometricState();
     } finally {
@@ -129,6 +137,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _hasPin = true;
     _isUnlocked = true;
     _biometricErrorMessage = null;
+    _pinAttemptStatus = const PinAttemptStatus();
     await _loadBiometricState();
     _notifySafely();
   }
@@ -138,20 +147,24 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _pinSetupCompleted = true;
     _hasPin = false;
     _isUnlocked = true;
+    _pinAttemptStatus = const PinAttemptStatus();
     await _biometricService.setEnabled(false);
     _isBiometricEnabled = false;
     _notifySafely();
   }
 
   Future<bool> unlock(String pin) async {
-    final isValid = await _securityService.verifyPin(pin);
-    if (isValid) {
+    final result = await _securityService.verifyPinWithProtection(pin);
+    _pinAttemptStatus = result.status;
+
+    if (result.isValid) {
       _isUnlocked = true;
       _backgroundedAt = null;
       _biometricErrorMessage = null;
-      _notifySafely();
     }
-    return isValid;
+
+    _notifySafely();
+    return result.isValid;
   }
 
   Future<bool> authenticateWithBiometrics() async {
@@ -170,6 +183,8 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
     _isAuthenticatingBiometric = false;
     if (result.authenticated) {
+      await _securityService.clearFailedAttempts();
+      _pinAttemptStatus = const PinAttemptStatus();
       _isUnlocked = true;
       _backgroundedAt = null;
       _biometricErrorMessage = null;
@@ -238,6 +253,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _pinSetupCompleted = true;
       _hasPin = true;
       _isUnlocked = true;
+      _pinAttemptStatus = const PinAttemptStatus();
       _notifySafely();
     }
     return changed;
@@ -250,6 +266,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _hasPin = false;
     _isUnlocked = true;
     _isBiometricEnabled = false;
+    _pinAttemptStatus = const PinAttemptStatus();
     _backgroundedAt = null;
     _notifySafely();
   }
@@ -266,8 +283,10 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   /// Email/password authentication is a strong account-level verification.
   /// After an explicit sign-in, allow entry once without asking for the local
   /// PIN again. Future app launches still require the PIN or biometrics.
-  void unlockAfterAccountAuthentication() {
+  Future<void> unlockAfterAccountAuthentication() async {
     if (_boundUid == null || !_hasPin) return;
+    await _securityService.clearFailedAttempts();
+    _pinAttemptStatus = const PinAttemptStatus();
     _isUnlocked = true;
     _backgroundedAt = null;
     _biometricErrorMessage = null;
@@ -287,6 +306,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _isBiometricEnabled = false;
     _isBiometricAvailable = false;
     _biometricErrorMessage = null;
+    _pinAttemptStatus = const PinAttemptStatus();
     _backgroundedAt = null;
     _autoLockOption = AutoLockOption.twoMinutes;
     _lockAfter = _autoLockOption.duration;
@@ -301,6 +321,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _isUnlocked = true;
     _isBiometricEnabled = false;
     _biometricErrorMessage = null;
+    _pinAttemptStatus = const PinAttemptStatus();
     _backgroundedAt = null;
     _notifySafely();
   }

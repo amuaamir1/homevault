@@ -165,4 +165,127 @@ void main() {
     await service.bindUser('firebase-user-history-a');
     expect(service.createPin('1122'), throwsA(isA<PinReuseException>()));
   });
+
+  test('locks PIN entry after five failed attempts', () async {
+    var now = DateTime(2026, 8, 23, 12);
+    final service = PinSecurityService(now: () => now);
+    await service.bindUser('firebase-user-lockout');
+    await service.createPin('2468');
+
+    for (var attempt = 1; attempt <= 4; attempt++) {
+      final result = await service.verifyPinWithProtection('1357');
+      expect(result.isValid, isFalse);
+      expect(result.status.failedAttempts, attempt);
+      expect(result.status.lockedUntil, isNull);
+    }
+
+    final fifth = await service.verifyPinWithProtection('1357');
+    expect(fifth.isValid, isFalse);
+    expect(fifth.status.failedAttempts, 5);
+    expect(fifth.status.isLockedAt(now), isTrue);
+    expect(fifth.status.secondsRemainingAt(now), 30);
+
+    final blockedCorrectPin = await service.verifyPinWithProtection('2468');
+    expect(blockedCorrectPin.isValid, isFalse);
+    expect(blockedCorrectPin.wasLockedBeforeAttempt, isTrue);
+    expect(blockedCorrectPin.status.failedAttempts, 5);
+  });
+
+  test('PIN lockout survives service recreation and expires safely', () async {
+    var now = DateTime(2026, 8, 23, 12);
+    final firstSession = PinSecurityService(now: () => now);
+    await firstSession.bindUser('firebase-user-persistent-lock');
+    await firstSession.createPin('2468');
+
+    for (var attempt = 0; attempt < 5; attempt++) {
+      await firstSession.verifyPinWithProtection('1357');
+    }
+
+    final restartedSession = PinSecurityService(now: () => now);
+    await restartedSession.bindUser('firebase-user-persistent-lock');
+
+    var status = await restartedSession.getAttemptStatus();
+    expect(status.failedAttempts, 5);
+    expect(status.isLockedAt(now), isTrue);
+
+    now = now.add(const Duration(seconds: 31));
+    status = await restartedSession.getAttemptStatus();
+    expect(status.failedAttempts, 5);
+    expect(status.lockedUntil, isNull);
+
+    final success = await restartedSession.verifyPinWithProtection('2468');
+    expect(success.isValid, isTrue);
+    expect((await restartedSession.getAttemptStatus()).failedAttempts, 0);
+  });
+
+  test('successful PIN clears failed-attempt state', () async {
+    final service = PinSecurityService();
+    await service.bindUser('firebase-user-attempt-reset');
+    await service.createPin('2468');
+
+    await service.verifyPinWithProtection('1357');
+    await service.verifyPinWithProtection('1357');
+    expect((await service.getAttemptStatus()).failedAttempts, 2);
+
+    final success = await service.verifyPinWithProtection('2468');
+    expect(success.isValid, isTrue);
+    expect((await service.getAttemptStatus()).failedAttempts, 0);
+  });
+
+  test('failed PIN attempts remain scoped to each Firebase user', () async {
+    final service = PinSecurityService();
+
+    await service.bindUser('firebase-user-attempt-a');
+    await service.createPin('2468');
+    await service.verifyPinWithProtection('1357');
+    await service.verifyPinWithProtection('1357');
+    expect((await service.getAttemptStatus()).failedAttempts, 2);
+
+    await service.bindUser('firebase-user-attempt-b');
+    await service.createPin('8642');
+    expect((await service.getAttemptStatus()).failedAttempts, 0);
+
+    await service.bindUser('firebase-user-attempt-a');
+    expect((await service.getAttemptStatus()).failedAttempts, 2);
+  });
+
+  test('repeated attack waves increase the PIN lockout duration', () async {
+    var now = DateTime(2026, 8, 23, 12);
+    final service = PinSecurityService(now: () => now);
+    await service.bindUser('firebase-user-progressive-lock');
+    await service.createPin('2468');
+
+    for (var attempt = 0; attempt < 5; attempt++) {
+      await service.verifyPinWithProtection('1357');
+    }
+    var status = await service.getAttemptStatus();
+    expect(status.lockedUntil, now.add(const Duration(seconds: 30)));
+
+    now = now.add(const Duration(seconds: 31));
+    for (var attempt = 0; attempt < 5; attempt++) {
+      await service.verifyPinWithProtection('1357');
+    }
+    status = await service.getAttemptStatus();
+    expect(status.failedAttempts, 10);
+    expect(status.lockedUntil, now.add(const Duration(minutes: 2)));
+  });
+
+  test(
+    'account recovery clears PIN attack state but keeps PIN history',
+    () async {
+      final service = PinSecurityService();
+      await service.bindUser('firebase-user-lock-recovery');
+      await service.createPin('2468');
+
+      for (var attempt = 0; attempt < 5; attempt++) {
+        await service.verifyPinWithProtection('1357');
+      }
+      expect((await service.getAttemptStatus()).lockedUntil, isNotNull);
+
+      await service.clearPin(markSetupComplete: false);
+
+      expect((await service.getAttemptStatus()).failedAttempts, 0);
+      expect(service.createPin('2468'), throwsA(isA<PinReuseException>()));
+    },
+  );
 }

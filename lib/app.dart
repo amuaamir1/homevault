@@ -168,7 +168,7 @@ class _HomeVaultAppState extends State<HomeVaultApp>
     ]);
 
     if (auth.consumeAccountSignInUnlock()) {
-      _appLockController.unlockAfterAccountAuthentication();
+      await _appLockController.unlockAfterAccountAuthentication();
     }
 
     if (epoch != _authenticationEpoch || auth.user?.uid != user.uid) return;

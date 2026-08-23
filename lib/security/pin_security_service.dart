@@ -8,16 +8,19 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'security_scope_key.dart';
 
 class PinSecurityService {
-  PinSecurityService({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+  PinSecurityService({FlutterSecureStorage? storage, DateTime Function()? now})
+    : _storage = storage ?? const FlutterSecureStorage(),
+      _now = now ?? DateTime.now;
 
   static const _legacyPinSaltKey = 'homevault.pin.salt.v1';
   static const _legacyPinHashKey = 'homevault.pin.hash.v1';
   static const _legacyPinSetupCompleteKey = 'homevault.pin.setup.complete.v1';
   static const _legacyPinHistoryKey = 'homevault.pin.history.v1';
   static const _pinHistoryLimit = 4;
+  static const _attemptsPerLockoutTier = 5;
 
   final FlutterSecureStorage _storage;
+  final DateTime Function() _now;
   String? _scope;
 
   String get _pinSaltKey => _scopedKey('salt');
@@ -27,6 +30,20 @@ class PinSecurityService {
     final scope = _scope;
     if (scope == null) return _legacyPinHistoryKey;
     return 'homevault.pin.$scope.history.v2';
+  }
+
+  String get _failedAttemptsKey {
+    final scope = _scope;
+    return scope == null
+        ? 'homevault.pin.failed.attempts.v1'
+        : 'homevault.pin.$scope.failed.attempts.v1';
+  }
+
+  String get _lockedUntilKey {
+    final scope = _scope;
+    return scope == null
+        ? 'homevault.pin.locked.until.v1'
+        : 'homevault.pin.$scope.locked.until.v1';
   }
 
   String _scopedKey(String suffix) {
@@ -110,6 +127,7 @@ class PinSecurityService {
     }
 
     await _savePin(pin);
+    await clearFailedAttempts();
   }
 
   Future<void> _savePin(String pin) async {
@@ -146,6 +164,83 @@ class PinSecurityService {
     return _constantTimeEquals(actualHash, expectedHash);
   }
 
+  /// Verifies a PIN while enforcing durable, account-scoped brute-force
+  /// protection. Failed-attempt state lives in secure storage, so rebuilding
+  /// the unlock screen or restarting HomeVault cannot bypass a lockout.
+  Future<PinUnlockResult> verifyPinWithProtection(String pin) async {
+    final currentStatus = await getAttemptStatus();
+    if (currentStatus.isLockedAt(_now())) {
+      return PinUnlockResult.locked(currentStatus);
+    }
+
+    final isValid = await verifyPin(pin);
+    if (isValid) {
+      await clearFailedAttempts();
+      return const PinUnlockResult.success();
+    }
+
+    final failedAttempts = currentStatus.failedAttempts + 1;
+    final lockoutDuration = _lockoutDurationForAttempt(failedAttempts);
+    final lockedUntil = lockoutDuration == null
+        ? null
+        : _now().add(lockoutDuration);
+
+    await Future.wait([
+      _storage.write(key: _failedAttemptsKey, value: failedAttempts.toString()),
+      if (lockedUntil != null)
+        _storage.write(
+          key: _lockedUntilKey,
+          value: lockedUntil.millisecondsSinceEpoch.toString(),
+        )
+      else
+        _storage.delete(key: _lockedUntilKey),
+    ]);
+
+    return PinUnlockResult.failure(
+      PinAttemptStatus(
+        failedAttempts: failedAttempts,
+        lockedUntil: lockedUntil,
+      ),
+    );
+  }
+
+  Future<PinAttemptStatus> getAttemptStatus() async {
+    final values = await Future.wait([
+      _storage.read(key: _failedAttemptsKey),
+      _storage.read(key: _lockedUntilKey),
+    ]);
+
+    final attempts = int.tryParse(values[0] ?? '') ?? 0;
+    final lockedUntilMillis = int.tryParse(values[1] ?? '');
+    final lockedUntil = lockedUntilMillis == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(lockedUntilMillis);
+
+    if (lockedUntil != null && !_now().isBefore(lockedUntil)) {
+      await _storage.delete(key: _lockedUntilKey);
+      return PinAttemptStatus(failedAttempts: attempts);
+    }
+
+    return PinAttemptStatus(failedAttempts: attempts, lockedUntil: lockedUntil);
+  }
+
+  Future<void> clearFailedAttempts() async {
+    await Future.wait([
+      _storage.delete(key: _failedAttemptsKey),
+      _storage.delete(key: _lockedUntilKey),
+    ]);
+  }
+
+  static Duration? _lockoutDurationForAttempt(int failedAttempts) {
+    if (failedAttempts <= 0 || failedAttempts % _attemptsPerLockoutTier != 0) {
+      return null;
+    }
+
+    if (failedAttempts >= 15) return const Duration(minutes: 10);
+    if (failedAttempts >= 10) return const Duration(minutes: 2);
+    return const Duration(seconds: 30);
+  }
+
   Future<bool> changePin({
     required String currentPin,
     required String newPin,
@@ -162,6 +257,7 @@ class PinSecurityService {
     }
 
     await _savePin(newPin);
+    await clearFailedAttempts();
     return true;
   }
 
@@ -191,6 +287,8 @@ class PinSecurityService {
     final operations = <Future<void>>[
       _storage.delete(key: _pinSaltKey),
       _storage.delete(key: _pinHashKey),
+      _storage.delete(key: _failedAttemptsKey),
+      _storage.delete(key: _lockedUntilKey),
     ];
 
     if (markSetupComplete) {
@@ -296,6 +394,50 @@ class PinSecurityService {
     }
     return difference == 0;
   }
+}
+
+class PinAttemptStatus {
+  const PinAttemptStatus({this.failedAttempts = 0, this.lockedUntil});
+
+  final int failedAttempts;
+  final DateTime? lockedUntil;
+
+  bool isLockedAt(DateTime now) {
+    final until = lockedUntil;
+    return until != null && now.isBefore(until);
+  }
+
+  int secondsRemainingAt(DateTime now) {
+    final until = lockedUntil;
+    if (until == null || !now.isBefore(until)) return 0;
+    final milliseconds = until.difference(now).inMilliseconds;
+    return (milliseconds + 999) ~/ 1000;
+  }
+}
+
+class PinUnlockResult {
+  const PinUnlockResult._({
+    required this.isValid,
+    required this.status,
+    required this.wasLockedBeforeAttempt,
+  });
+
+  const PinUnlockResult.success()
+    : this._(
+        isValid: true,
+        status: const PinAttemptStatus(),
+        wasLockedBeforeAttempt: false,
+      );
+
+  PinUnlockResult.failure(PinAttemptStatus status)
+    : this._(isValid: false, status: status, wasLockedBeforeAttempt: false);
+
+  PinUnlockResult.locked(PinAttemptStatus status)
+    : this._(isValid: false, status: status, wasLockedBeforeAttempt: true);
+
+  final bool isValid;
+  final PinAttemptStatus status;
+  final bool wasLockedBeforeAttempt;
 }
 
 class PinReuseException implements Exception {
