@@ -489,8 +489,7 @@ class _FakeEmailAuthService implements EmailAuthService {
 
 class _FakeSensitiveAuthService extends _FakeEmailAuthService
     implements SensitiveAuthOperations {
-  _FakeSensitiveAuthService({AuthenticatedUser? currentUser})
-    : super(currentUser: currentUser);
+  _FakeSensitiveAuthService({super.currentUser});
 
   int deleteCalls = 0;
   int passwordReauthCalls = 0;

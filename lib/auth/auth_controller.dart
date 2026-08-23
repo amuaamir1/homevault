@@ -11,10 +11,9 @@ class AuthController extends ChangeNotifier {
   AuthController({
     EmailAuthService? service,
     DateTime Function()? now,
-    Duration sensitiveAuthenticationWindow = const Duration(minutes: 5),
+    this.sensitiveAuthenticationWindow = const Duration(minutes: 5),
   }) : _service = service ?? FirebaseEmailAuthService(),
-       _now = now ?? DateTime.now,
-       _sensitiveAuthenticationWindow = sensitiveAuthenticationWindow;
+       _now = now ?? DateTime.now;
 
   AuthController.authenticatedForTesting({
     String uid = 'test-user',
@@ -22,11 +21,10 @@ class AuthController extends ChangeNotifier {
     bool isEmailVerified = true,
     String phoneNumber = '+919876543210',
     DateTime Function()? now,
-    Duration sensitiveAuthenticationWindow = const Duration(minutes: 5),
+    this.sensitiveAuthenticationWindow = const Duration(minutes: 5),
     bool recentlyAuthenticated = false,
   }) : _service = null,
        _now = now ?? DateTime.now,
-       _sensitiveAuthenticationWindow = sensitiveAuthenticationWindow,
        _isInitializing = false,
        _user = AuthenticatedUser(
          uid: uid,
@@ -42,7 +40,7 @@ class AuthController extends ChangeNotifier {
 
   final EmailAuthService? _service;
   final DateTime Function() _now;
-  final Duration _sensitiveAuthenticationWindow;
+  final Duration sensitiveAuthenticationWindow;
   StreamSubscription<AuthenticatedUser?>? _authSubscription;
   Future<bool>? _sessionValidationFuture;
 
@@ -82,8 +80,6 @@ class AuthController extends ChangeNotifier {
   bool get hasGoogleProvider => providerIds.contains('google.com');
   bool get hasAppleProvider => providerIds.contains('apple.com');
 
-  Duration get sensitiveAuthenticationWindow => _sensitiveAuthenticationWindow;
-
   bool get hasRecentSensitiveAuthentication {
     final user = _user;
     final authenticatedAt = _lastSensitiveAuthenticationAt;
@@ -94,7 +90,7 @@ class AuthController extends ChangeNotifier {
     }
 
     final age = _now().difference(authenticatedAt);
-    return !age.isNegative && age <= _sensitiveAuthenticationWindow;
+    return !age.isNegative && age <= sensitiveAuthenticationWindow;
   }
 
   Future<void> initialize() async {
