@@ -84,6 +84,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
       case TargetPlatform.windows:
       case TargetPlatform.linux:
+      case TargetPlatform.fuchsia:
         throw UnsupportedError(
           'HomeVault Production Firebase is currently configured for Android only.',
         );

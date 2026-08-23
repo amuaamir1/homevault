@@ -182,21 +182,73 @@ if ([string]::IsNullOrWhiteSpace($appId)) {
     throw 'Production Android Firebase App ID is missing. Re-run the provisioning script first.'
 }
 
+$candidateGoogleServicesPath = Join-Path $ConfigRoot 'google-services.candidate.json'
+Remove-Item -LiteralPath $candidateGoogleServicesPath -Force -ErrorAction SilentlyContinue
+
 $sdkConfig = Invoke-Firebase -Arguments @(
     'apps:sdkconfig',
     'android',
     $appId,
     '--project', $ProductionProjectId,
-    '--out', $googleServicesPath,
+    '--out', $candidateGoogleServicesPath,
     '--non-interactive'
-)
-if ($sdkConfig.ExitCode -ne 0) {
-    throw 'Could not refresh Production google-services.json.'
+) -AllowFailure
+
+$candidateGoogle = $null
+if ($sdkConfig.ExitCode -eq 0 -and (Test-Path -LiteralPath $candidateGoogleServicesPath -PathType Leaf)) {
+    try {
+        $candidateGoogle = Get-Content -Raw -LiteralPath $candidateGoogleServicesPath | ConvertFrom-Json
+    } catch {
+        $candidateGoogle = $null
+    }
+}
+
+$candidateClient = $null
+if ($null -ne $candidateGoogle -and "$($candidateGoogle.project_info.project_id)" -eq $ProductionProjectId) {
+    $candidateClient = @(
+        $candidateGoogle.client |
+            Where-Object {
+                "$($_.client_info.android_client_info.package_name)" -eq $PackageName -and
+                "$($_.client_info.mobilesdk_app_id)".Trim() -eq $appId
+            }
+    ) | Select-Object -First 1
+}
+
+if ($null -ne $candidateClient) {
+    Move-Item -LiteralPath $candidateGoogleServicesPath -Destination $googleServicesPath -Force
+    Write-Host 'PASS  Refreshed Production google-services.json.'
+} else {
+    Remove-Item -LiteralPath $candidateGoogleServicesPath -Force -ErrorAction SilentlyContinue
+    Write-Warning @"
+Firebase CLI could not refresh a valid Production google-services.json.
+
+Finalization will validate the existing external config instead. If the checks
+below report a missing Storage bucket or web OAuth client, download the latest
+google-services.json from Firebase Console -> Project settings -> General ->
+Your apps -> HomeVault Production Android and save it to:
+  $googleServicesPath
+Then re-run finalization.
+"@
+}
+
+if (-not (Test-Path -LiteralPath $googleServicesPath -PathType Leaf)) {
+    throw 'Production google-services.json is missing. Download it from Firebase Console before finalization.'
 }
 
 $google = Get-Content -Raw -LiteralPath $googleServicesPath | ConvertFrom-Json
 if ("$($google.project_info.project_id)" -ne $ProductionProjectId) {
-    throw 'Refreshed Production google-services.json targets the wrong project.'
+    throw 'Production google-services.json targets the wrong project.'
+}
+
+$validatedClient = @(
+    $google.client |
+        Where-Object {
+            "$($_.client_info.android_client_info.package_name)" -eq $PackageName -and
+            "$($_.client_info.mobilesdk_app_id)".Trim() -eq $appId
+        }
+) | Select-Object -First 1
+if ($null -eq $validatedClient) {
+    throw 'Production google-services.json does not match the expected Android package and Firebase App ID.'
 }
 
 $storageBucket = "$($google.project_info.storage_bucket)".Trim()

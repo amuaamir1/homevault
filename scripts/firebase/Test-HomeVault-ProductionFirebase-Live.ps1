@@ -50,7 +50,7 @@ function Invoke-FirebaseAuthRest {
         [hashtable]$Body
     )
 
-    $uri = "https://identitytoolkit.googleapis.com/v1/accounts:$Action?key=$apiKey"
+    $uri = "https://identitytoolkit.googleapis.com/v1/accounts:$Action" + "?key=$apiKey"
     return Invoke-RestMethod `
         -Method $Method `
         -Uri $uri `

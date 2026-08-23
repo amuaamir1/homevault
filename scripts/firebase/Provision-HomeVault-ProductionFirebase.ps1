@@ -266,61 +266,144 @@ $googleServicesPath = Join-Path $ConfigRoot 'google-services.json'
 $optionsPath = Join-Path $ConfigRoot 'firebase_options.dart'
 
 Write-Section 'Production Android Firebase app'
+
+function Read-ValidatedGoogleServices {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [string]$ExpectedAppId = ''
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $googleConfig = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+
+    if ("$($googleConfig.project_info.project_id)" -ne $ProductionProjectId) {
+        return $null
+    }
+
+    $matchingClient = @(
+        $googleConfig.client |
+            Where-Object {
+                "$($_.client_info.android_client_info.package_name)" -eq $PackageName
+            }
+    ) | Select-Object -First 1
+
+    if ($null -eq $matchingClient) {
+        return $null
+    }
+
+    $configAppId = "$($matchingClient.client_info.mobilesdk_app_id)".Trim()
+    if ([string]::IsNullOrWhiteSpace($configAppId)) {
+        return $null
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedAppId) -and $configAppId -ne $ExpectedAppId) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        Google = $googleConfig
+        Client = $matchingClient
+        AppId = $configAppId
+    }
+}
+
+$candidateGoogleServicesPath = Join-Path $ConfigRoot 'google-services.candidate.json'
+Remove-Item -LiteralPath $candidateGoogleServicesPath -Force -ErrorAction SilentlyContinue
+
 $downloadArguments = @('apps:sdkconfig', 'android')
 if (-not [string]::IsNullOrWhiteSpace($AndroidAppId)) {
     $downloadArguments += $AndroidAppId
 }
 $downloadArguments += @(
     '--project', $ProductionProjectId,
-    '--out', $googleServicesPath,
+    '--out', $candidateGoogleServicesPath,
     '--non-interactive'
 )
 
 $sdkConfig = Invoke-Firebase -Arguments $downloadArguments -AllowFailure
-if ($sdkConfig.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $googleServicesPath)) {
-    if (-not [string]::IsNullOrWhiteSpace($AndroidAppId)) {
-        throw 'Could not download the requested Android Firebase app configuration.'
-    }
+$candidate = Read-ValidatedGoogleServices `
+    -Path $candidateGoogleServicesPath `
+    -ExpectedAppId $AndroidAppId
 
-    Write-Host 'No unambiguous Android app configuration was available. Registering HomeVault Production Android.'
-    Invoke-Firebase -Arguments @(
-        'apps:create',
-        '-a', $PackageName,
-        'android',
-        'HomeVault Production Android',
-        '--project', $ProductionProjectId,
-        '--non-interactive'
-    ) | Out-Null
+if ($sdkConfig.ExitCode -eq 0 -and $null -ne $candidate) {
+    Move-Item -LiteralPath $candidateGoogleServicesPath -Destination $googleServicesPath -Force
+    Write-Host 'PASS  Refreshed Production google-services.json.'
+} else {
+    Remove-Item -LiteralPath $candidateGoogleServicesPath -Force -ErrorAction SilentlyContinue
 
-    Invoke-Firebase -Arguments @(
-        'apps:sdkconfig',
-        'android',
-        '--project', $ProductionProjectId,
-        '--out', $googleServicesPath,
-        '--non-interactive'
-    ) | Out-Null
-}
+    if ([string]::IsNullOrWhiteSpace($AndroidAppId)) {
+        $existing = Read-ValidatedGoogleServices -Path $googleServicesPath
+        if ($null -eq $existing) {
+            Write-Host 'No unambiguous Android app configuration was available. Registering HomeVault Production Android.'
+            Invoke-Firebase -Arguments @(
+                'apps:create',
+                '-a', $PackageName,
+                'android',
+                'HomeVault Production Android',
+                '--project', $ProductionProjectId,
+                '--non-interactive'
+            ) | Out-Null
 
-$google = Get-Content -Raw -LiteralPath $googleServicesPath | ConvertFrom-Json
-if ("$($google.project_info.project_id)" -ne $ProductionProjectId) {
-    throw 'Downloaded google-services.json targets a different Firebase project.'
-}
+            $sdkConfig = Invoke-Firebase -Arguments @(
+                'apps:sdkconfig',
+                'android',
+                '--project', $ProductionProjectId,
+                '--out', $candidateGoogleServicesPath,
+                '--non-interactive'
+            ) -AllowFailure
 
-$client = @(
-    $google.client |
-        Where-Object {
-            "$($_.client_info.android_client_info.package_name)" -eq $PackageName
+            $candidate = Read-ValidatedGoogleServices -Path $candidateGoogleServicesPath
+            if ($sdkConfig.ExitCode -ne 0 -or $null -eq $candidate) {
+                Remove-Item -LiteralPath $candidateGoogleServicesPath -Force -ErrorAction SilentlyContinue
+                throw 'Could not obtain a valid Production Android Firebase configuration after app registration.'
+            }
+
+            Move-Item -LiteralPath $candidateGoogleServicesPath -Destination $googleServicesPath -Force
+            Write-Host 'PASS  Downloaded Production google-services.json after Android app registration.'
+        } else {
+            Write-Warning 'Firebase CLI could not refresh google-services.json. Continuing with the previously validated Production config; finalization must refresh or validate the post-Authentication config.'
         }
-) | Select-Object -First 1
+    } else {
+        $existing = Read-ValidatedGoogleServices `
+            -Path $googleServicesPath `
+            -ExpectedAppId $AndroidAppId
 
-if ($null -eq $client) {
-    throw "Production google-services.json does not contain Android package $PackageName."
+        if ($null -eq $existing) {
+            throw @"
+Firebase CLI could not refresh the requested Android Firebase app configuration,
+and no previously downloaded Production google-services.json matches:
+  Project: $ProductionProjectId
+  Package: $PackageName
+  App ID:  $AndroidAppId
+
+Download google-services.json from Firebase Console -> Project settings ->
+General -> Your apps -> HomeVault Production Android, save it to:
+  $googleServicesPath
+then re-run provisioning.
+"@
+        }
+
+        Write-Warning 'Firebase CLI could not refresh google-services.json. Continuing with the previously validated Production config; finalization must refresh or validate the post-Authentication config.'
+    }
 }
 
-$resolvedAppId = "$($client.client_info.mobilesdk_app_id)".Trim()
-if ([string]::IsNullOrWhiteSpace($resolvedAppId)) {
-    throw 'Could not determine the Production Android Firebase App ID.'
+$validatedGoogle = Read-ValidatedGoogleServices `
+    -Path $googleServicesPath `
+    -ExpectedAppId $AndroidAppId
+if ($null -eq $validatedGoogle) {
+    throw 'Production google-services.json failed project/package/App-ID validation.'
 }
+
+$google = $validatedGoogle.Google
+$client = $validatedGoogle.Client
+$resolvedAppId = $validatedGoogle.AppId
 Write-Host "PASS  Android Firebase App ID: $resolvedAppId"
 
 Write-Section 'Release SHA-1'
