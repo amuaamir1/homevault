@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -14,6 +15,8 @@ import '../services/cloud_document_sync_journal.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/homevault_error_message.dart';
+import '../services/local_data_management_service.dart';
+import '../services/local_document_cache_policy.dart';
 import '../services/warranty_notification_service.dart';
 
 class ApplianceStore extends ChangeNotifier {
@@ -23,6 +26,7 @@ class ApplianceStore extends ChangeNotifier {
     CloudDocumentStorage? cloudDocumentStorage,
     CloudDocumentSyncJournal? cloudDocumentSyncJournal,
     DocumentStorageService? documentStorageService,
+    LocalDocumentCachePolicy? localDocumentCachePolicy,
   }) : _repository = repository ?? FileApplianceRepository(),
        _reminderScheduler =
            reminderScheduler ?? const NoOpWarrantyReminderScheduler(),
@@ -31,13 +35,16 @@ class ApplianceStore extends ChangeNotifier {
        _cloudDocumentSyncJournal =
            cloudDocumentSyncJournal ?? MemoryCloudDocumentSyncJournal(),
        _documentStorageService =
-           documentStorageService ?? DocumentStorageService();
+           documentStorageService ?? DocumentStorageService(),
+       _localDocumentCachePolicy =
+           localDocumentCachePolicy ?? MemoryLocalDocumentCachePolicy();
 
   final ApplianceRepository _repository;
   final WarrantyReminderScheduler _reminderScheduler;
   final CloudDocumentStorage _cloudDocumentStorage;
   final CloudDocumentSyncJournal _cloudDocumentSyncJournal;
   final DocumentStorageService _documentStorageService;
+  final LocalDocumentCachePolicy _localDocumentCachePolicy;
   List<Appliance> _appliances = [];
   bool _isLoading = false;
   bool _isInitialized = false;
@@ -54,6 +61,7 @@ class ApplianceStore extends ChangeNotifier {
   Future<void>? _documentSyncInProgress;
   final Map<String, Future<StoredDocument>> _documentDownloads = {};
   bool _hasPendingCloudDocumentDeletes = false;
+  Set<String> _evictedCloudDocumentPaths = <String>{};
 
   // Advances only after a successful local structured-data mutation.
   // Cloud-sync status changes, remote-watch refreshes, and local document-cache
@@ -78,8 +86,14 @@ class ApplianceStore extends ChangeNotifier {
 
     for (final appliance in _appliances) {
       for (final document in appliance.allAttachments) {
+        final cloudPath = document.cloudStoragePath.trim();
+        final intentionallyEvicted =
+            cloudPath.isNotEmpty &&
+            _evictedCloudDocumentPaths.contains(cloudPath);
         if (document.needsCloudUpload ||
-            (!document.isAvailableOnDevice && document.isAvailableInCloud)) {
+            (!document.isAvailableOnDevice &&
+                document.isAvailableInCloud &&
+                !intentionallyEvicted)) {
           return true;
         }
       }
@@ -183,10 +197,14 @@ class ApplianceStore extends ChangeNotifier {
     await Future.wait([
       _cloudDocumentStorage.bindOwner(nextOwner),
       _cloudDocumentSyncJournal.bindOwner(nextOwner),
+      _localDocumentCachePolicy.bindOwner(nextOwner),
     ]);
     _hasPendingCloudDocumentDeletes =
         nextOwner != null &&
         await _cloudDocumentSyncJournal.hasPendingDeletes();
+    _evictedCloudDocumentPaths = nextOwner == null
+        ? <String>{}
+        : Set<String>.from(await _localDocumentCachePolicy.evictedCloudPaths());
 
     if (_repository is! OwnerScopedApplianceRepository) {
       final ownerChanged = _ownerUid != nextOwner;
@@ -735,10 +753,129 @@ class ApplianceStore extends ChangeNotifier {
       rethrow;
     }
 
+    await _markDocumentCacheAvailableSafely(cachedDocument.cloudStoragePath);
+
     final refreshedAppliance = applianceById(applianceId);
     return refreshedAppliance == null
         ? cachedDocument
         : _documentById(refreshedAppliance, documentId) ?? cachedDocument;
+  }
+
+  Future<LocalCleanupResult> clearDownloadedDocumentCopies() async {
+    final ownerAtStart = _ownerUid;
+    if (ownerAtStart == null || ownerAtStart.isEmpty) {
+      throw StateError('Sign in before managing HomeVault device storage.');
+    }
+
+    final activeSync = _documentSyncInProgress;
+    if (activeSync != null) {
+      await activeSync;
+    }
+
+    final targets = <({String applianceId, StoredDocument document})>[];
+    for (final appliance in _appliances) {
+      for (final document in appliance.allAttachments) {
+        if (document.isAvailableOnDevice && document.isAvailableInCloud) {
+          targets.add((applianceId: appliance.id, document: document));
+        }
+      }
+    }
+
+    if (targets.isEmpty) {
+      return const LocalCleanupResult(itemCount: 0, bytesFreed: 0);
+    }
+
+    final cloudPaths = targets
+        .map((target) => target.document.cloudStoragePath.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+
+    await _localDocumentCachePolicy.markEvicted(cloudPaths);
+    _evictedCloudDocumentPaths.addAll(cloudPaths);
+
+    var updated = [..._appliances];
+    for (final target in targets) {
+      final index = updated.indexWhere(
+        (appliance) => appliance.id == target.applianceId,
+      );
+      if (index == -1) continue;
+
+      updated[index] = updated[index].replaceDocument(
+        target.document.id,
+        target.document.copyWith(localPath: ''),
+      );
+    }
+
+    try {
+      final persisted = await _persistAppliances(updated);
+      if (_ownerUid != ownerAtStart) {
+        throw StateError(
+          'Device cleanup stopped because the signed-in account changed.',
+        );
+      }
+      _appliances = persisted;
+      notifyListeners();
+    } catch (_) {
+      try {
+        await _localDocumentCachePolicy.markAvailable(cloudPaths);
+      } catch (_) {
+        // Preserve the original persistence failure.
+      }
+      _evictedCloudDocumentPaths.removeAll(cloudPaths);
+      rethrow;
+    }
+
+    var deletedFiles = 0;
+    var bytesFreed = 0;
+    var failedFiles = 0;
+
+    for (final target in targets) {
+      final filePath = target.document.localPath.trim();
+      var size = 0;
+      if (filePath.isNotEmpty) {
+        try {
+          final file = File(filePath);
+          if (await file.exists()) size = await file.length();
+        } catch (_) {
+          size = target.document.sizeBytes < 0 ? 0 : target.document.sizeBytes;
+        }
+      }
+
+      try {
+        await _documentStorageService.deleteStoredDocument(target.document);
+        deletedFiles++;
+        bytesFreed += size;
+      } catch (error, stack) {
+        failedFiles++;
+        await CrashReportingService.recordNonFatal(
+          error,
+          stack,
+          reason: 'Removing a released HomeVault local document copy',
+        );
+      }
+    }
+
+    return LocalCleanupResult(
+      itemCount: deletedFiles,
+      bytesFreed: bytesFreed,
+      failedItems: failedFiles,
+    );
+  }
+
+  Future<void> _markDocumentCacheAvailableSafely(String cloudPath) async {
+    final normalized = cloudPath.trim();
+    if (normalized.isEmpty) return;
+
+    try {
+      await _localDocumentCachePolicy.markAvailable([normalized]);
+      _evictedCloudDocumentPaths.remove(normalized);
+    } catch (error, stack) {
+      await CrashReportingService.recordNonFatal(
+        error,
+        stack,
+        reason: 'Updating HomeVault local document cache preference',
+      );
+    }
   }
 
   Future<void> _persistDocumentCache(
@@ -811,7 +948,8 @@ class ApplianceStore extends ChangeNotifier {
 
     // Cache files that came from another signed-in device. This runs in the
     // background, so users normally open documents without seeing transfer
-    // states or needing to press a download button.
+    // states or needing to press a download button. Files intentionally
+    // released from this device remain cloud-only until the user opens them.
     for (final applianceId in applianceIds) {
       if (_ownerUid != ownerAtStart) return;
       final current = applianceById(applianceId);
@@ -820,7 +958,11 @@ class ApplianceStore extends ChangeNotifier {
       final pendingDownloadIds = current.allAttachments
           .where(
             (document) =>
-                !document.isAvailableOnDevice && document.isAvailableInCloud,
+                !document.isAvailableOnDevice &&
+                document.isAvailableInCloud &&
+                !_evictedCloudDocumentPaths.contains(
+                  document.cloudStoragePath.trim(),
+                ),
           )
           .map((document) => document.id)
           .toList(growable: false);
