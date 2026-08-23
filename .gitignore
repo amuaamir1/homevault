@@ -12,7 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 *.jks
-*.keystorre
+*.keystore
 
 # IntelliJ related
 *.iml
@@ -62,3 +62,10 @@ lib/firebase_options.dart
 .env
 .env.*
 !.env.example
+*.keystore
+*.p12
+*.pfx
+*.pem
+**/*service-account*.json
+**/*service_account*.json
+**/*adminsdk*.json

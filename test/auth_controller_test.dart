@@ -182,6 +182,195 @@ void main() {
     expect(controller.isEmailVerified, isTrue);
     expect(controller.consumeAccountSignInUnlock(), isTrue);
   });
+  test(
+    'cached Firebase session is not trusted as recent authentication',
+    () async {
+      final service = _FakeEmailAuthService(
+        currentUser: const AuthenticatedUser(
+          uid: 'existing-user',
+          email: 'user@example.com',
+          isEmailVerified: true,
+        ),
+      );
+      final controller = AuthController(service: service);
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.hasRecentSensitiveAuthentication, isFalse);
+    },
+  );
+
+  test(
+    'explicit sign-in creates a short recent-authentication window',
+    () async {
+      var now = DateTime(2026, 8, 23, 15);
+      final service = _FakeEmailAuthService();
+      final controller = AuthController(
+        service: service,
+        now: () => now,
+        sensitiveAuthenticationWindow: const Duration(minutes: 5),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final signedIn = await controller.signInWithEmailAndPassword(
+        email: 'user@example.com',
+        password: 'SecurePass1',
+      );
+
+      expect(signedIn, isTrue);
+      expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+      now = now.add(const Duration(minutes: 5, seconds: 1));
+      expect(controller.hasRecentSensitiveAuthentication, isFalse);
+    },
+  );
+
+  test('reauthentication renews recent sensitive authentication', () async {
+    var now = DateTime(2026, 8, 23, 15);
+    final service = _FakeEmailAuthService(
+      currentUser: const AuthenticatedUser(
+        uid: 'existing-user',
+        email: 'user@example.com',
+        isEmailVerified: true,
+      ),
+    );
+    final controller = AuthController(
+      service: service,
+      now: () => now,
+      sensitiveAuthenticationWindow: const Duration(minutes: 5),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    expect(controller.hasRecentSensitiveAuthentication, isFalse);
+
+    final verified = await controller.reauthenticateWithPassword('SecurePass1');
+    expect(verified, isTrue);
+    expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+    now = now.add(const Duration(minutes: 6));
+    expect(controller.hasRecentSensitiveAuthentication, isFalse);
+  });
+
+  test('sign out clears recent sensitive authentication', () async {
+    final service = _FakeEmailAuthService();
+    final controller = AuthController(service: service);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    expect(
+      await controller.signInWithEmailAndPassword(
+        email: 'user@example.com',
+        password: 'SecurePass1',
+      ),
+      isTrue,
+    );
+    expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+    await controller.signOut();
+
+    expect(controller.hasRecentSensitiveAuthentication, isFalse);
+  });
+
+  test(
+    'failed reauthentication clears any older sensitive-auth proof',
+    () async {
+      var now = DateTime(2026, 8, 23, 15);
+      final service = _FakeSensitiveAuthService(
+        currentUser: const AuthenticatedUser(
+          uid: 'existing-user',
+          email: 'user@example.com',
+          isEmailVerified: true,
+        ),
+      );
+      final controller = AuthController(
+        service: service,
+        now: () => now,
+        sensitiveAuthenticationWindow: const Duration(minutes: 5),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      expect(
+        await controller.reauthenticateWithPassword('SecurePass1'),
+        isTrue,
+      );
+      expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+      now = now.add(const Duration(minutes: 1));
+      service.failPasswordReauthentication = true;
+
+      expect(
+        await controller.reauthenticateWithPassword('WrongPass1'),
+        isFalse,
+      );
+      expect(controller.hasRecentSensitiveAuthentication, isFalse);
+    },
+  );
+
+  test(
+    'Google and Apple reauthentication renew sensitive-auth proof',
+    () async {
+      var now = DateTime(2026, 8, 23, 15);
+      final service = _FakeSensitiveAuthService(
+        currentUser: const AuthenticatedUser(
+          uid: 'existing-user',
+          email: 'user@example.com',
+          isEmailVerified: true,
+        ),
+      );
+      final controller = AuthController(
+        service: service,
+        now: () => now,
+        sensitiveAuthenticationWindow: const Duration(minutes: 5),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      expect(await controller.reauthenticateWithGoogle(), isTrue);
+      expect(service.googleReauthCalls, 1);
+      expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+      now = now.add(const Duration(minutes: 6));
+      expect(controller.hasRecentSensitiveAuthentication, isFalse);
+
+      expect(await controller.reauthenticateWithApple(), isTrue);
+      expect(service.appleReauthCalls, 1);
+      expect(controller.hasRecentSensitiveAuthentication, isTrue);
+    },
+  );
+  test(
+    'account deletion requires recent verification even if UI is bypassed',
+    () async {
+      final service = _FakeSensitiveAuthService(
+        currentUser: const AuthenticatedUser(
+          uid: 'existing-user',
+          email: 'user@example.com',
+          isEmailVerified: true,
+        ),
+      );
+      final controller = AuthController(service: service);
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      expect(await controller.deleteCurrentAccount(), isFalse);
+      expect(service.deleteCalls, 0);
+      expect(controller.errorMessage, contains('Verify your account again'));
+
+      expect(
+        await controller.reauthenticateWithPassword('SecurePass1'),
+        isTrue,
+      );
+      expect(controller.hasRecentSensitiveAuthentication, isTrue);
+
+      expect(await controller.deleteCurrentAccount(), isTrue);
+      expect(service.deleteCalls, 1);
+      expect(controller.isAuthenticated, isFalse);
+      expect(controller.hasRecentSensitiveAuthentication, isFalse);
+    },
+  );
 }
 
 class _FakeEmailAuthService implements EmailAuthService {
@@ -296,6 +485,51 @@ class _FakeEmailAuthService implements EmailAuthService {
 
   @override
   Future<void> signOut() async => _currentUser = null;
+}
+
+class _FakeSensitiveAuthService extends _FakeEmailAuthService
+    implements SensitiveAuthOperations {
+  _FakeSensitiveAuthService({super.currentUser});
+
+  int deleteCalls = 0;
+  int passwordReauthCalls = 0;
+  int googleReauthCalls = 0;
+  int appleReauthCalls = 0;
+  bool failPasswordReauthentication = false;
+
+  @override
+  Set<String> get currentProviderIds => const {
+    'password',
+    'google.com',
+    'apple.com',
+  };
+
+  @override
+  Future<void> reauthenticateWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    passwordReauthCalls++;
+    if (failPasswordReauthentication) {
+      throw StateError('Invalid password');
+    }
+  }
+
+  @override
+  Future<void> reauthenticateWithGoogle() async {
+    googleReauthCalls++;
+  }
+
+  @override
+  Future<void> reauthenticateWithApple() async {
+    appleReauthCalls++;
+  }
+
+  @override
+  Future<void> deleteCurrentUser() async {
+    deleteCalls++;
+    _currentUser = null;
+  }
 }
 
 class _FakeSessionValidationAuthService extends _FakeEmailAuthService

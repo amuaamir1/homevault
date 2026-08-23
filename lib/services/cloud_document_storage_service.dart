@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/stored_document.dart';
+import '../security/homevault_file_security.dart';
 import 'document_storage_service.dart';
 
 abstract class CloudDocumentStorage {
@@ -106,18 +107,24 @@ class FirebaseCloudDocumentStorage implements CloudDocumentStorage {
       );
     }
 
-    final size = await source.length();
-    if (size > DocumentStorageService.maximumFileSizeBytes) {
-      throw const CloudDocumentStorageException(
-        'The document is larger than the 15 MB cloud upload limit.',
-      );
-    }
+    final maximumBytes = document.type == DocumentType.appliancePhoto
+        ? DocumentStorageService.maximumPhotoSizeBytes
+        : DocumentStorageService.maximumFileSizeBytes;
 
-    final contentType = _contentTypeFor(document);
-    if (contentType == null) {
-      throw const CloudDocumentStorageException(
-        'Only PDF, JPG, JPEG, and PNG documents can be uploaded.',
+    late final int size;
+    late final String contentType;
+    try {
+      size = await source.length();
+      contentType = await HomeVaultFileSecurity.validateFile(
+        source,
+        fileName: document.fileName,
+        maximumBytes: maximumBytes,
+        allowedExtensions: document.type == DocumentType.appliancePhoto
+            ? DocumentStorageService.allowedPhotoExtensions.toSet()
+            : DocumentStorageService.allowedExtensions.toSet(),
       );
+    } on HomeVaultFileSecurityException catch (error) {
+      throw CloudDocumentStorageException(error.message, error);
     }
 
     try {
@@ -173,8 +180,31 @@ class FirebaseCloudDocumentStorage implements CloudDocumentStorage {
       }
 
       await _storage.ref().child(cloudPath).writeToFile(destination);
-      final downloadedSize = await destination.length();
 
+      final maximumBytes = document.type == DocumentType.appliancePhoto
+          ? DocumentStorageService.maximumPhotoSizeBytes
+          : DocumentStorageService.maximumFileSizeBytes;
+      try {
+        await HomeVaultFileSecurity.validateFile(
+          destination,
+          fileName: document.fileName,
+          maximumBytes: maximumBytes,
+          allowedExtensions: document.type == DocumentType.appliancePhoto
+              ? DocumentStorageService.allowedPhotoExtensions.toSet()
+              : DocumentStorageService.allowedExtensions.toSet(),
+        );
+      } on HomeVaultFileSecurityException catch (error) {
+        try {
+          if (await destination.exists()) {
+            await destination.delete();
+          }
+        } catch (_) {
+          // Best-effort cleanup of a rejected cloud file.
+        }
+        throw CloudDocumentStorageException(error.message, error);
+      }
+
+      final downloadedSize = await destination.length();
       return document.copyWith(
         localPath: destination.path,
         sizeBytes: downloadedSize,
@@ -210,20 +240,6 @@ class FirebaseCloudDocumentStorage implements CloudDocumentStorage {
         return;
       }
       throw CloudDocumentStorageException(_friendlyMessage(error), error);
-    }
-  }
-
-  static String? _contentTypeFor(StoredDocument document) {
-    switch (document.extension) {
-      case 'pdf':
-        return 'application/pdf';
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      default:
-        return null;
     }
   }
 

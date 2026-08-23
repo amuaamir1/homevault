@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/app_build_info.dart';
+import '../security/homevault_file_security.dart';
 import '../models/beta_feedback.dart';
 import 'firebase_error_message.dart';
 
@@ -38,7 +39,8 @@ class BetaFeedbackService {
   Future<SelectedFeedbackScreenshot?> pickScreenshot() async {
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: 'Choose an optional screenshot',
-      type: FileType.image,
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png'],
       allowMultiple: false,
       withData: true,
     );
@@ -61,7 +63,23 @@ class BetaFeedbackService {
       );
     }
 
-    return SelectedFeedbackScreenshot(fileName: selected.name, bytes: bytes);
+    try {
+      HomeVaultFileSecurity.validateBytes(
+        bytes,
+        fileName: selected.name,
+        maximumBytes: maximumScreenshotBytes,
+        allowedExtensions: const {'jpg', 'jpeg', 'png'},
+      );
+    } on HomeVaultFileSecurityException catch (error) {
+      throw FeedbackSubmissionException(error.message, error);
+    }
+
+    final extension = HomeVaultFileSecurity.normalizedExtension(selected.name);
+    final safeExtension = extension == 'jpeg' ? 'jpg' : extension;
+    return SelectedFeedbackScreenshot(
+      fileName: 'feedback-screenshot.$safeExtension',
+      bytes: bytes,
+    );
   }
 
   Future<void> submit({

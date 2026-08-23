@@ -94,11 +94,36 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
 
     try {
       await deletionService.deleteRemoteAccountData(user.uid);
-      await deletionService.deleteLocalAccountData(user.uid);
+
+      // Large accounts can take long enough to exhaust HomeVault's short
+      // recent-authentication window. Re-verify before the irreversible
+      // Firebase Authentication deletion rather than trusting stale proof.
+      if (!auth.hasRecentSensitiveAuthentication) {
+        final reverified = await verifyAccount();
+        if (!mounted || !reverified) {
+          if (mounted) {
+            setState(() {
+              _isDeleting = false;
+              _errorMessage =
+                  auth.errorMessage ??
+                  'Verify your account again to finish deleting it.';
+            });
+          }
+          return;
+        }
+      }
 
       final authDeleted = await auth.deleteCurrentAccount();
       if (authDeleted) {
-        await lockController.clearSecurityForDeletedAccount();
+        // Local cleanup does not need Firebase authorization, so keep local
+        // data available until the sign-in account deletion has succeeded.
+        // Always clear local security state even if filesystem cleanup hits
+        // an unexpected error after Firebase Authentication is already gone.
+        try {
+          await deletionService.deleteLocalAccountData(user.uid);
+        } finally {
+          await lockController.clearSecurityForDeletedAccount();
+        }
         return;
       }
       if (!mounted) return;
@@ -107,8 +132,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
         _isDeleting = false;
         _errorMessage =
             auth.errorMessage ??
-            'The HomeVault data was removed, but the sign-in account could '
-                'not be deleted. Verify your account again and retry.';
+            'The HomeVault cloud data was removed, but the sign-in account '
+                'could not be deleted. Verify your account again and retry.';
       });
     } catch (error) {
       if (!mounted) return;

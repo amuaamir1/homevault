@@ -12,9 +12,15 @@ class CrashReportingService {
   static bool _isReady = false;
 
   static Future<void> initialize() async {
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-      kReleaseMode,
-    );
+    final crashlytics = FirebaseCrashlytics.instance;
+    await crashlytics.setCrashlyticsCollectionEnabled(kReleaseMode);
+
+    if (!kReleaseMode) {
+      await crashlytics.deleteUnsentReports();
+      _isReady = false;
+      return;
+    }
+
     _isReady = true;
   }
 
@@ -23,19 +29,39 @@ class CrashReportingService {
 
     FlutterError.onError = (details) {
       if (_isReady) {
+        final telemetry = HomeVaultErrorTelemetry.fromError(
+          details.exception,
+          operation: 'uncaught flutter error',
+        );
         unawaited(
-          FirebaseCrashlytics.instance.recordFlutterFatalError(details),
+          FirebaseCrashlytics.instance.recordError(
+            _SanitizedCrashException(telemetry.crashReason),
+            details.stack ?? StackTrace.current,
+            fatal: true,
+            reason: telemetry.crashReason,
+          ),
         );
       }
       previousFlutterHandler?.call(details);
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
-      if (_isReady) {
-        unawaited(
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
-        );
+      if (!_isReady) {
+        return false;
       }
+
+      final telemetry = HomeVaultErrorTelemetry.fromError(
+        error,
+        operation: 'uncaught platform error',
+      );
+      unawaited(
+        FirebaseCrashlytics.instance.recordError(
+          _SanitizedCrashException(telemetry.crashReason),
+          stack,
+          fatal: true,
+          reason: telemetry.crashReason,
+        ),
+      );
       return true;
     };
   }
@@ -72,15 +98,19 @@ class CrashReportingService {
 
     await FirebaseCrashlytics.instance.log(telemetry.logLine);
     await FirebaseCrashlytics.instance.recordError(
-      error,
+      _SanitizedCrashException(telemetry.crashReason),
       stack,
       fatal: false,
       reason: telemetry.crashReason,
     );
   }
+}
 
-  static Future<void> log(String message) async {
-    if (!_isReady) return;
-    await FirebaseCrashlytics.instance.log(message);
-  }
+class _SanitizedCrashException implements Exception {
+  const _SanitizedCrashException(this.code);
+
+  final String code;
+
+  @override
+  String toString() => 'HomeVaultError($code)';
 }

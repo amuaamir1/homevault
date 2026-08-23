@@ -10,6 +10,7 @@ import '../../services/homevault_backup_service.dart';
 import '../../services/homevault_error_message.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
+import '../auth/sensitive_action_verification_dialog.dart';
 import 'cloud_backup_screen.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
@@ -67,6 +68,15 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     if (mode == RestoreMode.replace) {
       final confirmed = await _confirmReplacement();
       if (!mounted || !confirmed) return;
+
+      final verified = await verifySensitiveAction(
+        context,
+        title: 'Verify before replacing data',
+        message:
+            'Replacing current HomeVault data can remove records that are not '
+            'present in the selected backup.',
+      );
+      if (!mounted || !verified) return;
     }
 
     await _runBusy('Restoring HomeVault data...', () async {

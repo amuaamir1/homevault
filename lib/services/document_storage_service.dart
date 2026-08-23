@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/stored_document.dart';
+import '../security/homevault_file_security.dart';
 import '../security/security_scope_key.dart';
 
 class DocumentStorageService {
@@ -80,6 +81,18 @@ class DocumentStorageService {
       );
     }
 
+    final sourceFile = File(sourcePath);
+    try {
+      await HomeVaultFileSecurity.validateFile(
+        sourceFile,
+        fileName: selectedFile.name,
+        maximumBytes: maximumBytes,
+        allowedExtensions: extensions.toSet(),
+      );
+    } on HomeVaultFileSecurityException catch (error) {
+      throw DocumentStorageException(error.message);
+    }
+
     final rootDirectory = await getApplicationDocumentsDirectory();
     await _ensureLegacyOwnership(rootDirectory);
     final destinationDirectory = Directory(
@@ -97,8 +110,24 @@ class DocumentStorageService {
       '${DateTime.now().microsecondsSinceEpoch}_$safeFileName',
     );
 
-    final copiedFile = await File(sourcePath).copy(destinationPath);
+    final copiedFile = await sourceFile.copy(destinationPath);
     final copiedFileSize = await copiedFile.length();
+
+    try {
+      await HomeVaultFileSecurity.validateFile(
+        copiedFile,
+        fileName: selectedFile.name,
+        maximumBytes: maximumBytes,
+        allowedExtensions: extensions.toSet(),
+      );
+    } on HomeVaultFileSecurityException catch (error) {
+      try {
+        await copiedFile.delete();
+      } catch (_) {
+        // Best-effort cleanup if validation fails after the copy.
+      }
+      throw DocumentStorageException(error.message);
+    }
 
     return StoredDocument(
       type: type,

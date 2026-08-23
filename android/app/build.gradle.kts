@@ -19,11 +19,14 @@ if (keystorePropertiesFile.exists()) {
 }
 
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
 
-if (!hasReleaseKeystore) {
-    logger.warn(
-        "WARNING: android/key.properties not found. Release builds will use " +
-        "the DEBUG signing config and cannot be uploaded to Google Play."
+if (releaseBuildRequested && !hasReleaseKeystore) {
+    throw GradleException(
+        "Release signing is not configured. Create android/key.properties " +
+        "with the release keystore credentials before building a release."
     )
 }
 
@@ -61,10 +64,8 @@ android {
 
     buildTypes {
         getByName("release") {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

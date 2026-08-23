@@ -2,36 +2,267 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function signedInAs(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return signedIn() && request.auth.uid == userId;
     }
 
     function isAdmin() {
-      return request.auth != null
+      return signedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
     }
 
-    function validFeedbackPayload(userId) {
-      return request.resource.data.uid == userId
-        && request.resource.data.category in [
-          'bug',
-          'featureRequest',
-          'performance',
-          'authentication',
-          'documents',
-          'other'
-        ]
+    function validFeedbackCategory(category) {
+      return category in [
+        'bug',
+        'featureRequest',
+        'performance',
+        'authentication',
+        'documents',
+        'other'
+      ];
+    }
+
+    function validFeedbackStatus(status) {
+      return status in [
+        'newFeedback',
+        'inReview',
+        'planned',
+        'resolved',
+        'dismissed'
+      ];
+    }
+
+    function validFeedbackPriority(priority) {
+      return priority in ['low', 'normal', 'high', 'urgent'];
+    }
+
+    function validCentralFeedbackCreate(userId) {
+      return request.resource.data.keys().hasOnly([
+          'uid',
+          'userEmail',
+          'category',
+          'message',
+          'appVersion',
+          'buildNumber',
+          'releaseNumber',
+          'platform',
+          'deviceManufacturer',
+          'deviceModel',
+          'androidVersion',
+          'androidSdk',
+          'screenshotFileName',
+          'screenshotBase64',
+          'status',
+          'priority',
+          'adminNote',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.uid == userId
+        && request.resource.data.userEmail is string
+        && request.resource.data.userEmail.size() <= 320
+        && validFeedbackCategory(request.resource.data.category)
         && request.resource.data.message is string
         && request.resource.data.message.size() >= 10
         && request.resource.data.message.size() <= 5000
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 64
+        && request.resource.data.buildNumber is string
+        && request.resource.data.buildNumber.size() <= 64
+        && request.resource.data.releaseNumber is string
+        && request.resource.data.releaseNumber.size() <= 64
+        && request.resource.data.platform == 'android'
+        && request.resource.data.deviceManufacturer is string
+        && request.resource.data.deviceManufacturer.size() <= 160
+        && request.resource.data.deviceModel is string
+        && request.resource.data.deviceModel.size() <= 160
+        && request.resource.data.androidVersion is string
+        && request.resource.data.androidVersion.size() <= 64
+        && request.resource.data.androidSdk is int
+        && request.resource.data.androidSdk >= 1
+        && (
+          request.resource.data.screenshotFileName == null
+          || (
+            request.resource.data.screenshotFileName is string
+            && request.resource.data.screenshotFileName.size() <= 255
+          )
+        )
         && (
           request.resource.data.screenshotBase64 == null
           || (
             request.resource.data.screenshotBase64 is string
             && request.resource.data.screenshotBase64.size() <= 700000
           )
+        )
+        && request.resource.data.status == 'newFeedback'
+        && request.resource.data.priority == 'normal'
+        && request.resource.data.adminNote == ''
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validLegacyFeedbackCreate(userId) {
+      return request.resource.data.uid == userId
+        && validFeedbackCategory(request.resource.data.category)
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 5000
+        && (
+          !('screenshotBase64' in request.resource.data)
+          || request.resource.data.screenshotBase64 == null
+          || (
+            request.resource.data.screenshotBase64 is string
+            && request.resource.data.screenshotBase64.size() <= 700000
+          )
+        )
+        && (
+          !('status' in request.resource.data)
+          || request.resource.data.status == 'newFeedback'
+        )
+        && (
+          !('priority' in request.resource.data)
+          || request.resource.data.priority == 'normal'
+        )
+        && (
+          !('adminNote' in request.resource.data)
+          || request.resource.data.adminNote == ''
+        )
+        && (
+          !('updatedBy' in request.resource.data)
+          || request.resource.data.updatedBy == ''
+        )
+        && (
+          !('createdAt' in request.resource.data)
+          || request.resource.data.createdAt == request.time
+        )
+        && (
+          !('updatedAt' in request.resource.data)
+          || request.resource.data.updatedAt == request.time
         );
+    }
+
+    function validCentralFeedbackAdminUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'priority',
+          'adminNote',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && validFeedbackStatus(request.resource.data.status)
+        && validFeedbackPriority(request.resource.data.priority)
+        && request.resource.data.adminNote is string
+        && request.resource.data.adminNote.size() <= 5000
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validLegacyFeedbackAdminUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'priority',
+          'adminNote',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && (
+          !('status' in request.resource.data)
+          || validFeedbackStatus(request.resource.data.status)
+        )
+        && (
+          !('priority' in request.resource.data)
+          || validFeedbackPriority(request.resource.data.priority)
+        )
+        && (
+          !('adminNote' in request.resource.data)
+          || (
+            request.resource.data.adminNote is string
+            && request.resource.data.adminNote.size() <= 5000
+          )
+        )
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validUserProfile(userId) {
+      return request.resource.data.uid == userId
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() <= 160
+        && request.resource.data.phoneNumber is string
+        && request.resource.data.phoneNumber.size() <= 32
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.addressLine1 is string
+        && request.resource.data.addressLine1.size() <= 300
+        && request.resource.data.addressLine2 is string
+        && request.resource.data.addressLine2.size() <= 300
+        && request.resource.data.landmark is string
+        && request.resource.data.landmark.size() <= 200
+        && request.resource.data.state is string
+        && request.resource.data.state.size() <= 100
+        && request.resource.data.city is string
+        && request.resource.data.city.size() <= 100
+        && request.resource.data.pinCode is string
+        && (
+          request.resource.data.pinCode == ''
+          || request.resource.data.pinCode.matches('^[1-9][0-9]{5}$')
+        );
+    }
+
+    function validAppliance(applianceId) {
+      return request.resource.data.id == applianceId
+        && request.resource.data.cloudSchemaVersion is int
+        && request.resource.data.cloudSchemaVersion >= 1
+        && request.resource.data.cloudRevision is int
+        && request.resource.data.cloudRevision >= 1
+        && request.resource.data.cloudUpdatedAt == request.time
+        && request.resource.data.cloudUpdatedByDevice is string
+        && request.resource.data.cloudUpdatedByDevice.size() > 0
+        && request.resource.data.cloudUpdatedByDevice.size() <= 256;
+    }
+
+    function validApplianceSyncMeta(documentId) {
+      return documentId == 'appliancesV1'
+        && request.resource.data.completed == true
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.schemaVersion >= 1
+        && request.resource.data.lastConfirmedAt == request.time
+        && request.resource.data.lastConfirmedByDevice is string
+        && request.resource.data.lastConfirmedByDevice.size() > 0
+        && request.resource.data.lastConfirmedByDevice.size() <= 256
+        && (
+          !('completedAt' in request.resource.data)
+          || request.resource.data.completedAt is timestamp
+        );
+    }
+
+    function validBackupMetadata(userId, backupId) {
+      return request.resource.data.createdAt is timestamp
+        && request.resource.data.source in [
+          'automatic',
+          'manual',
+          'preRestoreSafety'
+        ]
+        && request.resource.data.applianceCount is int
+        && request.resource.data.applianceCount >= 0
+        && request.resource.data.documentCount is int
+        && request.resource.data.documentCount >= 0
+        && request.resource.data.missingDocuments is int
+        && request.resource.data.missingDocuments >= 0
+        && request.resource.data.sizeBytes is int
+        && request.resource.data.sizeBytes >= 0
+        && request.resource.data.sizeBytes <= 250 * 1024 * 1024
+        && request.resource.data.storagePath
+          == 'users/' + userId + '/backups/' + backupId + '/homevault-backup.zip'
+        && request.resource.data.appVersion is string
+        && request.resource.data.appVersion.size() <= 64
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.schemaVersion >= 1;
     }
 
     match /admins/{adminId} {
@@ -44,33 +275,46 @@ service cloud.firestore {
 
     // Central feedback collection used by current HomeVault versions.
     match /feedback/{feedbackId} {
-      allow create: if request.auth != null
-        && validFeedbackPayload(request.auth.uid)
-        && request.resource.data.status == 'newFeedback'
-        && request.resource.data.priority == 'normal'
-        && request.resource.data.adminNote == '';
+      allow create: if signedIn()
+        && validCentralFeedbackCreate(request.auth.uid);
 
       allow read, delete: if isAdmin()
-        || (request.auth != null && resource.data.uid == request.auth.uid);
-      allow update: if isAdmin();
+        || (signedIn() && resource.data.uid == request.auth.uid);
+
+      allow update: if isAdmin() && validCentralFeedbackAdminUpdate();
     }
 
     match /users/{userId} {
-      allow read, create, update, delete: if signedInAs(userId);
+      allow read: if signedInAs(userId);
+
+      allow create: if signedInAs(userId)
+        && validUserProfile(userId);
+
+      // Permit one-time migration of older profile documents that did not
+      // contain uid, but never allow ownership to be changed.
+      allow update: if signedInAs(userId)
+        && (!('uid' in resource.data) || resource.data.uid == userId)
+        && validUserProfile(userId);
+
+      allow delete: if signedInAs(userId);
 
       match /appliances/{applianceId} {
         allow read, delete: if signedInAs(userId);
 
         allow create, update: if signedInAs(userId)
-          && request.resource.data.id == applianceId;
+          && validAppliance(applianceId);
       }
 
       match /syncMeta/{documentId} {
-        allow read, create, update, delete: if signedInAs(userId);
+        allow read, delete: if signedInAs(userId);
+        allow create, update: if signedInAs(userId)
+          && validApplianceSyncMeta(documentId);
       }
 
       match /backups/{backupId} {
-        allow read, create, update, delete: if signedInAs(userId);
+        allow read, delete: if signedInAs(userId);
+        allow create, update: if signedInAs(userId)
+          && validBackupMetadata(userId, backupId);
       }
 
       // Backward compatibility for older app builds that submitted feedback
@@ -78,11 +322,16 @@ service cloud.firestore {
       // with a collection-group query so existing feedback is not lost.
       match /feedback/{feedbackId} {
         allow create: if signedInAs(userId)
-          && validFeedbackPayload(userId);
+          && validLegacyFeedbackCreate(userId);
 
         allow read, delete: if signedInAs(userId) || isAdmin();
-        allow update: if isAdmin();
+        allow update: if isAdmin() && validLegacyFeedbackAdminUpdate();
       }
+    }
+
+    // Explicit deny-by-default guard for every path not listed above.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

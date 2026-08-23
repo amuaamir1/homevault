@@ -6,6 +6,7 @@ import '../../security/auto_lock_preference_service.dart';
 import '../../security/pin_security_service.dart';
 import '../../services/homevault_error_presenter.dart';
 import '../auth/reset_pin_with_password_screen.dart';
+import '../auth/sensitive_action_verification_dialog.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -24,6 +25,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   }
 
   Future<void> _showCreatePin(BuildContext context) async {
+    final verified = await verifySensitiveAction(
+      context,
+      title: 'Verify before creating a PIN',
+      message:
+          'Creating a HomeVault PIN changes how this account is protected on '
+          'this device.',
+    );
+    if (!context.mounted || !verified) return;
+
     final created = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -37,6 +47,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   }
 
   Future<void> _showChangePin(BuildContext context) async {
+    final verified = await verifySensitiveAction(
+      context,
+      title: 'Verify before changing your PIN',
+      message:
+          'Changing your HomeVault PIN changes the credential used to unlock '
+          'this account on this device.',
+    );
+    if (!context.mounted || !verified) return;
+
     final changed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -49,7 +68,37 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     }
   }
 
+  Future<void> _changeAutoLockOption(
+    BuildContext context,
+    AutoLockOption option,
+  ) async {
+    final controller = AppLockScope.read(context);
+    if (option.duration > controller.autoLockOption.duration) {
+      final verified = await verifySensitiveAction(
+        context,
+        title: 'Verify before extending auto-lock',
+        message:
+            'A longer automatic-lock delay keeps HomeVault unlocked for more '
+            'time after you leave the app.',
+      );
+      if (!context.mounted || !verified) return;
+    }
+
+    await controller.setAutoLockOption(option);
+  }
+
   Future<void> _toggleBiometrics(BuildContext context, bool enabled) async {
+    if (enabled) {
+      final verified = await verifySensitiveAction(
+        context,
+        title: 'Verify before enabling biometrics',
+        message:
+            'Biometric unlock adds another way to open HomeVault on this '
+            'device.',
+      );
+      if (!context.mounted || !verified) return;
+    }
+
     final controller = AppLockScope.read(context);
     final changed = await controller.setBiometricEnabled(enabled);
     if (!context.mounted) return;
@@ -170,7 +219,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     .toList(),
                 onChanged: (option) {
                   if (option != null) {
-                    AppLockScope.read(context).setAutoLockOption(option);
+                    _changeAutoLockOption(context, option);
                   }
                 },
               ),

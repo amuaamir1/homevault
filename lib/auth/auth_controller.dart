@@ -8,15 +8,23 @@ import '../services/firebase_error_message.dart';
 import 'email_auth_service.dart';
 
 class AuthController extends ChangeNotifier {
-  AuthController({EmailAuthService? service})
-    : _service = service ?? FirebaseEmailAuthService();
+  AuthController({
+    EmailAuthService? service,
+    DateTime Function()? now,
+    this.sensitiveAuthenticationWindow = const Duration(minutes: 5),
+  }) : _service = service ?? FirebaseEmailAuthService(),
+       _now = now ?? DateTime.now;
 
   AuthController.authenticatedForTesting({
     String uid = 'test-user',
     String email = 'test@example.com',
     bool isEmailVerified = true,
     String phoneNumber = '+919876543210',
+    DateTime Function()? now,
+    this.sensitiveAuthenticationWindow = const Duration(minutes: 5),
+    bool recentlyAuthenticated = false,
   }) : _service = null,
+       _now = now ?? DateTime.now,
        _isInitializing = false,
        _user = AuthenticatedUser(
          uid: uid,
@@ -24,9 +32,15 @@ class AuthController extends ChangeNotifier {
          isEmailVerified: isEmailVerified,
          phoneNumber: phoneNumber,
        ),
+       _lastSensitiveAuthenticationAt = recentlyAuthenticated
+           ? (now ?? DateTime.now)()
+           : null,
+       _lastSensitiveAuthenticationUid = recentlyAuthenticated ? uid : null,
        _isTestController = true;
 
   final EmailAuthService? _service;
+  final DateTime Function() _now;
+  final Duration sensitiveAuthenticationWindow;
   StreamSubscription<AuthenticatedUser?>? _authSubscription;
   Future<bool>? _sessionValidationFuture;
 
@@ -36,6 +50,8 @@ class AuthController extends ChangeNotifier {
   bool _unlockAfterAccountSignIn = false;
   bool _isTestController = false;
   AuthenticatedUser? _user;
+  DateTime? _lastSensitiveAuthenticationAt;
+  String? _lastSensitiveAuthenticationUid;
   String? _errorMessage;
   String? _statusMessage;
 
@@ -64,14 +80,33 @@ class AuthController extends ChangeNotifier {
   bool get hasGoogleProvider => providerIds.contains('google.com');
   bool get hasAppleProvider => providerIds.contains('apple.com');
 
+  bool get hasRecentSensitiveAuthentication {
+    final user = _user;
+    final authenticatedAt = _lastSensitiveAuthenticationAt;
+    if (user == null ||
+        authenticatedAt == null ||
+        _lastSensitiveAuthenticationUid != user.uid) {
+      return false;
+    }
+
+    final age = _now().difference(authenticatedAt);
+    return !age.isNegative && age <= sensitiveAuthenticationWindow;
+  }
+
   Future<void> initialize() async {
     if (_isTestController) return;
 
     final service = _service!;
     _user = service.currentUser;
     _authSubscription = service.authStateChanges().listen((user) {
+      final previousUid = _user?.uid;
       _user = user;
-      if (user == null) _unlockAfterAccountSignIn = false;
+      if (user == null) {
+        _unlockAfterAccountSignIn = false;
+        _clearSensitiveAuthentication();
+      } else if (previousUid != null && previousUid != user.uid) {
+        _clearSensitiveAuthentication();
+      }
       notifyListeners();
     });
 
@@ -130,6 +165,7 @@ class AuthController extends ChangeNotifier {
         }
 
         _user = null;
+        _clearSensitiveAuthentication();
         notifyListeners();
         return false;
       }
@@ -175,6 +211,7 @@ class AuthController extends ChangeNotifier {
           email: normalizedEmail,
           password: password,
         );
+        _markSensitiveAuthentication();
 
         try {
           await _service.resendVerificationEmail();
@@ -218,6 +255,7 @@ class AuthController extends ChangeNotifier {
           password: password,
         );
         _unlockAfterAccountSignIn = true;
+        _markSensitiveAuthentication();
       },
     );
   }
@@ -229,6 +267,7 @@ class AuthController extends ChangeNotifier {
       operation: () async {
         _user = await _service!.signInWithGoogle();
         _unlockAfterAccountSignIn = true;
+        _markSensitiveAuthentication();
       },
     );
   }
@@ -240,6 +279,7 @@ class AuthController extends ChangeNotifier {
       operation: () async {
         _user = await _service!.signInWithApple();
         _unlockAfterAccountSignIn = true;
+        _markSensitiveAuthentication();
       },
     );
   }
@@ -302,14 +342,18 @@ class AuthController extends ChangeNotifier {
       return false;
     }
 
+    _clearSensitiveAuthentication();
     return _run(
-      reason: 'Reauthenticating for PIN recovery',
+      reason: 'Reauthenticating for a sensitive action',
       fallback:
           'The password is incorrect or the session could not be verified.',
-      operation: () => _service!.reauthenticateWithEmailAndPassword(
-        email: email,
-        password: password,
-      ),
+      operation: () async {
+        await _service!.reauthenticateWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        _markSensitiveAuthentication();
+      },
     );
   }
 
@@ -321,10 +365,14 @@ class AuthController extends ChangeNotifier {
     }
 
     final sensitiveService = service as SensitiveAuthOperations;
+    _clearSensitiveAuthentication();
     return _run(
       reason: 'Reauthenticating with Google for a sensitive action',
       fallback: 'Google verification failed. Please try again.',
-      operation: sensitiveService.reauthenticateWithGoogle,
+      operation: () async {
+        await sensitiveService.reauthenticateWithGoogle();
+        _markSensitiveAuthentication();
+      },
     );
   }
 
@@ -336,10 +384,14 @@ class AuthController extends ChangeNotifier {
     }
 
     final sensitiveService = service as SensitiveAuthOperations;
+    _clearSensitiveAuthentication();
     return _run(
       reason: 'Reauthenticating with Apple for a sensitive action',
       fallback: 'Apple verification failed. Please try again.',
-      operation: sensitiveService.reauthenticateWithApple,
+      operation: () async {
+        await sensitiveService.reauthenticateWithApple();
+        _markSensitiveAuthentication();
+      },
     );
   }
 
@@ -349,9 +401,13 @@ class AuthController extends ChangeNotifier {
       _setError('Account deletion is not available in this build.');
       return false;
     }
+    if (!hasRecentSensitiveAuthentication) {
+      _setError('Verify your account again before deleting it.');
+      return false;
+    }
 
     final sensitiveService = service as SensitiveAuthOperations;
-    return _run(
+    final deleted = await _run(
       reason: 'Deleting the Firebase Authentication account',
       fallback:
           'Your sign-in account could not be deleted. Please verify your account again and retry.',
@@ -359,8 +415,17 @@ class AuthController extends ChangeNotifier {
         await sensitiveService.deleteCurrentUser();
         _user = null;
         _unlockAfterAccountSignIn = false;
+        _clearSensitiveAuthentication();
       },
     );
+
+    if (!deleted) {
+      // Firebase can reject a deletion with requires-recent-login even when
+      // HomeVault's short local window has not yet elapsed. Never retain a
+      // local proof after a failed account-deletion attempt.
+      _clearSensitiveAuthentication();
+    }
+    return deleted;
   }
 
   Future<bool> upgradeLegacyPhoneAccount({
@@ -398,6 +463,7 @@ class AuthController extends ChangeNotifier {
     await _service?.signOut();
     _user = null;
     _unlockAfterAccountSignIn = false;
+    _clearSensitiveAuthentication();
     notifyListeners();
   }
 
@@ -412,6 +478,21 @@ class AuthController extends ChangeNotifier {
     _errorMessage = null;
     _statusMessage = null;
     notifyListeners();
+  }
+
+  void _markSensitiveAuthentication() {
+    final user = _user;
+    if (user == null) {
+      _clearSensitiveAuthentication();
+      return;
+    }
+    _lastSensitiveAuthenticationAt = _now();
+    _lastSensitiveAuthenticationUid = user.uid;
+  }
+
+  void _clearSensitiveAuthentication() {
+    _lastSensitiveAuthenticationAt = null;
+    _lastSensitiveAuthenticationUid = null;
   }
 
   Future<bool> _run({

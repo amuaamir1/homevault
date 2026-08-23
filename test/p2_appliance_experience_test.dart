@@ -212,17 +212,20 @@ void main() {
         final photo = await fileDocument(
           'photo.jpg',
           DocumentType.appliancePhoto,
-          [1, 2, 3],
+          [0xff, 0xd8, 0xff, 0xe0],
         );
         final extended = await fileDocument(
           'extended.pdf',
           DocumentType.extendedWarranty,
-          [4, 5, 6],
+          [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31],
         );
         final amc = await fileDocument('amc.pdf', DocumentType.amcContract, [
-          7,
-          8,
-          9,
+          0x25,
+          0x50,
+          0x44,
+          0x46,
+          0x2d,
+          0x31,
         ]);
 
         final appliance = Appliance(
