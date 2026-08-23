@@ -3,49 +3,16 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_scope.dart';
 import '../../core/app_build_info.dart';
 import '../../profile/profile_scope.dart';
-import '../../security/app_lock_scope.dart';
-import '../backup/backup_restore_screen.dart';
+import '../../services/feedback_admin_service.dart';
 import '../feedback/beta_feedback_screen.dart';
 import '../feedback/feedback_dashboard_screen.dart';
-import '../../services/feedback_admin_service.dart';
 import '../profile/profile_screen.dart';
 import '../reminders/reminder_center_screen.dart';
 import '../service/service_center_screen.dart';
-import 'security_settings_screen.dart';
-import 'account_deletion_screen.dart';
+import 'account_data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
-
-  Future<void> _signOut(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out of HomeVault?'),
-        content: const Text(
-          'HomeVault will require your email and password again. Your existing '
-          'HomeVault PIN and biometric preference will remain saved for this account.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final lockController = AppLockScope.read(context);
-    final authController = AuthScope.read(context);
-
-    lockController.prepareForSignOut();
-    await authController.signOut();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,32 +126,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.backup_outlined),
-                  title: const Text('Backup, restore & export'),
+                  key: const ValueKey('settingsAccountDataTile'),
+                  leading: const Icon(Icons.manage_accounts_outlined),
+                  title: const Text('Account & data'),
                   subtitle: const Text(
-                    'Cloud and ZIP backups, recovery, plus CSV and PDF exports.',
+                    'Manage your data, backups, security, and account access.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (context) => const BackupRestoreScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.security_outlined),
-                  title: const Text('Security'),
-                  subtitle: const Text(
-                    'PIN, biometrics, and automatic locking.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) => const SecuritySettingsScreen(),
+                        builder: (context) => const AccountDataScreen(),
                       ),
                     );
                   },
@@ -237,40 +189,6 @@ class SettingsScreen extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (context) => const ServiceCenterScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sign out'),
-                  subtitle: const Text(
-                    'Sign in again using your HomeVault account.',
-                  ),
-                  onTap: () => _signOut(context),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_forever_outlined,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  title: Text(
-                    'Delete account',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Permanently remove your HomeVault account and stored data.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AccountDeletionScreen(),
                       ),
                     );
                   },
