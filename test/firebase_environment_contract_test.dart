@@ -11,9 +11,25 @@ void main() {
       expect(firebaseJson, contains('"firestore"'));
       expect(firebaseJson, contains('"storage"'));
       expect(firebaseJson, isNot(contains('"projectId"')));
-      expect(firebaserc, contains('"development"'));
-      expect(firebaserc, contains('homevault-aamir-india-1701'));
-      expect(firebaserc, isNot(contains('"production"')));
+
+      expect(
+        RegExp(
+          r'"default"\s*:\s*"homevault-aamir-india-1701"',
+        ).hasMatch(firebaserc),
+        isTrue,
+      );
+      expect(
+        RegExp(
+          r'"development"\s*:\s*"homevault-aamir-india-1701"',
+        ).hasMatch(firebaserc),
+        isTrue,
+      );
+      expect(
+        RegExp(
+          r'"production"\s*:\s*"homevault-aamir-india-1701"',
+        ).hasMatch(firebaserc),
+        isFalse,
+      );
     });
 
     test('release build has a Firebase project mismatch guard', () {

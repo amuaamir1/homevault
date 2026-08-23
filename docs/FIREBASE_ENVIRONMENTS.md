@@ -14,7 +14,7 @@ HomeVault uses separate Firebase projects for development and production.
 
 ### Production
 
-Production must use a different Firebase project. Its project ID is deliberately not stored in the repository until the project exists, and Firebase client configuration files remain outside source control.
+Production must use a different Firebase project. During P16 Phase 2 the verified project may be added as a `production` alias in `.firebaserc`; `default` and `development` must always remain mapped to `homevault-aamir-india-1701`. Firebase client configuration files remain outside source control.
 
 Recommended local configuration location:
 
@@ -78,3 +78,30 @@ Next:
 7. store production client config outside the repository;
 8. configure production GitHub secrets;
 9. run production smoke verification before allowing stable releases.
+
+
+## P16 Phase 2 onboarding
+
+Use `scripts/firebase/Provision-HomeVault-ProductionFirebase.ps1` to create or
+connect the dedicated Production Firebase project, register
+`com.amuaamir.homevault`, register the release SHA-1 when available, create the
+default Firestore database with deletion protection, and write client config to
+`C:\Projects\HomeVault-Firebase-Config\production`.
+
+Cloud Storage provisioning remains an explicit Firebase Console step because a
+new default Cloud Storage for Firebase bucket requires a Blaze billing plan.
+For HomeVault's India-focused deployment, the default recommendation is
+`asia-south1` (Mumbai) for Firestore and, unless there is a documented reason
+otherwise, the Storage bucket as well.
+
+Production Authentication currently needs Email/Password and Google. The app
+contains Apple provider support in its service layer, but the Android sign-in
+screen does not expose Apple sign-in, so Apple credentials are not a Phase 2
+launch dependency.
+
+After Storage and Authentication are configured in the Firebase Console, run
+`scripts/firebase/Finalize-HomeVault-ProductionFirebase.ps1`. It refreshes the
+Android config, verifies the Storage bucket, Google OAuth client, release SHA-1,
+Firestore, regenerates the external `firebase_options.dart`, deploys the exact
+P13 Phase 2 security rules to the explicit Production project, and can run a
+temporary Auth/Firestore security smoke test plus a real Production APK build.

@@ -70,11 +70,27 @@ try {
     if ($BuildName) { $arguments += "--build-name=$BuildName" }
     if ($BuildNumber) { $arguments += "--build-number=$BuildNumber" }
 
+    $flutterCommand = Get-Command flutter.bat -ErrorAction SilentlyContinue
+    if ($null -eq $flutterCommand) {
+        $flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $flutterCommand) {
+        throw 'Flutter is not installed or not available in PATH.'
+    }
+
     Push-Location $ProjectRoot
     try {
-        & flutter @arguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "Flutter production build failed with exit code $LASTEXITCODE."
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $flutterCommand.Source @arguments
+            $flutterExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousPreference
+        }
+
+        if ($flutterExitCode -ne 0) {
+            throw "Flutter production build failed with exit code $flutterExitCode."
         }
     } finally {
         Pop-Location
