@@ -358,8 +358,8 @@ if ($CheckDevice) {
             & $adb -s $DeviceId shell svc power stayon true | Out-Null
             & $adb -s $DeviceId shell am start -W -n "$ExpectedPackageName/.MainActivity" | Out-Host
             Start-Sleep -Seconds 8
-            $pid = (& $adb -s $DeviceId shell pidof $ExpectedPackageName 2>$null | Out-String).Trim()
-            if ($pid) { Pass "HomeVault process running (PID $pid)" } else { Fail "HomeVault process is not running after launch" }
+            $appPid = (& $adb -s $DeviceId shell pidof $ExpectedPackageName 2>$null | Out-String).Trim()
+            if ($appPid) { Pass "HomeVault process running (PID $appPid)" } else { Fail "HomeVault process is not running after launch" }
             $focus = (& $adb -s $DeviceId shell dumpsys window 2>$null | Select-String 'mCurrentFocus|mFocusedApp' | Out-String)
             if ($focus -match [regex]::Escape($ExpectedPackageName)) { Pass "HomeVault owns/resolves focused app window" } else { Fail "HomeVault does not own the focused app window" }
             if ($focus -match 'Application Not Responding') { Fail "Android ANR window is active" } else { Pass "No Android ANR focus window" }

@@ -88,6 +88,12 @@ void main() {
       expect(readiness, isNot(contains('projects:create')));
     });
 
+    test('does not overwrite PowerShell automatic PID variable', () {
+      expect(readiness, isNot(contains(r'$pid =')));
+      expect(readiness, contains(r'$appPid ='));
+      expect(readiness, contains(r'PID $appPid'));
+    });
+
     test('tracks every Production device acceptance area', () {
       for (final marker in <String>[
         'EmailPasswordPinFlow',
