@@ -9,9 +9,11 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/app_build_info.dart';
 import '../models/appliance.dart';
+import '../security/homevault_file_security.dart';
 import '../security/security_scope_key.dart';
 import '../models/backup_models.dart';
 import '../models/stored_document.dart';
+import 'document_storage_service.dart';
 
 class HomeVaultBackupService {
   HomeVaultBackupService({
@@ -24,6 +26,10 @@ class HomeVaultBackupService {
   static const String appVersion = AppBuildInfo.version;
   static const String _manifestName = 'manifest.json';
   static const String _legacyOwnerMarkerName = '.homevault_owner';
+  static const int maximumBackupBytes = 250 * 1024 * 1024;
+  static const int maximumExpandedBackupBytes = 512 * 1024 * 1024;
+  static const int maximumArchiveEntries = 2000;
+  static const int maximumManifestBytes = 2 * 1024 * 1024;
 
   final Future<Directory> Function() _documentsDirectoryProvider;
 
@@ -111,11 +117,24 @@ class HomeVaultBackupService {
     }
 
     final picked = result.files.single;
+    if (picked.size > maximumBackupBytes) {
+      throw const BackupFormatException(
+        'The selected backup is larger than the 250 MB restore limit.',
+      );
+    }
+
     Uint8List? bytes = picked.bytes;
     final pickedPath = picked.path;
 
     if (bytes == null && pickedPath != null && pickedPath.trim().isNotEmpty) {
-      bytes = await File(pickedPath).readAsBytes();
+      final file = File(pickedPath);
+      final size = await file.length();
+      if (size > maximumBackupBytes) {
+        throw const BackupFormatException(
+          'The selected backup is larger than the 250 MB restore limit.',
+        );
+      }
+      bytes = await file.readAsBytes();
     }
 
     if (bytes == null || bytes.isEmpty) {
@@ -170,6 +189,7 @@ class HomeVaultBackupService {
     Uint8List bytes, {
     required String fileName,
   }) {
+    _validateBackupFileName(fileName);
     final decoded = _decodeArchive(bytes);
     final manifest = decoded.manifest;
     final applianceData = _requiredApplianceData(manifest);
@@ -184,6 +204,8 @@ class HomeVaultBackupService {
         );
       }
     }
+
+    _validateArchivedDocumentContent(applianceData, decoded.files);
 
     final createdAt = DateTime.tryParse('${manifest['createdAt']}');
     if (createdAt == null) {
@@ -227,6 +249,7 @@ class HomeVaultBackupService {
     final decoded = _decodeArchive(selection.bytes);
     final manifest = decoded.manifest;
     final applianceData = _requiredApplianceData(manifest);
+    _validateArchivedDocumentContent(applianceData, decoded.files);
     final backupOwner = '${manifest['ownerFingerprint'] ?? ''}'.trim();
     if (backupOwner.isNotEmpty &&
         currentOwnerUid?.trim().isNotEmpty == true &&
@@ -607,6 +630,27 @@ class HomeVaultBackupService {
       return null;
     }
 
+    try {
+      await HomeVaultFileSecurity.validateFile(
+        source,
+        fileName: document.fileName,
+        maximumBytes: document.type == DocumentType.appliancePhoto
+            ? DocumentStorageService.maximumPhotoSizeBytes
+            : DocumentStorageService.maximumFileSizeBytes,
+        allowedExtensions: document.type == DocumentType.appliancePhoto
+            ? DocumentStorageService.allowedPhotoExtensions.toSet()
+            : DocumentStorageService.allowedExtensions.toSet(),
+      );
+    } on HomeVaultFileSecurityException {
+      state.missingDocuments.add({
+        'applianceId': appliance.id,
+        'applianceName': appliance.name,
+        'documentId': document.id,
+        'documentTitle': document.displayTitle,
+      });
+      return null;
+    }
+
     final data = await source.readAsBytes();
     final archivePath = state.uniqueArchivePath(
       applianceId: appliance.id,
@@ -625,8 +669,16 @@ class HomeVaultBackupService {
 
   _DecodedBackup _decodeArchive(Uint8List bytes) {
     try {
+      _validateZipContainer(bytes);
       final archive = ZipDecoder().decodeBytes(bytes, verify: true);
+      if (archive.length > maximumArchiveEntries) {
+        throw const BackupFormatException(
+          'The backup contains too many archive entries.',
+        );
+      }
+
       final files = <String, ArchiveFile>{};
+      var expandedBytes = 0;
 
       for (final entry in archive) {
         final name = entry.name.replaceAll('\\', '/');
@@ -635,9 +687,45 @@ class HomeVaultBackupService {
             'The backup contains an unsafe file path.',
           );
         }
-        if (entry.isFile) {
-          files[name] = entry;
+
+        final entrySize = entry.size;
+        if (entrySize < 0) {
+          throw const BackupFormatException(
+            'The backup contains an invalid archive entry.',
+          );
         }
+        expandedBytes += entrySize;
+        if (expandedBytes > maximumExpandedBackupBytes) {
+          throw const BackupFormatException(
+            'The backup expands beyond the 512 MB safety limit.',
+          );
+        }
+
+        if (!entry.isFile) continue;
+
+        if (name != _manifestName && !name.startsWith('documents/')) {
+          throw const BackupFormatException(
+            'The backup contains an unexpected file.',
+          );
+        }
+        if (files.containsKey(name)) {
+          throw const BackupFormatException(
+            'The backup contains duplicate archive paths.',
+          );
+        }
+        if (name == _manifestName && entrySize > maximumManifestBytes) {
+          throw const BackupFormatException(
+            'The backup manifest is larger than the allowed safety limit.',
+          );
+        }
+        if (name.startsWith('documents/') &&
+            entrySize > DocumentStorageService.maximumFileSizeBytes) {
+          throw const BackupFormatException(
+            'The backup contains an attachment larger than 15 MB.',
+          );
+        }
+
+        files[name] = entry;
       }
 
       final manifestEntry = files[_manifestName];
@@ -665,6 +753,82 @@ class HomeVaultBackupService {
         'The selected file is damaged or is not a valid HomeVault backup.',
         error,
       );
+    }
+  }
+
+  void _validateZipContainer(Uint8List bytes) {
+    if (bytes.isEmpty || bytes.length > maximumBackupBytes) {
+      throw const BackupFormatException(
+        'The selected backup is empty or larger than the 250 MB restore limit.',
+      );
+    }
+    if (bytes.length < 4 ||
+        bytes[0] != 0x50 ||
+        bytes[1] != 0x4b ||
+        !((bytes[2] == 0x03 && bytes[3] == 0x04) ||
+            (bytes[2] == 0x05 && bytes[3] == 0x06) ||
+            (bytes[2] == 0x07 && bytes[3] == 0x08))) {
+      throw const BackupFormatException(
+        'The selected file is not a valid ZIP backup.',
+      );
+    }
+  }
+
+  void _validateBackupFileName(String fileName) {
+    if (path.extension(fileName).toLowerCase() != '.zip') {
+      throw const BackupFormatException(
+        'Select a HomeVault backup with a .zip file extension.',
+      );
+    }
+  }
+
+  void _validateArchivedDocumentContent(
+    List<Map<String, dynamic>> appliances,
+    Map<String, ArchiveFile> files,
+  ) {
+    for (final appliance in appliances) {
+      for (final document in _documentMaps(appliance)) {
+        final archivePath = '${document['localPath'] ?? ''}'.replaceAll(
+          '\\',
+          '/',
+        );
+        if (archivePath.isEmpty) continue;
+        if (!_isSafeArchivePath(archivePath)) {
+          throw const BackupFormatException(
+            'The backup contains an unsafe attachment path.',
+          );
+        }
+
+        final archiveFile = files[archivePath];
+        if (archiveFile == null) continue;
+        final bytes = archiveFile.readBytes();
+        if (bytes == null) {
+          throw const BackupFormatException(
+            'The backup contains an unreadable attachment.',
+          );
+        }
+
+        final fileName = '${document['fileName'] ?? ''}';
+        final typeName = '${document['type'] ?? ''}';
+        final isPhoto = typeName == DocumentType.appliancePhoto.name;
+        try {
+          HomeVaultFileSecurity.validateBytes(
+            bytes,
+            fileName: fileName,
+            maximumBytes: isPhoto
+                ? DocumentStorageService.maximumPhotoSizeBytes
+                : DocumentStorageService.maximumFileSizeBytes,
+            allowedExtensions: isPhoto
+                ? DocumentStorageService.allowedPhotoExtensions.toSet()
+                : DocumentStorageService.allowedExtensions.toSet(),
+          );
+        } on HomeVaultFileSecurityException catch (error) {
+          throw BackupFormatException(
+            'The backup contains an attachment whose content does not match its file type.',
+            error,
+          );
+        }
+      }
     }
   }
 

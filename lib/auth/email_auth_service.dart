@@ -183,35 +183,28 @@ class FirebaseEmailAuthService
       throw StateError('The Firebase user could not be refreshed.');
     }
 
-    debugPrint(
-      'HOMEVAULT_AUTH: '
-      'email=${user.email}, '
+    _debugAuthEvent(
+      'Verification state refreshed. '
       'emailVerified=${user.emailVerified}, '
       'providers=${user.providerData.map((provider) => provider.providerId).join(',')}',
     );
 
     if (user.emailVerified) {
-      debugPrint('HOMEVAULT_AUTH: The email address is already verified.');
+      _debugAuthEvent('The email address is already verified.');
       return;
     }
 
     try {
       await user.sendEmailVerification();
 
-      debugPrint(
-        'HOMEVAULT_AUTH: Verification email resend request completed '
-        'for ${user.email}',
-      );
-    } on FirebaseAuthException catch (error, stackTrace) {
-      debugPrint(
-        'HOMEVAULT_AUTH: Verification email resend failed. '
-        'code=${error.code}, message=${error.message}',
-      );
-      debugPrintStack(stackTrace: stackTrace);
+      _debugAuthEvent('Verification email resend request completed.');
+    } on FirebaseAuthException catch (error) {
+      _debugAuthEvent('Verification email resend failed. code=${error.code}');
       rethrow;
-    } catch (error, stackTrace) {
-      debugPrint('HOMEVAULT_AUTH: Unexpected verification email error: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (error) {
+      _debugAuthEvent(
+        'Unexpected verification email error. type=${error.runtimeType}',
+      );
       rethrow;
     }
   }
@@ -310,23 +303,18 @@ class FirebaseEmailAuthService
           code == 'invalid-user-token' ||
           code == 'user-disabled' ||
           code == 'user-not-found') {
-        debugPrint(
-          'HOMEVAULT_AUTH: Firebase session is no longer valid. code=$code',
-        );
+        _debugAuthEvent('Firebase session is no longer valid. code=$code');
         return SessionValidationResult.revoked;
       }
 
       // Do not force-sign-out merely because the device is temporarily
       // offline or Firebase cannot be reached. HomeVault supports local
       // PIN access while offline.
-      debugPrint(
-        'HOMEVAULT_AUTH: Firebase session validation unavailable. '
-        'code=$code, message=${error.message}',
-      );
+      _debugAuthEvent('Firebase session validation unavailable. code=$code');
       return SessionValidationResult.unavailable;
     } catch (error) {
-      debugPrint(
-        'HOMEVAULT_AUTH: Firebase session validation unavailable: $error',
+      _debugAuthEvent(
+        'Firebase session validation unavailable. type=${error.runtimeType}',
       );
       return SessionValidationResult.unavailable;
     }
@@ -343,7 +331,9 @@ class FirebaseEmailAuthService
       await initialization;
       await _googleSignIn.signOut();
     } catch (error) {
-      debugPrint('HOMEVAULT_AUTH: Google sign-out cleanup failed: $error');
+      _debugAuthEvent(
+        'Google sign-out cleanup failed. type=${error.runtimeType}',
+      );
     }
   }
 
@@ -370,5 +360,11 @@ class FirebaseEmailAuthService
       isEmailVerified: user.emailVerified,
       phoneNumber: user.phoneNumber ?? '',
     );
+  }
+}
+
+void _debugAuthEvent(String message) {
+  if (kDebugMode) {
+    debugPrint('HOMEVAULT_AUTH: $message');
   }
 }

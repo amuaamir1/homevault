@@ -20,7 +20,7 @@ void main() {
 
       try {
         final sourceDocument = File('${sourceDirectory.path}/invoice.pdf');
-        await sourceDocument.writeAsBytes([1, 2, 3, 4, 5]);
+        await sourceDocument.writeAsBytes([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
 
         final appliance = Appliance(
           id: 'appliance-1',
@@ -34,7 +34,7 @@ void main() {
             title: 'Purchase invoice',
             fileName: 'invoice.pdf',
             localPath: sourceDocument.path,
-            sizeBytes: 5,
+            sizeBytes: 6,
             attachedAt: DateTime(2026, 8, 2),
           ),
           createdAt: DateTime(2026, 8, 2),
@@ -67,7 +67,14 @@ void main() {
 
         final restoredPath =
             restored.appliances.single.invoiceDocument!.localPath;
-        expect(await File(restoredPath).readAsBytes(), [1, 2, 3, 4, 5]);
+        expect(await File(restoredPath).readAsBytes(), [
+          0x25,
+          0x50,
+          0x44,
+          0x46,
+          0x2d,
+          0x31,
+        ]);
       } finally {
         await sourceDirectory.delete(recursive: true);
         await restoreDirectory.delete(recursive: true);
@@ -215,7 +222,7 @@ void main() {
 
     try {
       final sourceDocument = File('${sourceDirectory.path}/invoice.pdf');
-      await sourceDocument.writeAsBytes([9, 8, 7]);
+      await sourceDocument.writeAsBytes([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
 
       final appliance = Appliance(
         id: 'cloud-pointer-appliance',
@@ -227,7 +234,7 @@ void main() {
           type: DocumentType.invoice,
           fileName: 'invoice.pdf',
           localPath: sourceDocument.path,
-          sizeBytes: 3,
+          sizeBytes: 6,
           attachedAt: DateTime(2026, 8, 11),
           cloudStoragePath: 'users/old/appliances/a/documents/d/invoice.pdf',
           cloudContentType: 'application/pdf',
