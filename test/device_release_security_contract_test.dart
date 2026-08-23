@@ -79,8 +79,8 @@ void main() {
 
       expect(authService, contains('void _debugAuthEvent(String message)'));
       expect(authService, contains('if (kDebugMode)'));
-      expect(authService, isNot(contains('email=${user.email}')));
-      expect(authService, isNot(contains('message=${error.message}')));
+      expect(authService, isNot(contains(r'email=${user.email}')));
+      expect(authService, isNot(contains(r'message=${error.message}')));
       expect(authService, isNot(contains('debugPrintStack(')));
     });
 

@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/models/appliance.dart';
 import 'package:homevault/models/stored_document.dart';
+import 'package:homevault/models/backup_models.dart';
 import 'package:homevault/services/homevault_backup_service.dart';
 
 void main() {
