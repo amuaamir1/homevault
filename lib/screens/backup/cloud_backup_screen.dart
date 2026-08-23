@@ -10,6 +10,7 @@ import '../../services/crash_reporting_service.dart';
 import '../../services/homevault_backup_service.dart';
 import '../../services/homevault_error_message.dart';
 import '../../state/app_scope.dart';
+import '../auth/sensitive_action_verification_dialog.dart';
 
 class CloudBackupScreen extends StatefulWidget {
   const CloudBackupScreen({super.key});
@@ -115,6 +116,15 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
     if (mode == RestoreMode.replace) {
       final confirmed = await _confirmReplacement();
       if (!mounted || !confirmed) return;
+
+      final verified = await verifySensitiveAction(
+        context,
+        title: 'Verify before replacing data',
+        message:
+            'Replacing current HomeVault data from this cloud backup is a '
+            'destructive operation.',
+      );
+      if (!mounted || !verified) return;
     }
 
     await _runBusy('Restoring cloud backup...', () async {
@@ -221,6 +231,14 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
     );
 
     if (!mounted || confirmed != true) return;
+
+    final verified = await verifySensitiveAction(
+      context,
+      title: 'Verify before deleting backup',
+      message:
+          'Deleting this cloud restore point is permanent and cannot be undone.',
+    );
+    if (!mounted || !verified) return;
 
     await _runBusy('Deleting cloud backup...', () async {
       final uid = AuthScope.read(context).user?.uid ?? '';
