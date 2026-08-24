@@ -128,7 +128,7 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   key: const ValueKey('settingsAccountDataTile'),
                   leading: const Icon(Icons.manage_accounts_outlined),
-                  title: const Text('Account & data'),
+                  title: const Text('Account & Data'),
                   subtitle: const Text(
                     'Manage your data, backups, security, and account access.',
                   ),
