@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../security/app_lock_scope.dart';
 import '../../security/pin_security_service.dart';
 import '../../services/homevault_error_presenter.dart';
@@ -20,6 +21,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   final _confirmController = TextEditingController();
   bool _hidePin = true;
   bool _isSaving = false;
+  bool _showValidationSummary = false;
 
   @override
   void dispose() {
@@ -29,9 +31,15 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   }
 
   Future<void> _savePin() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
+      return;
+    }
+    setState(() {
+      _showValidationSummary = false;
+      _isSaving = true;
+    });
     try {
       await AppLockScope.read(context).createPin(_pinController.text);
     } catch (error) {
@@ -73,11 +81,16 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 440),
-                child: Form(
-                  key: _formKey,
+                child: HomeVaultAccessibleForm(
+                  formKey: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      HomeVaultFormValidationSummary(
+                        visible: _showValidationSummary,
+                        message:
+                            'Check both PIN fields. Use 4 to 8 digits and make sure the PINs match.',
+                      ),
                       Icon(
                         Icons.shield_outlined,
                         size: 72,
@@ -100,7 +113,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       _PinField(
                         key: const Key('createPinField'),
                         controller: _pinController,
-                        label: 'Create PIN',
+                        label: 'Create PIN (required)',
                         obscureText: _hidePin,
                         validator: _validatePin,
                         suffixIcon: IconButton(
@@ -117,7 +130,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       _PinField(
                         key: const Key('confirmPinField'),
                         controller: _confirmController,
-                        label: 'Confirm PIN',
+                        label: 'Confirm PIN (required)',
                         obscureText: _hidePin,
                         validator: (value) {
                           final validation = _validatePin(value);

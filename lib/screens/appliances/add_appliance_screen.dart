@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/appliance_form_result.dart';
 import '../../models/stored_document.dart';
@@ -98,6 +99,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   bool _isPickingExtendedWarranty = false;
   bool _isPickingAmc = false;
   bool _submitted = false;
+  bool _showValidationSummary = false;
 
   bool get _isEditing => widget.appliance != null;
 
@@ -629,8 +631,13 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   void _save() {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) {
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
       return;
+    }
+    if (_showValidationSummary) {
+      setState(() => _showValidationSummary = false);
     }
 
     final purchaseDate = _purchaseDate;
@@ -925,12 +932,13 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         title: Text(_isEditing ? 'Edit appliance' : 'Add appliance'),
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
+        child: HomeVaultAccessibleForm(
+          formKey: _formKey,
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
+              HomeVaultFormValidationSummary(visible: _showValidationSummary),
               _SectionTitle(
                 title: 'Appliance details',
                 subtitle: _isEditing
@@ -951,7 +959,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
-                  labelText: 'Appliance name *',
+                  labelText: 'Appliance name (required)',
                   hintText: 'Living room air conditioner',
                   prefixIcon: Icon(Icons.devices_other),
                 ),

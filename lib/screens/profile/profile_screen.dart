@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../auth/auth_controller.dart';
 import '../../auth/auth_scope.dart';
 import '../../models/user_profile.dart';
@@ -28,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _pinCodeController = TextEditingController();
   String? _selectedState;
   bool _didLoadInitialValues = false;
+  bool _showValidationSummary = false;
 
   @override
   void didChangeDependencies() {
@@ -71,7 +73,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _save() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
+      return;
+    }
+    if (_showValidationSummary) {
+      setState(() => _showValidationSummary = false);
+    }
 
     final authUser = AuthScope.read(context).user;
     if (authUser == null) return;
@@ -263,11 +272,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = AuthScope.of(context);
     final title = widget.isInitialSetup ? 'Create your profile' : 'My profile';
 
-    final body = Form(
-      key: _formKey,
+    final body = HomeVaultAccessibleForm(
+      formKey: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          HomeVaultFormValidationSummary(visible: _showValidationSummary),
           if (widget.isInitialSetup) ...[
             Icon(
               Icons.person_pin_circle_outlined,
@@ -295,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             decoration: const InputDecoration(
-              labelText: 'Full name *',
+              labelText: 'Full name (required)',
               prefixIcon: Icon(Icons.person_outline),
             ),
             validator: (value) => _requiredText(value, 'Full name'),
@@ -356,7 +366,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.streetAddressLine1],
             decoration: const InputDecoration(
-              labelText: 'Address line 1 *',
+              labelText: 'Address line 1 (required)',
               hintText: 'House/flat number, building and street',
               prefixIcon: Icon(Icons.home_outlined),
             ),
@@ -390,7 +400,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             initialValue: _selectedState,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'State / Union Territory *',
+              labelText: 'State / Union Territory (required)',
               prefixIcon: Icon(Icons.map_outlined),
             ),
             items: indiaStatesAndUnionTerritories
@@ -416,7 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.addressCity],
             decoration: const InputDecoration(
-              labelText: 'City *',
+              labelText: 'City (required)',
               prefixIcon: Icon(Icons.location_city),
             ),
             validator: (value) => _requiredText(value, 'City'),
@@ -434,7 +444,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             autofillHints: const [AutofillHints.postalCode],
             decoration: const InputDecoration(
-              labelText: 'PIN code *',
+              labelText: 'PIN code (required)',
               prefixIcon: Icon(Icons.markunread_mailbox_outlined),
             ),
             validator: _validatePinCode,
@@ -467,7 +477,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            '* Required fields',
+            'Fields marked required must be completed.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12),
           ),
