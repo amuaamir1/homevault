@@ -48,7 +48,7 @@ class AccountDataScreen extends StatelessWidget {
     final store = AppScope.of(context);
     final summary = AccountDataSummary.fromAppliances(store.appliances);
     return Scaffold(
-      appBar: AppBar(title: const Text('Account & data')),
+      appBar: AppBar(title: const Text('Account & Data')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
