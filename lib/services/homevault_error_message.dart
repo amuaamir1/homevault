@@ -13,6 +13,8 @@ import 'cloud_backup_service.dart';
 import 'cloud_document_storage_service.dart';
 import 'cloud_document_sync_journal.dart';
 import 'document_storage_service.dart';
+import 'homevault_document_export_service.dart';
+import 'homevault_support_pack_service.dart';
 import 'firebase_error_message.dart';
 import 'support_action_service.dart';
 
@@ -32,6 +34,8 @@ String friendlyHomeVaultError(
   if (error is CloudDocumentStorageException) return error.message;
   if (error is CloudDocumentSyncJournalException) return error.message;
   if (error is DocumentStorageException) return error.message;
+  if (error is HomeVaultDocumentExportException) return error.message;
+  if (error is HomeVaultSupportPackException) return error.message;
   if (error is AccountDeletionException) return error.message;
   if (error is FeedbackSubmissionException) return error.message;
   if (error is SupportActionException) return error.message;

@@ -11,6 +11,7 @@ import '../../services/homevault_error_message.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
 import '../auth/sensitive_action_verification_dialog.dart';
+import 'appliance_support_pack_screen.dart';
 import 'cloud_backup_screen.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
@@ -285,14 +286,14 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     );
   }
 
-  Future<void> _exportAppliancePdf() async {
+  Future<Appliance?> _chooseApplianceForPdf() async {
     final appliances = AppScope.read(context).appliances;
     if (appliances.isEmpty) {
       _showMessage('Add an appliance before creating a PDF summary.');
-      return;
+      return null;
     }
 
-    final appliance = await showModalBottomSheet<Appliance>(
+    return showModalBottomSheet<Appliance>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -329,12 +330,27 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         ),
       ),
     );
+  }
 
+  Future<void> _exportAppliancePdf() async {
+    final appliance = await _chooseApplianceForPdf();
     if (!mounted || appliance == null) return;
+
     await _runExport(
       message: 'Creating appliance PDF...',
       successMessage: 'Appliance PDF saved.',
       action: () => _exportService.exportAppliancePdf(appliance),
+    );
+  }
+
+  Future<void> _openSupportPackBuilder() async {
+    final appliance = await _chooseApplianceForPdf();
+    if (!mounted || appliance == null) return;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ApplianceSupportPackScreen(applianceId: appliance.id),
+      ),
     );
   }
 
@@ -502,30 +518,28 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       const ListTile(
                         leading: Icon(Icons.table_view_outlined),
                         title: Text('CSV reports'),
-                        subtitle: Text(
-                          'Save spreadsheet-friendly reports using the Android file picker.',
-                        ),
+                        subtitle: Text('Save CSV reports to Files.'),
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Appliance inventory'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Appliance inventory',
+                        saveKey: 'p17SaveInventoryButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportInventory,
+                        onSave: _exportInventory,
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Warranty report'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Warranty report',
+                        saveKey: 'p17SaveWarrantyButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportWarrantyReport,
+                        onSave: _exportWarrantyReport,
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Service cost report'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Service cost report',
+                        saveKey: 'p17SaveServiceCostButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportServiceReport,
+                        onSave: _exportServiceReport,
                       ),
                     ],
                   ),
@@ -536,20 +550,43 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                     leading: const Icon(Icons.picture_as_pdf_outlined),
                     title: const Text('Appliance summary PDF'),
                     subtitle: const Text(
-                      'Choose one appliance and save a printable summary.',
+                      'Choose one appliance, then save its printable summary.',
+                    ),
+                    trailing: IconButton(
+                      key: const ValueKey('p17SaveAppliancePdfButton'),
+                      tooltip: 'Save PDF',
+                      onPressed: _isBusy || store.appliances.isEmpty
+                          ? null
+                          : _exportAppliancePdf,
+                      icon: const Icon(Icons.download_outlined),
+                    ),
+                    enabled: !_isBusy && store.appliances.isNotEmpty,
+                    onTap: _exportAppliancePdf,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    key: const ValueKey('p17SupportPackTile'),
+                    leading: const Icon(Icons.folder_zip_outlined),
+                    title: const Text('Appliance support pack'),
+                    subtitle: const Text(
+                      'Choose an appliance, then select the documents and optional service history to save in one support ZIP.',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     enabled: !_isBusy && store.appliances.isNotEmpty,
-                    onTap: _exportAppliancePdf,
+                    onTap: _isBusy || store.appliances.isEmpty
+                        ? null
+                        : _openSupportPackBuilder,
                   ),
                 ),
                 const SizedBox(height: 12),
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.lock_open_outlined),
-                    title: Text('Local backup security'),
+                    title: Text('Saved file security'),
                     subtitle: Text(
-                      'Backups are account-tagged but not encrypted. Store them in a private, trusted location.',
+                      'Backups, reports, document copies, and support packs are not encrypted after you save them. Store them in a private, trusted location.',
                     ),
                   ),
                 ),
@@ -591,6 +628,35 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         '${value.hour.toString().padLeft(2, '0')}:'
         '${value.minute.toString().padLeft(2, '0')}';
     return '$date $time';
+  }
+}
+
+class _ExportTile extends StatelessWidget {
+  const _ExportTile({
+    required this.title,
+    required this.saveKey,
+    required this.enabled,
+    required this.onSave,
+  });
+
+  final String title;
+  final String saveKey;
+  final bool enabled;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(title),
+      enabled: enabled,
+      onTap: enabled ? onSave : null,
+      trailing: IconButton(
+        key: ValueKey(saveKey),
+        tooltip: 'Save',
+        onPressed: enabled ? onSave : null,
+        icon: const Icon(Icons.download_outlined),
+      ),
+    );
   }
 }
 

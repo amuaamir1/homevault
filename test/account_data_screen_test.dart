@@ -9,7 +9,7 @@ import 'package:homevault/state/app_scope.dart';
 import 'package:homevault/state/appliance_store.dart';
 
 void main() {
-  testWidgets('Account & Data groups data security and lifecycle actions', (
+  testWidgets('Account & Data keeps deletion but no longer shows sign out', (
     tester,
   ) async {
     final auth = AuthController.authenticatedForTesting(
@@ -38,12 +38,10 @@ void main() {
     expect(find.text('Appliances'), findsOneWidget);
     expect(find.text('Documents & photos'), findsOneWidget);
 
-    // Profile remains only in the parent Settings screen.
     expect(find.text('Profile & service address'), findsNothing);
-
-    // Authentication/security status details remain intentionally omitted.
     expect(find.text('Sign-in methods'), findsNothing);
     expect(find.textContaining('PIN protection'), findsNothing);
+    expect(find.byKey(const ValueKey('accountDataSignOutTile')), findsNothing);
 
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('accountDataBackupTile')),
@@ -67,14 +65,13 @@ void main() {
       find.byKey(const ValueKey('accountDataDeleteAccountTile')),
       250,
     );
-    expect(
-      find.byKey(const ValueKey('accountDataSignOutTile')),
-      findsOneWidget,
-    );
+    expect(find.text('Account access'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('accountDataDeleteAccountTile')),
       findsOneWidget,
     );
+    expect(find.text('Delete account'), findsOneWidget);
+    expect(find.text('Sign out'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     auth.dispose();

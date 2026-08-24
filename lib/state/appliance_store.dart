@@ -683,7 +683,15 @@ class ApplianceStore extends ChangeNotifier {
     }
 
     if (document.isAvailableOnDevice) {
-      return document;
+      final localFile = File(document.localPath);
+      if (await localFile.exists()) {
+        return document;
+      }
+      if (!document.isAvailableInCloud) {
+        throw const CloudDocumentStorageException(
+          'The document file is no longer available on this device.',
+        );
+      }
     }
 
     if (!document.isAvailableInCloud) {

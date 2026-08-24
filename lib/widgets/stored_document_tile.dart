@@ -10,6 +10,7 @@ class StoredDocumentTile extends StatelessWidget {
     required this.subtitle,
     required this.onOpen,
     this.onDetails,
+    this.onSaveCopy,
     this.onEdit,
     this.onDelete,
   });
@@ -19,6 +20,7 @@ class StoredDocumentTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onOpen;
   final VoidCallback? onDetails;
+  final VoidCallback? onSaveCopy;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -57,7 +59,11 @@ class StoredDocumentTile extends StatelessWidget {
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
 
-    final hasActions = onDetails != null || onEdit != null || onDelete != null;
+    final hasActions =
+        onDetails != null ||
+        onSaveCopy != null ||
+        onEdit != null ||
+        onDelete != null;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -82,6 +88,9 @@ class StoredDocumentTile extends StatelessWidget {
                     break;
                   case 'details':
                     onDetails?.call();
+                    break;
+                  case 'saveCopy':
+                    onSaveCopy?.call();
                     break;
                   case 'edit':
                     onEdit?.call();
@@ -114,6 +123,14 @@ class StoredDocumentTile extends StatelessWidget {
                     child: ListTile(
                       leading: Icon(Icons.info_outline),
                       title: Text('View details'),
+                    ),
+                  ),
+                if (onSaveCopy != null && _canOpen)
+                  const PopupMenuItem(
+                    value: 'saveCopy',
+                    child: ListTile(
+                      leading: Icon(Icons.download_outlined),
+                      title: Text('Save a copy'),
                     ),
                   ),
                 if (onEdit != null)
