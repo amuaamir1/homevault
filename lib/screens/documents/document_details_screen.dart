@@ -4,7 +4,7 @@ import '../../models/appliance.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_vault_service.dart';
 
-enum DocumentDetailsAction { open, edit, delete }
+enum DocumentDetailsAction { open, saveCopy, edit, delete }
 
 class DocumentDetailsScreen extends StatelessWidget {
   const DocumentDetailsScreen({
@@ -50,25 +50,45 @@ class DocumentDetailsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Document details')),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    Navigator.of(context).pop(DocumentDetailsAction.edit),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context).pop(DocumentDetailsAction.edit),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: canOpen
+                        ? () => Navigator.of(
+                            context,
+                          ).pop(DocumentDetailsAction.open)
+                        : null,
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton.icon(
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const ValueKey('documentDetailsSaveCopyButton'),
                 onPressed: canOpen
-                    ? () =>
-                          Navigator.of(context).pop(DocumentDetailsAction.open)
+                    ? () => Navigator.of(
+                        context,
+                      ).pop(DocumentDetailsAction.saveCopy)
                     : null,
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('Open'),
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Save a copy'),
               ),
             ),
           ],

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
@@ -6,6 +8,7 @@ import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
 import '../../services/document_storage_service.dart';
 import '../../services/document_vault_service.dart';
+import '../../services/homevault_document_export_service.dart';
 import '../../services/homevault_error_presenter.dart';
 import '../../state/app_scope.dart';
 import '../../widgets/empty_state.dart';
@@ -24,6 +27,7 @@ class DocumentsScreen extends StatefulWidget {
 
 class _DocumentsScreenState extends State<DocumentsScreen> {
   final _vaultService = const DocumentVaultService();
+  final _documentExportService = const HomeVaultDocumentExportService();
   final _searchController = TextEditingController();
 
   String _query = '';
@@ -51,52 +55,67 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     return '$day/$month/${value.year}';
   }
 
+  Future<StoredDocument?> _prepareDocument(
+    BuildContext context,
+    String applianceId,
+    StoredDocument document,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final store = AppScope.read(context);
+
+    if (document.isAvailableOnDevice) {
+      final localFile = File(document.localPath);
+      if (await localFile.exists()) return document;
+      if (!context.mounted) return null;
+    }
+
+    if (!document.isAvailableInCloud) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This document file is unavailable. Edit the document and choose the file again.',
+          ),
+        ),
+      );
+      return null;
+    }
+
+    if (!context.mounted) return null;
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Preparing document...'),
+        duration: Duration(seconds: 30),
+      ),
+    );
+
+    try {
+      final downloaded = await store.downloadDocument(applianceId, document.id);
+      if (!context.mounted) return null;
+      messenger.hideCurrentSnackBar();
+      return downloaded;
+    } catch (error) {
+      if (!context.mounted) return null;
+      messenger.hideCurrentSnackBar();
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document could not be prepared right now.',
+      );
+      return null;
+    }
+  }
+
   Future<void> _openDocument(
     BuildContext context,
     String applianceId,
     StoredDocument document,
   ) async {
-    var availableDocument = document;
-
-    if (!availableDocument.isAvailableOnDevice) {
-      if (!availableDocument.isAvailableInCloud) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'This document file is unavailable. Edit the document and choose the file again.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Preparing document...'),
-          duration: Duration(seconds: 30),
-        ),
-      );
-
-      try {
-        availableDocument = await AppScope.read(
-          context,
-        ).downloadDocument(applianceId, document.id);
-      } catch (error) {
-        messenger.hideCurrentSnackBar();
-        if (!context.mounted) return;
-        showHomeVaultError(
-          context,
-          error,
-          fallback: 'The document could not be prepared right now.',
-          actionLabel: 'Retry',
-          onAction: () => _openDocument(context, applianceId, document),
-        );
-        return;
-      }
-
-      messenger.hideCurrentSnackBar();
-    }
+    final availableDocument = await _prepareDocument(
+      context,
+      applianceId,
+      document,
+    );
+    if (availableDocument == null || !context.mounted) return;
 
     try {
       await OpenFilex.open(availableDocument.localPath);
@@ -106,6 +125,51 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         context,
         error,
         fallback: 'The document could not be opened on this device.',
+      );
+    }
+  }
+
+  Future<void> _saveDocumentCopy(
+    BuildContext context,
+    String applianceId,
+    StoredDocument document,
+  ) async {
+    final availableDocument = await _prepareDocument(
+      context,
+      applianceId,
+      document,
+    );
+    if (availableDocument == null || !context.mounted) return;
+
+    final appliance = AppScope.read(context).applianceById(applianceId);
+    if (appliance == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The linked appliance could not be found.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final result = await _documentExportService.saveDocumentCopy(
+        appliance: appliance,
+        document: availableDocument,
+      );
+      if (!context.mounted || !result.saved) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Document copy saved. You can share it later from Files.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      showHomeVaultError(
+        context,
+        error,
+        fallback: 'The document copy could not be saved. Try again.',
       );
     }
   }
@@ -280,6 +344,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     switch (action) {
       case DocumentDetailsAction.open:
         await _openDocument(context, entry.appliance.id, entry.document);
+        break;
+      case DocumentDetailsAction.saveCopy:
+        await _saveDocumentCopy(context, entry.appliance.id, entry.document);
         break;
       case DocumentDetailsAction.edit:
         await _editDocument(context, entry);
@@ -653,6 +720,11 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                     ),
                                     onDetails: () =>
                                         _showDetails(context, entry),
+                                    onSaveCopy: () => _saveDocumentCopy(
+                                      context,
+                                      entry.appliance.id,
+                                      entry.document,
+                                    ),
                                     onEdit: () => _editDocument(context, entry),
                                     onDelete: () =>
                                         _deleteDocument(context, entry),

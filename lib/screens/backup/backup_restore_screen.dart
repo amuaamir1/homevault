@@ -11,6 +11,7 @@ import '../../services/homevault_error_message.dart';
 import '../../services/homevault_export_service.dart';
 import '../../state/app_scope.dart';
 import '../auth/sensitive_action_verification_dialog.dart';
+import 'appliance_support_pack_screen.dart';
 import 'cloud_backup_screen.dart';
 
 class BackupRestoreScreen extends StatefulWidget {
@@ -342,6 +343,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     );
   }
 
+  Future<void> _openSupportPackBuilder() async {
+    final appliance = await _chooseApplianceForPdf();
+    if (!mounted || appliance == null) return;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ApplianceSupportPackScreen(applianceId: appliance.id),
+      ),
+    );
+  }
+
   Future<void> _runExport({
     required String message,
     required String successMessage,
@@ -553,12 +565,28 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    key: const ValueKey('p17SupportPackTile'),
+                    leading: const Icon(Icons.folder_zip_outlined),
+                    title: const Text('Appliance support pack'),
+                    subtitle: const Text(
+                      'Choose an appliance, then select the documents and optional service history to save in one support ZIP.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    enabled: !_isBusy && store.appliances.isNotEmpty,
+                    onTap: _isBusy || store.appliances.isEmpty
+                        ? null
+                        : _openSupportPackBuilder,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.lock_open_outlined),
-                    title: Text('Local backup security'),
+                    title: Text('Saved file security'),
                     subtitle: Text(
-                      'Backups are account-tagged but not encrypted. Store them in a private, trusted location.',
+                      'Backups, reports, document copies, and support packs are not encrypted after you save them. Store them in a private, trusted location.',
                     ),
                   ),
                 ),

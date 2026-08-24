@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/appliance.dart';
 import '../models/service_record.dart';
+import '../models/stored_document.dart';
+import 'homevault_file_save_service.dart';
 
 class HomeVaultExportArtifact {
   HomeVaultExportArtifact({
@@ -29,7 +30,11 @@ class HomeVaultExportArtifact {
 }
 
 class HomeVaultExportService {
-  const HomeVaultExportService();
+  const HomeVaultExportService({
+    this.saveAdapter = const FilePickerHomeVaultFileSaveAdapter(),
+  });
+
+  final HomeVaultFileSaveAdapter saveAdapter;
 
   Future<bool> exportApplianceInventory(Iterable<Appliance> appliances) async {
     return _saveArtifact(
@@ -240,8 +245,13 @@ class HomeVaultExportService {
   }
 
   Future<HomeVaultExportArtifact> createAppliancePdfArtifact(
-    Appliance appliance,
-  ) async {
+    Appliance appliance, {
+    Iterable<StoredDocument>? documentsForSummary,
+    bool includeServiceHistory = true,
+    bool supportPackMode = false,
+  }) async {
+    final summaryDocuments = (documentsForSummary ?? appliance.allDocuments)
+        .toList(growable: false);
     final document = pw.Document(
       title: '${_pdfSafe(appliance.name)} - HomeVault',
       author: 'HomeVault',
@@ -356,10 +366,18 @@ class HomeVaultExportService {
             _pdfRow('Notes', appliance.supportNotes),
           ]),
           _pdfSection(
-            'Documents (${appliance.documentCount})',
-            appliance.allDocuments.isEmpty
-                ? [pw.Text('No documents saved.')]
-                : appliance.allDocuments
+            supportPackMode
+                ? 'Included documents (${summaryDocuments.length})'
+                : 'Documents (${summaryDocuments.length})',
+            summaryDocuments.isEmpty
+                ? [
+                    pw.Text(
+                      supportPackMode
+                          ? 'No document files selected for this support pack.'
+                          : 'No documents saved.',
+                    ),
+                  ]
+                : summaryDocuments
                       .map(
                         (document) => pw.Padding(
                           padding: const pw.EdgeInsets.only(bottom: 5),
@@ -371,21 +389,25 @@ class HomeVaultExportService {
                       )
                       .toList(),
           ),
-          _pdfSection(
-            'Service history (${appliance.serviceRecordCount})',
-            appliance.serviceRecords.isEmpty
-                ? [pw.Text('No service records saved.')]
-                : appliance.serviceRecords.map(_serviceRecordBlock).toList(),
-          ),
-          pw.SizedBox(height: 12),
-          pw.Text(
-            'Total recorded service cost: '
-            '${appliance.totalServiceCost.toStringAsFixed(2)}',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-          ),
+          if (includeServiceHistory)
+            _pdfSection(
+              'Service history (${appliance.serviceRecordCount})',
+              appliance.serviceRecords.isEmpty
+                  ? [pw.Text('No service records saved.')]
+                  : appliance.serviceRecords.map(_serviceRecordBlock).toList(),
+            ),
+          if (includeServiceHistory) pw.SizedBox(height: 12),
+          if (includeServiceHistory)
+            pw.Text(
+              'Total recorded service cost: '
+              '${appliance.totalServiceCost.toStringAsFixed(2)}',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
           pw.SizedBox(height: 14),
           pw.Text(
-            'Generated ${_date(DateTime.now())}. This report is based on data stored locally in HomeVault.',
+            supportPackMode
+                ? 'Generated ${_date(DateTime.now())}. This support summary contains only the document list and service-history choice selected for this support pack.'
+                : 'Generated ${_date(DateTime.now())}. This report is based on data stored locally in HomeVault.',
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
@@ -422,16 +444,13 @@ class HomeVaultExportService {
   Future<bool> _saveArtifact(
     HomeVaultExportArtifact artifact, {
     required String dialogTitle,
-  }) async {
-    final extension = artifact.extension;
-    final savedPath = await FilePicker.platform.saveFile(
+  }) {
+    return saveAdapter.save(
       dialogTitle: dialogTitle,
       fileName: artifact.fileName,
-      type: FileType.custom,
-      allowedExtensions: extension.isEmpty ? null : [extension],
       bytes: artifact.bytes,
+      extension: artifact.extension,
     );
-    return savedPath != null;
   }
 
   String _csvRow(List<Object?> values) {
@@ -520,7 +539,13 @@ class HomeVaultExportService {
         '${value.day.toString().padLeft(2, '0')}';
   }
 
-  String _dateStamp() => _date(DateTime.now());
+  String _dateStamp() {
+    final now = DateTime.now();
+    return '${_date(now)}_'
+        '${now.hour.toString().padLeft(2, '0')}'
+        '${now.minute.toString().padLeft(2, '0')}'
+        '${now.second.toString().padLeft(2, '0')}';
+  }
 
   String _safeFilePart(String value) {
     final safe = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
