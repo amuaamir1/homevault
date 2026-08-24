@@ -8,10 +8,39 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/appliance.dart';
 import '../models/service_record.dart';
 
+class HomeVaultExportArtifact {
+  HomeVaultExportArtifact({
+    required this.fileName,
+    required this.displayName,
+    required this.mimeType,
+    required this.bytes,
+  });
+
+  final String fileName;
+  final String displayName;
+  final String mimeType;
+  final Uint8List bytes;
+
+  String get extension {
+    final separator = fileName.lastIndexOf('.');
+    if (separator == -1 || separator == fileName.length - 1) return '';
+    return fileName.substring(separator + 1).toLowerCase();
+  }
+}
+
 class HomeVaultExportService {
   const HomeVaultExportService();
 
   Future<bool> exportApplianceInventory(Iterable<Appliance> appliances) async {
+    return _saveArtifact(
+      createApplianceInventoryArtifact(appliances),
+      dialogTitle: 'Save appliance inventory',
+    );
+  }
+
+  HomeVaultExportArtifact createApplianceInventoryArtifact(
+    Iterable<Appliance> appliances,
+  ) {
     final now = DateTime.now();
     final rows = <List<Object?>>[
       [
@@ -52,13 +81,23 @@ class HomeVaultExportService {
       ),
     ];
 
-    return _saveCsv(
+    return _csvArtifact(
       fileName: 'HomeVault_Appliance_Inventory_${_dateStamp()}.csv',
+      displayName: 'Appliance inventory',
       rows: rows,
     );
   }
 
   Future<bool> exportWarrantyReport(Iterable<Appliance> appliances) async {
+    return _saveArtifact(
+      createWarrantyReportArtifact(appliances),
+      dialogTitle: 'Save warranty report',
+    );
+  }
+
+  HomeVaultExportArtifact createWarrantyReportArtifact(
+    Iterable<Appliance> appliances,
+  ) {
     final now = DateTime.now();
     final rows = <List<Object?>>[
       [
@@ -129,13 +168,23 @@ class HomeVaultExportService {
       ),
     ];
 
-    return _saveCsv(
+    return _csvArtifact(
       fileName: 'HomeVault_Warranty_Report_${_dateStamp()}.csv',
+      displayName: 'Warranty report',
       rows: rows,
     );
   }
 
   Future<bool> exportServiceCostReport(Iterable<Appliance> appliances) async {
+    return _saveArtifact(
+      createServiceCostReportArtifact(appliances),
+      dialogTitle: 'Save service cost report',
+    );
+  }
+
+  HomeVaultExportArtifact createServiceCostReportArtifact(
+    Iterable<Appliance> appliances,
+  ) {
     final rows = <List<Object?>>[
       [
         'Appliance name',
@@ -176,13 +225,23 @@ class HomeVaultExportService {
       }
     }
 
-    return _saveCsv(
+    return _csvArtifact(
       fileName: 'HomeVault_Service_Cost_Report_${_dateStamp()}.csv',
+      displayName: 'Service cost report',
       rows: rows,
     );
   }
 
   Future<bool> exportAppliancePdf(Appliance appliance) async {
+    return _saveArtifact(
+      await createAppliancePdfArtifact(appliance),
+      dialogTitle: 'Save appliance summary',
+    );
+  }
+
+  Future<HomeVaultExportArtifact> createAppliancePdfArtifact(
+    Appliance appliance,
+  ) async {
     final document = pw.Document(
       title: '${_pdfSafe(appliance.name)} - HomeVault',
       author: 'HomeVault',
@@ -334,30 +393,43 @@ class HomeVaultExportService {
     );
 
     final bytes = await document.save();
-    final fileName =
-        'HomeVault_${_safeFilePart(appliance.name)}_${_dateStamp()}.pdf';
-    final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save appliance summary',
-      fileName: fileName,
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
+    final displayName = appliance.name.trim().isEmpty
+        ? 'Appliance summary'
+        : '${appliance.name.trim()} summary';
+    return HomeVaultExportArtifact(
+      fileName:
+          'HomeVault_${_safeFilePart(appliance.name)}_${_dateStamp()}.pdf',
+      displayName: displayName,
+      mimeType: 'application/pdf',
       bytes: bytes,
     );
-    return savedPath != null;
   }
 
-  Future<bool> _saveCsv({
+  HomeVaultExportArtifact _csvArtifact({
     required String fileName,
+    required String displayName,
     required List<List<Object?>> rows,
-  }) async {
+  }) {
     final csv = rows.map(_csvRow).join('\r\n');
-    final bytes = Uint8List.fromList(utf8.encode('\uFEFF$csv'));
-    final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save HomeVault export',
+    return HomeVaultExportArtifact(
       fileName: fileName,
+      displayName: displayName,
+      mimeType: 'text/csv',
+      bytes: Uint8List.fromList(utf8.encode('\uFEFF$csv')),
+    );
+  }
+
+  Future<bool> _saveArtifact(
+    HomeVaultExportArtifact artifact, {
+    required String dialogTitle,
+  }) async {
+    final extension = artifact.extension;
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: dialogTitle,
+      fileName: artifact.fileName,
       type: FileType.custom,
-      allowedExtensions: const ['csv'],
-      bytes: bytes,
+      allowedExtensions: extension.isEmpty ? null : [extension],
+      bytes: artifact.bytes,
     );
     return savedPath != null;
   }

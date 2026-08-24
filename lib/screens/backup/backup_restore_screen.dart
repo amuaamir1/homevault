@@ -285,14 +285,14 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     );
   }
 
-  Future<void> _exportAppliancePdf() async {
+  Future<Appliance?> _chooseApplianceForPdf() async {
     final appliances = AppScope.read(context).appliances;
     if (appliances.isEmpty) {
       _showMessage('Add an appliance before creating a PDF summary.');
-      return;
+      return null;
     }
 
-    final appliance = await showModalBottomSheet<Appliance>(
+    return showModalBottomSheet<Appliance>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
@@ -329,8 +329,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         ),
       ),
     );
+  }
 
+  Future<void> _exportAppliancePdf() async {
+    final appliance = await _chooseApplianceForPdf();
     if (!mounted || appliance == null) return;
+
     await _runExport(
       message: 'Creating appliance PDF...',
       successMessage: 'Appliance PDF saved.',
@@ -502,30 +506,28 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       const ListTile(
                         leading: Icon(Icons.table_view_outlined),
                         title: Text('CSV reports'),
-                        subtitle: Text(
-                          'Save spreadsheet-friendly reports using the Android file picker.',
-                        ),
+                        subtitle: Text('Save CSV reports to Files.'),
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Appliance inventory'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Appliance inventory',
+                        saveKey: 'p17SaveInventoryButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportInventory,
+                        onSave: _exportInventory,
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Warranty report'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Warranty report',
+                        saveKey: 'p17SaveWarrantyButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportWarrantyReport,
+                        onSave: _exportWarrantyReport,
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        title: const Text('Service cost report'),
-                        trailing: const Icon(Icons.download_outlined),
+                      _ExportTile(
+                        title: 'Service cost report',
+                        saveKey: 'p17SaveServiceCostButton',
                         enabled: !_isBusy && store.appliances.isNotEmpty,
-                        onTap: _exportServiceReport,
+                        onSave: _exportServiceReport,
                       ),
                     ],
                   ),
@@ -536,9 +538,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                     leading: const Icon(Icons.picture_as_pdf_outlined),
                     title: const Text('Appliance summary PDF'),
                     subtitle: const Text(
-                      'Choose one appliance and save a printable summary.',
+                      'Choose one appliance, then save its printable summary.',
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: IconButton(
+                      key: const ValueKey('p17SaveAppliancePdfButton'),
+                      tooltip: 'Save PDF',
+                      onPressed: _isBusy || store.appliances.isEmpty
+                          ? null
+                          : _exportAppliancePdf,
+                      icon: const Icon(Icons.download_outlined),
+                    ),
                     enabled: !_isBusy && store.appliances.isNotEmpty,
                     onTap: _exportAppliancePdf,
                   ),
@@ -591,6 +600,35 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         '${value.hour.toString().padLeft(2, '0')}:'
         '${value.minute.toString().padLeft(2, '0')}';
     return '$date $time';
+  }
+}
+
+class _ExportTile extends StatelessWidget {
+  const _ExportTile({
+    required this.title,
+    required this.saveKey,
+    required this.enabled,
+    required this.onSave,
+  });
+
+  final String title;
+  final String saveKey;
+  final bool enabled;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(title),
+      enabled: enabled,
+      onTap: enabled ? onSave : null,
+      trailing: IconButton(
+        key: ValueKey(saveKey),
+        tooltip: 'Save',
+        onPressed: enabled ? onSave : null,
+        icon: const Icon(Icons.download_outlined),
+      ),
+    );
   }
 }
 

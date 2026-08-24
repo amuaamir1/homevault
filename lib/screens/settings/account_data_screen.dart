@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_scope.dart';
 import '../../models/account_data_summary.dart';
 import '../../models/cloud_sync_status.dart';
-import '../../security/app_lock_scope.dart';
 import '../../state/app_scope.dart';
 import '../backup/backup_restore_screen.dart';
 import 'account_deletion_screen.dart';
@@ -12,35 +11,6 @@ import 'security_settings_screen.dart';
 
 class AccountDataScreen extends StatelessWidget {
   const AccountDataScreen({super.key});
-
-  Future<void> _signOut(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out of HomeVault?'),
-        content: const Text(
-          'You will need to sign in again to access HomeVault on this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    final lockController = AppLockScope.read(context);
-    final authController = AuthScope.read(context);
-
-    lockController.prepareForSignOut();
-    await authController.signOut();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,49 +154,34 @@ class AccountDataScreen extends StatelessWidget {
           const SizedBox(height: 20),
           _SectionTitle(
             title: 'Account access',
-            subtitle:
-                'Sign out of HomeVault or permanently delete this account.',
+            subtitle: 'Permanently delete this HomeVault account.',
           ),
           const SizedBox(height: 8),
           Card(
-            child: Column(
-              children: [
-                ListTile(
-                  key: const ValueKey('accountDataSignOutTile'),
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sign out'),
-                  subtitle: const Text(
-                    'Sign in again using your HomeVault account.',
-                  ),
-                  onTap: () => _signOut(context),
+            child: ListTile(
+              key: const ValueKey('accountDataDeleteAccountTile'),
+              leading: Icon(
+                Icons.delete_forever_outlined,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Delete account',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w700,
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  key: const ValueKey('accountDataDeleteAccountTile'),
-                  leading: Icon(
-                    Icons.delete_forever_outlined,
-                    color: Theme.of(context).colorScheme.error,
+              ),
+              subtitle: const Text(
+                'Permanently remove your HomeVault account and stored data.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AccountDeletionScreen(),
                   ),
-                  title: Text(
-                    'Delete account',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    'Permanently remove your HomeVault account and stored data.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AccountDeletionScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 16),

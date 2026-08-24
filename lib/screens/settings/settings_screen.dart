@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_scope.dart';
 import '../../core/app_build_info.dart';
 import '../../profile/profile_scope.dart';
+import '../../security/app_lock_scope.dart';
 import '../../services/feedback_admin_service.dart';
 import '../feedback/beta_feedback_screen.dart';
 import '../feedback/feedback_dashboard_screen.dart';
@@ -13,6 +14,35 @@ import 'account_data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _signOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out of HomeVault?'),
+        content: const Text(
+          'You will need to sign in again to access HomeVault on this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final lockController = AppLockScope.read(context);
+    final authController = AuthScope.read(context);
+
+    lockController.prepareForSignOut();
+    await authController.signOut();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +224,16 @@ class SettingsScreen extends StatelessWidget {
                   },
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              key: const ValueKey('settingsSignOutTile'),
+              leading: const Icon(Icons.logout),
+              title: const Text('Sign out'),
+              subtitle: const Text('Sign out of HomeVault on this device.'),
+              onTap: () => _signOut(context),
             ),
           ),
         ],
