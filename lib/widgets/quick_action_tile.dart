@@ -16,19 +16,33 @@ class QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+    return Semantics(
+      button: true,
+      label: title,
       onTap: onTap,
-      child: Card(
-        child: SizedBox(
-          height: 120,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 34),
-              const SizedBox(height: 12),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            ],
+      child: ExcludeSemantics(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Card(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: color, size: 34),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

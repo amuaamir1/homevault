@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/homevault_report.dart';
 import '../../models/homevault_reminder.dart';
@@ -230,46 +231,59 @@ class _ReminderCenterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final badgeText = attentionCount > 99 ? '99+' : '$attentionCount';
+    final semanticsLabel = attentionCount == 0
+        ? 'Reminder center, no items need attention'
+        : 'Reminder center, $attentionCount ${attentionCount == 1 ? 'item needs' : 'items need'} attention';
 
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: [
-        IconButton(
-          tooltip: 'Reminder center',
-          onPressed: onPressed,
-          icon: const Icon(Icons.notifications_outlined),
-        ),
-        if (attentionCount > 0)
-          Positioned(
-            key: const ValueKey('dashboardReminderBadge'),
-            right: 3,
-            top: 5,
-            child: IgnorePointer(
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.surface,
-                    width: 1.5,
-                  ),
-                ),
-                child: Text(
-                  badgeText,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onError,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 9,
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              tooltip: 'Reminder center',
+              onPressed: onPressed,
+              icon: const Icon(Icons.notifications_outlined),
+            ),
+            if (attentionCount > 0)
+              Positioned(
+                key: const ValueKey('dashboardReminderBadge'),
+                right: 3,
+                top: 5,
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.error,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.surface,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onError,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 9,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -320,11 +334,14 @@ class _DashboardHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            firstName.isEmpty ? 'Welcome home' : 'Welcome $firstName',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+          Semantics(
+            header: true,
+            child: Text(
+              firstName.isEmpty ? 'Welcome home' : 'Welcome $firstName',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -362,11 +379,14 @@ class _SectionTitle extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
@@ -442,27 +462,19 @@ class _DashboardMetrics extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 340) {
-          return SizedBox(
-            height: 94,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var index = 0; index < cards.length; index++) ...[
-                  if (index > 0) const SizedBox(width: 8),
-                  Expanded(child: cards[index]),
-                ],
-              ],
-            ),
-          );
-        }
+        final columns = HomeVaultAccessibility.responsiveColumnCount(
+          availableWidth: constraints.maxWidth,
+          textScale: HomeVaultAccessibility.textScaleOf(context),
+        );
+        const spacing = 8.0;
+        final cardWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
-        final width = (constraints.maxWidth - 8) / 2;
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: spacing,
+          runSpacing: spacing,
           children: cards
-              .map((card) => SizedBox(width: width, height: 90, child: card))
+              .map((card) => SizedBox(width: cardWidth, child: card))
               .toList(growable: false),
         );
       },
@@ -488,54 +500,59 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 27,
-                height: 27,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(height: 2),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 1),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    label,
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.visible,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      height: 1.0,
+    return Semantics(
+      button: true,
+      label: '$label: $value',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 80),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(icon, color: color, size: 20),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            value,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            label,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

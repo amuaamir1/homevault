@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
@@ -40,6 +41,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
   StoredDocument? _replacementDocument;
   bool _isPicking = false;
   bool _submitted = false;
+  bool _showValidationSummary = false;
 
   bool get _isEditing => widget.document != null;
 
@@ -172,13 +174,23 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
   void _save() {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) return;
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
+      return;
+    }
+
     final selectedDocument = _document;
     if (selectedDocument == null) {
+      setState(() => _showValidationSummary = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Choose a document file first.')),
       );
       return;
+    }
+
+    if (_showValidationSummary) {
+      setState(() => _showValidationSummary = false);
     }
 
     _submitted = true;
@@ -203,15 +215,23 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
         title: Text(_isEditing ? 'Edit document' : 'Add document'),
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
+        child: HomeVaultAccessibleForm(
+          formKey: _formKey,
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                'Document details',
-                style: Theme.of(context).textTheme.titleLarge,
+              HomeVaultFormValidationSummary(
+                visible: _showValidationSummary,
+                message:
+                    'Check the highlighted fields and choose a document file before saving.',
+              ),
+              Semantics(
+                header: true,
+                child: Text(
+                  'Document details',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -224,7 +244,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
               DropdownButtonFormField<String>(
                 initialValue: _applianceId,
                 decoration: const InputDecoration(
-                  labelText: 'Appliance *',
+                  labelText: 'Appliance (required)',
                   prefixIcon: Icon(Icons.home_repair_service_outlined),
                 ),
                 items: widget.appliances
@@ -250,7 +270,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
               DropdownButtonFormField<DocumentType>(
                 initialValue: _type,
                 decoration: const InputDecoration(
-                  labelText: 'Document type *',
+                  labelText: 'Document type (required)',
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
                 items: DocumentType.values
@@ -275,7 +295,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(
-                  labelText: 'Document title *',
+                  labelText: 'Document title (required)',
                   hintText: 'Example: Installation manual',
                   prefixIcon: Icon(Icons.title),
                 ),

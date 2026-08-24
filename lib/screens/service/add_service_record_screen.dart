@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
@@ -66,6 +67,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
   bool _isPickingReceipt = false;
   bool _isPickingReport = false;
   bool _submitted = false;
+  bool _showValidationSummary = false;
 
   final Map<String, StoredDocument> _newDocuments = {};
   final Map<String, StoredDocument> _documentsToDelete = {};
@@ -326,7 +328,14 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
 
   void _save() {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
+      return;
+    }
+    if (_showValidationSummary) {
+      setState(() => _showValidationSummary = false);
+    }
 
     final intervalValue = _serviceIntervalValue;
     final nextDate = intervalValue == null
@@ -421,16 +430,17 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit service record' : 'Add service record'),
       ),
-      body: Form(
-        key: _formKey,
+      body: HomeVaultAccessibleForm(
+        formKey: _formKey,
         child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(16),
           children: [
+            HomeVaultFormValidationSummary(visible: _showValidationSummary),
             DropdownButtonFormField<String>(
               initialValue: _applianceId,
               decoration: const InputDecoration(
-                labelText: 'Appliance *',
+                labelText: 'Appliance (required)',
                 prefixIcon: Icon(Icons.devices_other_outlined),
               ),
               items: widget.appliances
@@ -453,8 +463,8 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
               leading: const Icon(Icons.event_outlined),
               title: Text(
                 _status == ServiceStatus.completed
-                    ? 'Last service date *'
-                    : 'Service date *',
+                    ? 'Last service date (required)'
+                    : 'Service date (required)',
               ),
               subtitle: Text(_date(_serviceDate)),
               trailing: const Icon(Icons.edit_calendar_outlined),
@@ -464,7 +474,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
             DropdownButtonFormField<ServiceStatus>(
               initialValue: _status,
               decoration: const InputDecoration(
-                labelText: 'Status *',
+                labelText: 'Status (required)',
                 prefixIcon: Icon(Icons.flag_outlined),
               ),
               items: ServiceStatus.values
@@ -521,7 +531,7 @@ class _AddServiceRecordScreenState extends State<AddServiceRecordScreen> {
             TextFormField(
               controller: _problemController,
               decoration: const InputDecoration(
-                labelText: 'Problem or complaint *',
+                labelText: 'Problem or complaint (required)',
                 hintText: 'Example: Cooling performance reduced',
                 prefixIcon: Icon(Icons.report_problem_outlined),
                 alignLabelWithHint: true,

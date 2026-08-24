@@ -18,7 +18,7 @@ class DashboardCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final content = Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -28,7 +28,7 @@ class DashboardCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, size: 32, color: color),
-              const Spacer(),
+              const SizedBox(height: 16),
               Text(
                 value,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -36,16 +36,25 @@ class DashboardCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              Text(title, style: Theme.of(context).textTheme.bodyMedium),
             ],
           ),
         ),
       ),
+    );
+
+    if (onTap == null) {
+      return Semantics(
+        label: '$title: $value',
+        child: ExcludeSemantics(child: content),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: '$title: $value',
+      onTap: onTap,
+      child: ExcludeSemantics(child: content),
     );
   }
 }

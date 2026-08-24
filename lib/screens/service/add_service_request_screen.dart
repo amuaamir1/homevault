@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../accessibility/homevault_form_accessibility.dart';
 import '../../auth/auth_controller.dart';
 import '../../models/appliance.dart';
 import '../../models/service_request.dart';
@@ -46,6 +47,8 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
   late String _applianceId;
   late DateTime _preferredDate;
   late ServiceVisitWindow _visitWindow;
+
+  bool _showValidationSummary = false;
 
   bool get _isEditing => widget.request != null;
 
@@ -206,7 +209,14 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
 
   void _save() {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) {
+      setState(() => _showValidationSummary = true);
+      return;
+    }
+    if (_showValidationSummary) {
+      setState(() => _showValidationSummary = false);
+    }
 
     final today = DateUtils.dateOnly(DateTime.now());
     if (_preferredDate.isBefore(today) &&
@@ -279,12 +289,13 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit service request' : 'Request service'),
       ),
-      body: Form(
-        key: _formKey,
+      body: HomeVaultAccessibleForm(
+        formKey: _formKey,
         child: ListView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
           children: [
+            HomeVaultFormValidationSummary(visible: _showValidationSummary),
             Card(
               margin: EdgeInsets.zero,
               child: const Padding(
@@ -308,7 +319,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
               key: const Key('serviceRequestApplianceField'),
               initialValue: _applianceId,
               decoration: const InputDecoration(
-                labelText: 'Appliance *',
+                labelText: 'Appliance (required)',
                 prefixIcon: Icon(Icons.devices_other_outlined),
               ),
               items: widget.appliances
@@ -330,7 +341,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
               key: const Key('serviceRequestIssueField'),
               controller: _issueController,
               decoration: const InputDecoration(
-                labelText: 'Problem / service needed *',
+                labelText: 'Problem / service needed (required)',
                 hintText: 'Example: AC is not cooling properly',
                 prefixIcon: Icon(Icons.report_problem_outlined),
                 alignLabelWithHint: true,
@@ -346,7 +357,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
               key: const Key('serviceRequestDateField'),
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.event_outlined),
-              title: const Text('Preferred service date *'),
+              title: const Text('Preferred service date (required)'),
               subtitle: Text(_date(_preferredDate)),
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: _selectDate,
@@ -356,7 +367,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
               key: const Key('serviceRequestWindowField'),
               initialValue: _visitWindow,
               decoration: const InputDecoration(
-                labelText: 'Preferred time *',
+                labelText: 'Preferred time (required)',
                 prefixIcon: Icon(Icons.schedule_outlined),
               ),
               items: ServiceVisitWindow.values
@@ -383,7 +394,7 @@ class _AddServiceRequestScreenState extends State<AddServiceRequestScreen> {
               key: const Key('serviceRequestAddressField'),
               controller: _addressController,
               decoration: const InputDecoration(
-                labelText: 'Service address *',
+                labelText: 'Service address (required)',
                 hintText: 'Enter the address where service is required',
                 prefixIcon: Icon(Icons.location_on_outlined),
                 alignLabelWithHint: true,
