@@ -5,7 +5,8 @@
 - Owner: `app_orchestrator`
 - Branch: `feat/p19-accessibility`
 - Baseline HEAD: `656d2c8` (`feat: p17 developments`)
-- Stage: Baseline captured; specialist discovery pending
+- Current HEAD: `73dafeb2d6f91d91f8a3fa8a2b6d6ddc642f335e`
+- Stage: Phase 2 COMPLETE / QA PASS; Phase 3 active and ready for implementation
 - Started: 2026-08-24
 - Overall status: IN PROGRESS
 
@@ -65,26 +66,26 @@ The requirements and UX reviews must turn these areas into traceable, testable a
 7. **Shared system states and components:** app bars, cards, tiles, chips, buttons, icon-only controls, dialogs, sheets, snackbars, live regions, loaders, empty/error states, date/time inputs, and notifications avoid duplicate/noisy announcements and meet target-size/contrast expectations.
 8. **Adaptive presentation:** essential content and actions remain available at Android large/maximum practical font and display scales, on narrow portrait layouts, and with keyboard obscuration; scrolling is allowed and fixed heights do not cause loss of content.
 
-## Required specialist reviews
+## Completed Phase 3 specialist findings
 
-All three discovery reviews may run in parallel. They are read-only for application source/tests and may write only concise handoffs under `.agent-state` while the current write authorization remains in force.
+The completed requirements, UX, and architecture reviews are preserved as the acceptance areas, bounded Phase 3 scope, non-scope, risks, QA matrix, and implementation constraints in this record. They do not need to be rerun merely because Flutter execution moved to host PowerShell.
 
-1. **`product_requirements`:** define P19 personas, essential journeys, user stories, measurable acceptance criteria, severity/priority rules, supported Android accessibility settings, explicit non-scope, and the boundary between release-blocking P19 work and later backlog. Map every criterion to the eight acceptance areas above and call out ambiguous product choices.
-2. **`ux_workflow`:** audit all routes and shared interaction patterns for TalkBack naming/roles/states, reading and focus order, touch targets, large text/reflow, contrast/non-color cues, forms/errors, dialogs, async announcements, and recovery. Return a route/component matrix with severity and expected behavior, including a concrete TalkBack smoke script.
-3. **`mobile_architect`:** assess the preserved helper/theme/semantics approach, risks of `ExcludeSemantics` and duplicated `onTap`, responsive layout strategy, test seams, cross-screen reuse, navigation/focus announcements, and backward compatibility. Confirm whether any dependency, integration-test harness, platform configuration, storage migration, or ADR is needed; default to none unless justified.
-4. **`app_orchestrator`:** consolidate the three outputs, resolve conflicts, freeze traceable acceptance criteria and slices, and assign non-overlapping implementation ownership before permitting more application writes.
+1. **`product_requirements` - PASS:** personas, essential journeys, measurable acceptance areas, severity boundary, supported behavior, and explicit non-scope are complete with no unresolved material product choice.
+2. **`ux_workflow` - PASS:** route/component expectations cover TalkBack names, roles, states, reading/focus order, form and asynchronous recovery, transient UI, repeated content, and representative smoke behavior.
+3. **`mobile_architect` - PASS:** the shared semantics and focused behavioral-test approach is approved; Phase 2 form behavior remains the regression baseline; no new dependency, integration harness, platform configuration, backend/data change, storage migration, or ADR is required.
+4. **`app_orchestrator` - PASS:** the findings are consolidated into the bounded implementation scope and gate sequence below, with `flutter_developer` as the sole owner of overlapping Phase 3 application/test writes.
 
 ## Delivery plan and gates
 
 1. **Baseline — COMPLETE:** branch/HEAD, working-tree file set, purposes, and hashes captured; application source/tests untouched.
-2. **Requirements gate — PENDING:** product criteria cover all eight areas, distinguish release blockers from later enhancements, and have no unresolved material product choice.
-3. **UX gate — PENDING:** route/component audit and reproducible TalkBack script are complete; critical focus, semantics, scaling, contrast, and recovery expectations are explicit.
-4. **Architecture gate — PENDING:** shared patterns, test strategy, migration/backward-compatibility assessment, dependency impact, and Android/platform impact are approved.
-5. **Scope consolidation — PENDING:** orchestrator publishes the approved criteria-to-change/test matrix and implementation slices. Existing Phase 1 changes are then either adopted, revised, or rejected with rationale.
-6. **Implementation gate — PENDING:** `flutter_developer` completes approved slices serially, preserves unrelated working-tree changes and user data, and adds/updates focused tests. `backend_data` is not planned and is engaged only if the approved architecture identifies real backend work.
-7. **Automated QA gate — PENDING:** `dart format --output=none --set-exit-if-changed lib test`, `flutter analyze`, focused P19 tests, affected regression tests, and full `flutter test` pass. Any repository script used must be inspected first. Integration tests run if an approved harness exists. A failure routes back to `flutter_developer`, then the failed checks are rerun.
-8. **Security/privacy gate — PENDING:** `security_privacy` independently verifies that semantic labels/live regions, notifications, error text, screenshots/recent-app behavior where relevant, export/backup/document flows, and logs do not disclose PINs, credentials, private profile data, document contents/paths, or other sensitive values; auth and destructive confirmation boundaries remain intact. A failure routes back to the responsible implementer and is rerun.
-9. **Android TalkBack/device-smoke gate — PENDING:** after automated fixes stop, `qa_automation` runs the approved script on a supported Android device or emulator with TalkBack enabled and large font/display settings. Record OS/API level, device/emulator, build mode, settings, routes covered, focus/announcement results, layout failures, and evidence. Critical/major failures block completion and return to implementation.
+2. **Requirements gate — PASS:** the completed product findings cover the eight acceptance areas, severity boundary, supported behavior, and explicit Phase 3 non-scope. These findings remain authoritative for implementation.
+3. **UX gate — PASS:** the completed route/component findings define screen-reader names, roles, states, focus/reading order, dynamic announcements, transient UI, repeated-content behavior, recovery, and representative smoke expectations. These findings remain authoritative for implementation.
+4. **Architecture gate — PASS:** the completed findings approve the shared-semantics and focused behavioral-test approach, preserve Phase 2 form behavior, and identify no new dependency, backend/data work, platform change, or migration.
+5. **Scope consolidation — PASS:** the bounded Phase 3 scope, non-scope, owners, gate sequence, acceptance areas, and QA matrix below are implementation-ready.
+6. **Implementation gate — NOT STARTED / READY:** `flutter_developer` completes approved slices serially, preserves unrelated working-tree changes and user data, and adds/updates focused tests. `backend_data` is not planned and is engaged only if a genuine approved dependency emerges.
+7. **Automated QA gate — PENDING FOR PHASE 3:** after implementation, run Dart format validation, `flutter analyze`, focused Phase 2/Phase 3 accessibility tests, affected regressions, applicable guards, and full `flutter test`. A failure routes back to `flutter_developer`, then the failed checks are rerun.
+8. **Security/privacy gate — PENDING FOR PHASE 3:** after implementation writes stop, `security_privacy` independently verifies that semantics/live regions expose no PINs, credentials, private profile data, document contents/paths, raw exceptions, or other protected values and that auth/destructive boundaries remain intact.
+9. **Android TalkBack/device-smoke gate — DEFERRED TO PHASE 4:** physical-device/emulator TalkBack certification, comprehensive contrast, and comprehensive large-text validation are outside the bounded Phase 3 implementation scope.
 10. **Completion/release-readiness gate — PENDING:** orchestrator confirms every approved criterion has evidence, all automated/QA/security/device gates pass, migration/backward compatibility is resolved, durable state is current, and no P19 blocker remains. If P19 is a release candidate, `release_play` then assesses version/build/AAB/store impact; it must not claim or perform publication without human approval.
 
 ## QA minimum matrix
@@ -102,16 +103,85 @@ P19 is DONE only when requirements, UX, and architecture outputs are consolidate
 
 ## Risks and assumptions
 
-- The existing changes predate the required specialist reviews; they may be retained only after review and consolidation.
+- Existing Phase 1/Phase 2 changes predate or sit outside the Phase 3 implementation pass; retain them as regression baselines unless a verified Phase 3 defect requires a bounded change.
 - `ExcludeSemantics` plus explicit semantic actions can create duplicated or misleading activation behavior if not tested with TalkBack.
 - Global 48 dp theme minimums can cause overflow or density regressions in compact forms and dialogs.
 - Source-string contract tests are brittle and cannot substitute for semantics-tree, widget, regression, or device evidence.
-- App-wide scope can expand without severity rules; the requirements review must define release blockers and deferrable findings.
-- The baseline indicates no data/schema migration and no backend work, but architecture and security reviewers must confirm.
+- App-wide scope can expand without discipline; the completed severity boundary and explicit non-scope must govern implementation and deferrals.
+- Architecture confirms no data/schema migration, backend work, new dependency, or platform change is required. Phase 3 security/privacy review remains mandatory after implementation.
 
 ## Exact next specialist actions
 
-1. Run `product_requirements`, `ux_workflow`, and `mobile_architect` in parallel with the read-only briefs under **Required specialist reviews**. Each must inspect the preserved working tree, avoid application/test writes, and save or return a concise PASS/FAIL/BLOCKED handoff with evidence, risks, and exact next action.
-2. Return all three handoffs to `app_orchestrator`; do not start or resume `flutter_developer` writes first.
-3. Have `app_orchestrator` consolidate the reviews into approved acceptance criteria, a route/component coverage matrix, and serialized implementation slices, then update this task and `PROJECT_STATE.md`.
-4. Only after consolidation, assign `flutter_developer` to reconcile the preserved baseline and implement the approved slices. After writes stop, assign `qa_automation` and `security_privacy` in parallel; QA also owns the final Android TalkBack/device smoke.
+1. Assign `flutter_developer` the preserved bounded Phase 3 scope, acceptance areas, UX/architecture constraints, QA matrix, and explicit non-scope in this record.
+2. Implement the smallest coherent screen-reader remediation and focused semantic coverage with serialized writes; preserve unrelated working-tree changes and do not infer implementation completion from the current commit title.
+3. After writes stop, assign `qa_automation` and `security_privacy` independently; any genuine failure returns to `flutter_developer` and the failed gate is rerun.
+4. Only after Phase 3 QA and security/privacy PASS may `release_play` assess release impact. Phase 4 device certification and human-controlled publication remain separate.
+
+## Phase 3 control-plane record - updated 2026-08-25
+
+### Resolved Phase 2 baseline history
+
+- Commit `73dafeb` is titled `feat: P19 phase 3`, but its changed files implement the Phase 2 accessible-form wrapper, six form integrations, and Phase 2 tests. The title is not evidence that the requested Phase 3 audit is complete.
+- The initial 2026-08-24 focused regressions exposed traversal-query scoping, semantics-tree live-region assertion, and stale required-label test-contract issues. APP-04 corrected those issues without changing application source.
+- The managed Windows sandbox could not supply the required Flutter execution evidence. The approved host-validation fallback and subsequent APP-06 independent review cleared that environment block on 2026-08-25.
+- Phase 2 is COMPLETE / QA PASS. The final evidence and verdict are recorded below; no Phase 2 rerun remains queued.
+
+### Bounded Phase 3 scope after Phase 2 PASS
+
+- App-wide semantic names for icon-only/action/navigation/auth/document/appliance/service/backup/settings controls, avoiding duplicate names where visible text already suffices.
+- Correct roles, headings, values, enabled/disabled, checked/selected/expanded, progress/loading, dialog/sheet/menu, list/card, image/icon, navigation, and reading-order semantics across the user-listed routes.
+- Concise live-region behavior for material asynchronous outcomes and validation, with deduplication and no private/internal values, IDs, paths, filenames, raw exceptions, PINs, or credentials.
+- Phase 2 form regression only; no redesign unless a genuine defect is found.
+- Focused behavioral semantic tests covering representative labels/actions/headings/states/live regions/images/navigation/dialogs/repeated content and duplicate-node prevention.
+
+### Explicit Phase 3 non-scope
+
+- Complete color/contrast audit, comprehensive large-text audit, physical-device TalkBack walkthrough, and final Android accessibility certification (Phase 4).
+- Backend/data/schema/Firebase/security-rule changes unless a genuine dependency is demonstrated and separately approved.
+- Unrelated architecture cleanup, visual redesign, product capabilities, production release/build/publication, signing changes, destructive operations, or irreversible migrations.
+
+### Phase 3 sequence and owners
+
+1. `product_requirements`, `ux_workflow`, and `mobile_architect` reviews are COMPLETE / PASS and remain preserved in this record.
+2. `app_orchestrator` consolidation is COMPLETE / PASS; the bounded remediation/test matrix is ready for implementation.
+3. After Phase 2 PASS only, `flutter_developer` owns all overlapping application/test writes. `backend_data` remains unassigned unless needed.
+4. After writes stop, `qa_automation` and `security_privacy` validate independently and may run in parallel. Failures return to `flutter_developer`, then the failed gate is rerun.
+5. Only after QA and security PASS may `release_play` assess release impact. It must not build/publish or claim Google Play publication.
+
+### Required Phase 3 gates
+
+- Acceptance criteria/UX/architecture consolidation PASS.
+- Implementation and focused semantic coverage complete.
+- `git diff --check`, Dart format validation, `flutter analyze`, focused Phase 2 and Phase 3 regressions, relevant accessibility regressions, full `flutter test`, and applicable source/navigation/security guards PASS.
+- Independent QA PASS and security/privacy PASS, including proof that semantics/live regions do not expose protected or internal data.
+- Backward compatibility assessed; no migration expected.
+- Release-impact assessment only after the preceding gates pass.
+
+## Final Phase 2 gate handoff - 2026-08-25
+
+### Corrections completed by APP-04
+
+- Test-only: scope the ordered `FocusTraversalGroup` assertion to the `HomeVaultAccessibleForm` subtree.
+- Test-only: enable the semantics tree and assert the keyed validation summary label plus live-region flag behaviorally.
+- Test-only: replace the stale `Appliance name *` widget expectation with `Appliance name (required)`.
+- Application source, backend/data behavior, Firebase rules, authentication, and storage behavior were not changed.
+
+### Independent APP-06 evidence
+
+- PASS: git diff/check.
+- PASS: Dart format validation, 216 files checked.
+- PASS: applicable source guards, 17/17.
+- PASS: release-security guards, 4/4.
+- PASS via approved Windows host-validation fallback: `C:\Projects\HomeVault-Test-Reports\homevault-validation-20260825-001750.log` (SHA-256 `D1017D749D58A14AA5D3D2355F2DD910B2AF56AC313488AF99A74D5631D664FA`).
+- PASS: `flutter analyze` and Dart format validation.
+- PASS: focused accessibility regressions 14/14 and full Flutter suite 341/341.
+- PASS: APP-06 independently verified that the fresh host evidence applies to branch `feat/p19-accessibility` at HEAD `73dafeb2d6f91d91f8a3fa8a2b6d6ddc642f335e` and returned test-integrity PASS and runtime-integrity PASS.
+- Environment resolution: the earlier managed-sandbox Flutter execution block is cleared. Host-side execution supplied the missing runtime evidence; it did not replace APP-06's independent review.
+
+### Final gate decision
+
+Phase 2 is COMPLETE / QA PASS. No failed or environment-blocked Phase 2 gate remains. Phase 3 requirements, UX, and architecture findings remain complete and preserved; Phase 3 implementation is active and ready but has not started.
+
+The current HEAD title `feat: P19 phase 3` is not implementation evidence and must not be used to mark Phase 3 complete.
+
+Exact next action: assign `flutter_developer` the preserved Phase 3 scope and acceptance matrix to implement the bounded screen-reader remediation plus focused semantic tests; after writes stop, route the result to independent `qa_automation` and `security_privacy` gates.

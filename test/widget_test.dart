@@ -144,7 +144,7 @@ void main() {
 
     expect(find.text('Appliance details'), findsOneWidget);
     expect(
-      find.widgetWithText(TextFormField, 'Appliance name *'),
+      find.widgetWithText(TextFormField, 'Appliance name (required)'),
       findsOneWidget,
     );
 
