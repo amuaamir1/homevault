@@ -11,7 +11,7 @@ void main() {
       ).readAsStringSync();
 
       expect(settings, contains("ValueKey('settingsAccountDataTile')"));
-      expect(settings, contains("title: const Text('Account & data')"));
+      expect(settings, contains("title: const Text('Account & Data')"));
       expect(settings, contains('const AccountDataScreen()'));
       expect(
         settings,
@@ -36,7 +36,7 @@ void main() {
   );
 
   test(
-    'Account & data owns backup device storage security and lifecycle controls',
+    'Account & Data owns backup device storage security and lifecycle controls',
     () {
       final accountData = File(
         'lib/screens/settings/account_data_screen.dart',

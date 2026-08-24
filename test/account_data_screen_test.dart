@@ -9,7 +9,7 @@ import 'package:homevault/state/app_scope.dart';
 import 'package:homevault/state/appliance_store.dart';
 
 void main() {
-  testWidgets('Account & data groups data security and lifecycle actions', (
+  testWidgets('Account & Data groups data security and lifecycle actions', (
     tester,
   ) async {
     final auth = AuthController.authenticatedForTesting(
@@ -32,7 +32,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Account & data'), findsOneWidget);
+    expect(find.text('Account & Data'), findsOneWidget);
     expect(find.text('owner@example.com'), findsOneWidget);
     expect(find.text('Your HomeVault data'), findsOneWidget);
     expect(find.text('Appliances'), findsOneWidget);

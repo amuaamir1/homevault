@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'Account & data is the unique location for device storage backup and security',
+    'Account & Data is the unique location for device storage backup and security',
     () {
       final accountData = File(
         'lib/screens/settings/account_data_screen.dart',
