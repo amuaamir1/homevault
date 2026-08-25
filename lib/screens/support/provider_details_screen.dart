@@ -230,7 +230,8 @@ class ProviderDetailsScreen extends StatelessWidget {
                                   .join(' • '),
                             ),
                             trailing: IconButton(
-                              tooltip: 'Edit appliance support details',
+                              tooltip:
+                                  'Edit support details for ${appliance.name}',
                               onPressed: () => onEditAppliance(appliance),
                               icon: const Icon(Icons.edit_outlined),
                             ),

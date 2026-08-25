@@ -242,6 +242,9 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                   labelText: 'Account password',
                   prefixIcon: const Icon(Icons.password_outlined),
                   suffixIcon: IconButton(
+                    tooltip: _hidePassword
+                        ? 'Show account password'
+                        : 'Hide account password',
                     onPressed: _isDeleting
                         ? null
                         : () => setState(() => _hidePassword = !_hidePassword),
@@ -291,11 +294,22 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               ),
             if (_isDeleting) ...[
               const SizedBox(height: 20),
-              const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 8),
-              const Text(
-                'Deleting HomeVault account data...',
-                textAlign: TextAlign.center,
+              Semantics(
+                container: true,
+                liveRegion: true,
+                label: 'Deleting HomeVault account data',
+                child: const ExcludeSemantics(
+                  child: Column(
+                    children: [
+                      Center(child: CircularProgressIndicator()),
+                      SizedBox(height: 8),
+                      Text(
+                        'Deleting HomeVault account data...',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ],

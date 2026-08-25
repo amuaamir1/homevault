@@ -108,7 +108,12 @@ class _FeedbackDetailScreenState extends State<FeedbackDetailScreen> {
           _InfoCard(
             title: 'Submitted by',
             rows: [
-              ('User', item.submitterLabel),
+              (
+                'User',
+                item.userEmail.trim().isEmpty
+                    ? 'Anonymous user'
+                    : item.userEmail,
+              ),
               ('UID', item.uid),
               ('Submitted', _formatDateTime(item.createdAt)),
             ],
@@ -141,6 +146,7 @@ class _FeedbackDetailScreenState extends State<FeedbackDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                       child: Image.memory(
                         base64Decode(item.screenshotBase64!),
+                        semanticLabel: 'Feedback screenshot',
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) =>
                             const Text(
@@ -269,10 +275,18 @@ class _InfoCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             const SizedBox(height: 10),
-            ...usefulRows.map(
-              (row) => Padding(
+            ...usefulRows.map((row) {
+              final hidesTechnicalValue =
+                  row.$1 == 'UID' || title == 'App & device';
+              final content = Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,8 +301,14 @@ class _InfoCard extends StatelessWidget {
                     Expanded(child: SelectableText(row.$2)),
                   ],
                 ),
-              ),
-            ),
+              );
+              if (!hidesTechnicalValue) return content;
+              return Semantics(
+                label: '${row.$1}: Hidden for privacy',
+                excludeSemantics: true,
+                child: content,
+              );
+            }),
           ],
         ),
       ),

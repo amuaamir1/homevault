@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../models/global_search_result.dart';
 import '../../services/global_search_service.dart';
 import '../../state/app_scope.dart';
@@ -90,6 +91,14 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               },
             ),
           ),
+          if (query.trim().isNotEmpty)
+            HomeVaultStatusAnnouncement(
+              key: const Key('globalSearchResultAnnouncement'),
+              message: results.isEmpty
+                  ? 'No matching search results'
+                  : '${results.length} matching search '
+                        '${results.length == 1 ? 'result' : 'results'}',
+            ),
           Expanded(
             child: query.trim().isEmpty
                 ? const _SearchStartState()

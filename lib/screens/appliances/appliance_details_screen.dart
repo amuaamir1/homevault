@@ -554,22 +554,22 @@ class ApplianceDetailsScreen extends StatelessWidget {
         actions: [
           IconButton(
             key: const Key('requestServiceFromApplianceButton'),
-            tooltip: 'Request service',
+            tooltip: 'Request service for ${appliance.name}',
             onPressed: () => _requestService(context, appliance),
             icon: const Icon(Icons.calendar_month_outlined),
           ),
           IconButton(
-            tooltip: 'Add document',
+            tooltip: 'Add document for ${appliance.name}',
             onPressed: () => _addDocument(context, appliance),
             icon: const Icon(Icons.note_add_outlined),
           ),
           IconButton(
-            tooltip: 'Edit appliance',
+            tooltip: 'Edit ${appliance.name}',
             onPressed: () => _edit(context, appliance),
             icon: const Icon(Icons.edit_outlined),
           ),
           IconButton(
-            tooltip: 'Delete appliance',
+            tooltip: 'Delete ${appliance.name}',
             onPressed: () => _delete(context, appliance),
             icon: const Icon(Icons.delete_outline),
           ),
@@ -584,7 +584,10 @@ class ApplianceDetailsScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AppliancePhoto(document: appliance.appliancePhotoDocument),
+                  _AppliancePhoto(
+                    applianceName: appliance.name,
+                    document: appliance.appliancePhotoDocument,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -1069,8 +1072,9 @@ class ApplianceDetailsScreen extends StatelessWidget {
 }
 
 class _AppliancePhoto extends StatelessWidget {
-  const _AppliancePhoto({required this.document});
+  const _AppliancePhoto({required this.applianceName, required this.document});
 
+  final String applianceName;
   final StoredDocument? document;
 
   @override
@@ -1085,6 +1089,7 @@ class _AppliancePhoto extends StatelessWidget {
             ? const _AppliancePhotoPlaceholder()
             : Image.file(
                 File(path),
+                semanticLabel: 'Photo of $applianceName',
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => const _AppliancePhotoPlaceholder(),
               ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../auth/auth_scope.dart';
 import '../../models/appliance.dart';
 import '../../models/backup_models.dart';
@@ -403,114 +404,132 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
         ),
         body: Stack(
           children: [
-            RefreshIndicator(
-              onRefresh: _loadHistory,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.cloud_done_outlined),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Protected cloud snapshots',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            lastSuccessful == null
-                                ? 'No cloud backup has been created yet.'
-                                : 'Last successful backup: '
-                                      '${_dateTime(lastSuccessful.createdAt.toLocal())}',
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'HomeVault automatically backs up after saved data '
-                            'changes and also checks once per day as a fallback. '
-                            'Only the latest 2 cloud restore points are kept.',
-                          ),
-                          const SizedBox(height: 14),
-                          FilledButton.icon(
-                            onPressed: _isBusy ? null : _backupNow,
-                            icon: const Icon(Icons.cloud_upload_outlined),
-                            label: const Text('Backup now'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_historyError != null)
+            ExcludeSemantics(
+              excluding: _isBusy,
+              child: RefreshIndicator(
+                onRefresh: _loadHistory,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
                     Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_off_outlined),
-                        title: const Text('Backup history unavailable'),
-                        subtitle: Text(_historyError!),
-                        trailing: TextButton(
-                          onPressed: _loadHistory,
-                          child: const Text('Retry'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.cloud_done_outlined),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: HomeVaultSectionHeading(
+                                    child: Text(
+                                      'Protected cloud snapshots',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              lastSuccessful == null
+                                  ? 'No cloud backup has been created yet.'
+                                  : 'Last successful backup: '
+                                        '${_dateTime(lastSuccessful.createdAt.toLocal())}',
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'HomeVault automatically backs up after saved data '
+                              'changes and also checks once per day as a fallback. '
+                              'Only the latest 2 cloud restore points are kept.',
+                            ),
+                            const SizedBox(height: 14),
+                            FilledButton.icon(
+                              onPressed: _isBusy ? null : _backupNow,
+                              icon: const Icon(Icons.cloud_upload_outlined),
+                              label: const Text('Backup now'),
+                            ),
+                          ],
                         ),
                       ),
-                    )
-                  else if (_loadingHistory && _backups.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_backups.isEmpty)
+                    ),
+                    const SizedBox(height: 12),
+                    if (_historyError != null)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.cloud_off_outlined),
+                          title: const Text('Backup history unavailable'),
+                          subtitle: Text(_historyError!),
+                          trailing: TextButton(
+                            onPressed: _loadHistory,
+                            child: const Text('Retry'),
+                          ),
+                        ),
+                      )
+                    else if (_loadingHistory && _backups.isEmpty)
+                      Semantics(
+                        container: true,
+                        liveRegion: true,
+                        label: 'Loading cloud backup history',
+                        child: const ExcludeSemantics(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
+                      )
+                    else if (_backups.isEmpty)
+                      const Card(
+                        child: ListTile(
+                          leading: Icon(Icons.history_outlined),
+                          title: Text('No cloud backup history'),
+                          subtitle: Text(
+                            'Use Backup now to create your first restore point.',
+                          ),
+                        ),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                        child: HomeVaultSectionHeading(
+                          child: Text(
+                            'Backup history',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                      ..._backups.map(
+                        (backup) => _CloudBackupTile(
+                          backup: backup,
+                          dateTimeText: _dateTime(backup.createdAt.toLocal()),
+                          sizeText: _fileSize(backup.sizeBytes),
+                          enabled: !_isBusy,
+                          onRestore: () => _restoreSnapshot(backup),
+                          onDelete: () => _deleteSnapshot(backup),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
                     const Card(
                       child: ListTile(
-                        leading: Icon(Icons.history_outlined),
-                        title: Text('No cloud backup history'),
+                        leading: Icon(Icons.security_outlined),
+                        title: Text('Account-isolated storage'),
                         subtitle: Text(
-                          'Use Backup now to create your first restore point.',
+                          'Cloud backups are isolated to your signed-in HomeVault '
+                          'account and cannot be accessed by another account. '
+                          'They are not end-to-end encrypted.',
                         ),
-                      ),
-                    )
-                  else ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-                      child: Text(
-                        'Backup history',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    ..._backups.map(
-                      (backup) => _CloudBackupTile(
-                        backup: backup,
-                        dateTimeText: _dateTime(backup.createdAt.toLocal()),
-                        sizeText: _fileSize(backup.sizeBytes),
-                        enabled: !_isBusy,
-                        onRestore: () => _restoreSnapshot(backup),
-                        onDelete: () => _deleteSnapshot(backup),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.security_outlined),
-                      title: Text('Account-isolated storage'),
-                      subtitle: Text(
-                        'Cloud backups are isolated to your signed-in HomeVault '
-                        'account and cannot be accessed by another account. '
-                        'They are not end-to-end encrypted.',
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
             if (_isBusy)
@@ -518,16 +537,23 @@ class _CloudBackupScreenState extends State<CloudBackupScreen> {
                 child: ColoredBox(
                   color: Colors.black26,
                   child: Center(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(),
-                            const SizedBox(height: 16),
-                            Text(_busyMessage!),
-                          ],
+                    child: Semantics(
+                      container: true,
+                      liveRegion: true,
+                      label: _busyMessage!,
+                      child: ExcludeSemantics(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(),
+                                const SizedBox(height: 16),
+                                Text(_busyMessage!),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -598,6 +624,10 @@ class _CloudBackupTile extends StatelessWidget {
           '${backup.documentCount} attachments • $sizeText',
         ),
         trailing: PopupMenuButton<_BackupAction>(
+          tooltip: HomeVaultAccessibility.contextualAction(
+            'Backup actions',
+            '${backup.source.label} backup from $dateTimeText',
+          ),
           enabled: enabled,
           onSelected: (action) {
             if (action == _BackupAction.restore) {
@@ -606,21 +636,29 @@ class _CloudBackupTile extends StatelessWidget {
               onDelete();
             }
           },
-          itemBuilder: (context) => const [
+          itemBuilder: (context) => [
             PopupMenuItem(
               value: _BackupAction.restore,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.restore_outlined),
-                title: Text('Restore'),
+              child: Semantics(
+                label: 'Restore backup from $dateTimeText',
+                excludeSemantics: true,
+                child: const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.restore_outlined),
+                  title: Text('Restore'),
+                ),
               ),
             ),
             PopupMenuItem(
               value: _BackupAction.delete,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline),
-                title: Text('Delete'),
+              child: Semantics(
+                label: 'Delete backup from $dateTimeText',
+                excludeSemantics: true,
+                child: const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline),
+                  title: Text('Delete'),
+                ),
               ),
             ),
           ],

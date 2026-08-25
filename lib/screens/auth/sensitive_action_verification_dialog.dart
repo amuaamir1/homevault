@@ -112,6 +112,9 @@ class _SensitiveActionVerificationDialogState
                     labelText: 'Account password',
                     prefixIcon: const Icon(Icons.password_outlined),
                     suffixIcon: IconButton(
+                      tooltip: _hidePassword
+                          ? 'Show account password'
+                          : 'Hide account password',
                       onPressed: auth.isBusy
                           ? null
                           : () =>
@@ -174,7 +177,14 @@ class _SensitiveActionVerificationDialogState
               ],
               if (auth.isBusy) ...[
                 const SizedBox(height: 14),
-                const Center(child: CircularProgressIndicator()),
+                Semantics(
+                  container: true,
+                  liveRegion: true,
+                  label: 'Verifying account',
+                  child: const ExcludeSemantics(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
               ],
             ],
           ),

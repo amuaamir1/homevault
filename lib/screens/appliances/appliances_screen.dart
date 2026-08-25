@@ -735,6 +735,7 @@ class _ApplianceListPhoto extends StatelessWidget {
       child: ClipOval(
         child: Image.file(
           File(path),
+          excludeFromSemantics: true,
           width: 42,
           height: 42,
           fit: BoxFit.cover,

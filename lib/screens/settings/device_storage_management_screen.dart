@@ -189,155 +189,180 @@ class _DeviceStorageManagementScreenState
       ),
       body: Stack(
         children: [
-          ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.storage_outlined),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'HomeVault-managed device storage',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Core appliance records stay on this device for offline '
-                        'use. Cleanup only targets recoverable cloud-backed '
-                        'document copies and HomeVault-managed safety backups.',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_loading && summary == null)
-                const Center(
+          ExcludeSemantics(
+            excluding: _busy,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (_loadError != null && summary == null)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.error_outline),
-                    title: const Text('Storage summary unavailable'),
-                    subtitle: const Text(
-                      'Your HomeVault data has not been changed. Try refreshing.',
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.storage_outlined),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Semantics(
+                                header: true,
+                                child: Text(
+                                  'HomeVault-managed device storage',
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Core appliance records stay on this device for offline '
+                          'use. Cleanup only targets recoverable cloud-backed '
+                          'document copies and HomeVault-managed safety backups.',
+                        ),
+                      ],
                     ),
-                    trailing: IconButton(
-                      tooltip: 'Retry',
-                      onPressed: _refresh,
-                      icon: const Icon(Icons.refresh),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_loading && summary == null)
+                  Semantics(
+                    container: true,
+                    liveRegion: true,
+                    label: 'Loading device storage summary',
+                    child: const ExcludeSemantics(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (_loadError != null && summary == null)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.error_outline),
+                      title: const Text('Storage summary unavailable'),
+                      subtitle: const Text(
+                        'Your HomeVault data has not been changed. Try refreshing.',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Retry',
+                        onPressed: _refresh,
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
+                  )
+                else if (summary != null) ...[
+                  _StorageTile(
+                    key: const ValueKey('deviceStorageCloudBackedCopies'),
+                    icon: Icons.cloud_done_outlined,
+                    title: 'Cloud-backed local documents',
+                    count: summary.cloudBackedDocumentCount,
+                    bytes: summary.cloudBackedDocumentBytes,
+                    subtitle:
+                        'Safe to release from this device and download again later.',
+                  ),
+                  const SizedBox(height: 8),
+                  _StorageTile(
+                    key: const ValueKey('deviceStorageLocalOnlyDocuments'),
+                    icon: Icons.phone_android_outlined,
+                    title: 'Local-only documents',
+                    count: summary.localOnlyDocumentCount,
+                    bytes: summary.localOnlyDocumentBytes,
+                    subtitle:
+                        'Protected from cleanup until a cloud copy exists.',
+                  ),
+                  const SizedBox(height: 8),
+                  _StorageTile(
+                    key: const ValueKey('deviceStorageSafetyBackups'),
+                    icon: Icons.health_and_safety_outlined,
+                    title: 'Local safety backups',
+                    count: summary.safetyBackupCount,
+                    bytes: summary.safetyBackupBytes,
+                    subtitle:
+                        'Automatic local restore points created before destructive restores.',
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.data_usage_outlined),
+                      title: const Text('Total managed file storage'),
+                      trailing: Text(
+                        formatManagedBytes(summary.totalManagedBytes),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
-                )
-              else if (summary != null) ...[
-                _StorageTile(
-                  key: const ValueKey('deviceStorageCloudBackedCopies'),
-                  icon: Icons.cloud_done_outlined,
-                  title: 'Cloud-backed local documents',
-                  count: summary.cloudBackedDocumentCount,
-                  bytes: summary.cloudBackedDocumentBytes,
-                  subtitle:
-                      'Safe to release from this device and download again later.',
-                ),
-                const SizedBox(height: 8),
-                _StorageTile(
-                  key: const ValueKey('deviceStorageLocalOnlyDocuments'),
-                  icon: Icons.phone_android_outlined,
-                  title: 'Local-only documents',
-                  count: summary.localOnlyDocumentCount,
-                  bytes: summary.localOnlyDocumentBytes,
-                  subtitle: 'Protected from cleanup until a cloud copy exists.',
-                ),
-                const SizedBox(height: 8),
-                _StorageTile(
-                  key: const ValueKey('deviceStorageSafetyBackups'),
-                  icon: Icons.health_and_safety_outlined,
-                  title: 'Local safety backups',
-                  count: summary.safetyBackupCount,
-                  bytes: summary.safetyBackupBytes,
-                  subtitle:
-                      'Automatic local restore points created before destructive restores.',
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.data_usage_outlined),
-                    title: const Text('Total managed file storage'),
-                    trailing: Text(
-                      formatManagedBytes(summary.totalManagedBytes),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Cleanup actions',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Cleanup actions',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          key: const ValueKey(
+                            'clearDownloadedDocumentCopiesTile',
+                          ),
+                          leading: const Icon(Icons.phonelink_erase_outlined),
+                          title: const Text(
+                            'Release downloaded document copies',
+                          ),
+                          subtitle: const Text(
+                            'Removes only local copies that already have a cloud copy.',
+                          ),
+                          enabled: summary.hasRecoverableLocalCopies && !_busy,
+                          onTap: _clearDownloadedCopies,
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const ValueKey('clearLocalSafetyBackupsTile'),
+                          leading: const Icon(Icons.delete_sweep_outlined),
+                          title: const Text('Delete local safety backups'),
+                          subtitle: const Text(
+                            'Does not delete cloud backups or exported ZIP files.',
+                          ),
+                          enabled: summary.hasSafetyBackups && !_busy,
+                          onTap: _clearSafetyBackups,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        key: const ValueKey(
-                          'clearDownloadedDocumentCopiesTile',
-                        ),
-                        leading: const Icon(Icons.phonelink_erase_outlined),
-                        title: const Text('Release downloaded document copies'),
-                        subtitle: const Text(
-                          'Removes only local copies that already have a cloud copy.',
-                        ),
-                        enabled: summary.hasRecoverableLocalCopies && !_busy,
-                        onTap: _clearDownloadedCopies,
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        key: const ValueKey('clearLocalSafetyBackupsTile'),
-                        leading: const Icon(Icons.delete_sweep_outlined),
-                        title: const Text('Delete local safety backups'),
-                        subtitle: const Text(
-                          'Does not delete cloud backups or exported ZIP files.',
-                        ),
-                        enabled: summary.hasSafetyBackups && !_busy,
-                        onTap: _clearSafetyBackups,
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'HomeVault never deletes local-only attachment files from this '
+                    'cleanup screen. Cloud backups are not changed here. Exported '
+                    'ZIP backups saved outside HomeVault remain under your control '
+                    'in the device Files app.',
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'HomeVault never deletes local-only attachment files from this '
-                  'cleanup screen. Cloud backups are not changed here. Exported '
-                  'ZIP backups saved outside HomeVault remain under your control '
-                  'in the device Files app.',
-                ),
+                ],
               ],
-            ],
+            ),
           ),
           if (_busy)
-            const Positioned.fill(
+            Positioned.fill(
               child: ColoredBox(
-                color: Color(0x33000000),
-                child: Center(child: CircularProgressIndicator()),
+                color: const Color(0x33000000),
+                child: Semantics(
+                  container: true,
+                  liveRegion: true,
+                  label: 'Updating device storage',
+                  child: const ExcludeSemantics(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
               ),
             ),
         ],

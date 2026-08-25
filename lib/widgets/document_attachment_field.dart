@@ -34,7 +34,7 @@ class DocumentAttachmentField extends StatelessWidget {
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(child: Icon(icon)),
+                  ExcludeSemantics(child: CircleAvatar(child: Icon(icon))),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -59,16 +59,24 @@ class DocumentAttachmentField extends StatelessWidget {
                         OutlinedButton.icon(
                           onPressed: isLoading ? null : onPick,
                           icon: isLoading
-                              ? const SizedBox.square(
-                                  dimension: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                              ? Semantics(
+                                  liveRegion: true,
+                                  label: 'Selecting $title file',
+                                  child: const ExcludeSemantics(
+                                    child: SizedBox.square(
+                                      dimension: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
                                   ),
                                 )
                               : const Icon(Icons.upload_file_outlined),
-                          label: Text(
-                            isLoading ? 'Selecting...' : 'Choose file',
-                          ),
+                          label: isLoading
+                              ? const ExcludeSemantics(
+                                  child: Text('Selecting...'),
+                                )
+                              : const Text('Choose file'),
                         ),
                       ],
                     ),
@@ -77,8 +85,10 @@ class DocumentAttachmentField extends StatelessWidget {
               )
             : Row(
                 children: [
-                  const CircleAvatar(
-                    child: Icon(Icons.insert_drive_file_outlined),
+                  const ExcludeSemantics(
+                    child: CircleAvatar(
+                      child: Icon(Icons.insert_drive_file_outlined),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -90,11 +100,15 @@ class DocumentAttachmentField extends StatelessWidget {
                           style: Theme.of(context).textTheme.labelLarge,
                         ),
                         const SizedBox(height: 3),
-                        Text(
-                          selectedDocument.fileName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        Semantics(
+                          label: 'Attachment selected',
+                          excludeSemantics: true,
+                          child: Text(
+                            selectedDocument.fileName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -122,12 +136,12 @@ class DocumentAttachmentField extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Replace file',
+                    tooltip: 'Replace $title file',
                     onPressed: isLoading ? null : onPick,
                     icon: const Icon(Icons.change_circle_outlined),
                   ),
                   IconButton(
-                    tooltip: 'Remove file',
+                    tooltip: 'Remove $title file',
                     onPressed: isLoading ? null : onRemove,
                     icon: const Icon(Icons.delete_outline),
                   ),

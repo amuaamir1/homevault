@@ -377,12 +377,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by appliance')),
             ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by appliance'),
+              ),
+            ),
+            ListTile(
+              selected: _selectedApplianceId == null,
               leading: const Icon(Icons.select_all),
               title: const Text('All appliances'),
               trailing: _selectedApplianceId == null
-                  ? const Icon(Icons.check)
+                  ? const ExcludeSemantics(child: Icon(Icons.check))
                   : null,
               onTap: () {
                 setState(() => _selectedApplianceId = null);
@@ -391,11 +397,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             ),
             ...appliances.map(
               (appliance) => ListTile(
+                selected: _selectedApplianceId == appliance.id,
                 leading: const Icon(Icons.home_repair_service_outlined),
                 title: Text(appliance.name),
                 subtitle: Text('${appliance.brand} • ${appliance.category}'),
                 trailing: _selectedApplianceId == appliance.id
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _selectedApplianceId = appliance.id);
@@ -417,10 +424,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by document type')),
             ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by document type'),
+              ),
+            ),
+            ListTile(
+              selected: _selectedType == null,
               title: const Text('All document types'),
-              trailing: _selectedType == null ? const Icon(Icons.check) : null,
+              trailing: _selectedType == null
+                  ? const ExcludeSemantics(child: Icon(Icons.check))
+                  : null,
               onTap: () {
                 setState(() => _selectedType = null);
                 Navigator.of(sheetContext).pop();
@@ -428,9 +443,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             ),
             ...DocumentVaultService.supportedTypes.map(
               (type) => ListTile(
+                selected: _selectedType == type,
                 title: Text(type.label),
                 trailing: _selectedType == type
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _selectedType = type);
@@ -452,12 +468,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by availability')),
+            ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by availability'),
+              ),
+            ),
             ...DocumentVaultAvailability.values.map(
               (availability) => ListTile(
+                selected: _availability == availability,
                 title: Text(availability.label),
                 trailing: _availability == availability
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _availability = availability);
@@ -479,11 +501,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Sort documents')),
+            ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Sort documents'),
+              ),
+            ),
             ...DocumentVaultSort.values.map(
               (sort) => ListTile(
+                selected: _sort == sort,
                 title: Text(sort.label),
-                trailing: _sort == sort ? const Icon(Icons.check) : null,
+                trailing: _sort == sort
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
+                    : null,
                 onTap: () {
                   setState(() => _sort = sort);
                   Navigator.of(sheetContext).pop();

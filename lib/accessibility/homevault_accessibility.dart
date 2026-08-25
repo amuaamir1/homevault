@@ -29,4 +29,44 @@ class HomeVaultAccessibility {
   static String countLabel(String label, int count) {
     return '$label: $count';
   }
+
+  static String contextualAction(String action, String context) {
+    final normalizedContext = context.trim();
+    return normalizedContext.isEmpty
+        ? action
+        : '$action for $normalizedContext';
+  }
+}
+
+/// A silent visual marker that announces only meaningful status changes.
+///
+/// Keeping the announcement in its own semantics node prevents progress
+/// indicators and repeated visible status text from being spoken twice.
+class HomeVaultStatusAnnouncement extends StatelessWidget {
+  const HomeVaultStatusAnnouncement({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: message,
+      child: const ExcludeSemantics(child: SizedBox.shrink()),
+    );
+  }
+}
+
+/// Adds heading navigation without replacing the visible text's accessible
+/// name or creating a second spoken node.
+class HomeVaultSectionHeading extends StatelessWidget {
+  const HomeVaultSectionHeading({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(header: true, child: child);
+  }
 }

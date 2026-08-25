@@ -31,7 +31,18 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Document actions'));
+    final menu = find.byWidgetPredicate(
+      (widget) =>
+          widget is PopupMenuButton<String> &&
+          widget.tooltip?.startsWith('Document actions for Invoice, ') ==
+              true &&
+          widget.tooltip!.contains('Invoice • Living room AC') &&
+          widget.tooltip!.contains('added 24 August 2026'),
+      description: 'contextual Invoice document action menu',
+    );
+    expect(menu, findsOneWidget);
+
+    await tester.tap(menu);
     await tester.pumpAndSettle();
 
     expect(find.text('Save a copy'), findsOneWidget);

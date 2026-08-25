@@ -166,7 +166,11 @@ class DocumentDetailsScreen extends StatelessWidget {
             _DetailsCard(
               title: 'File information',
               children: [
-                _DetailRow(label: 'File name', value: document.fileName),
+                _DetailRow(
+                  label: 'File name',
+                  value: document.fileName,
+                  accessibleValue: 'Hidden for privacy',
+                ),
                 _DetailRow(label: 'Size', value: document.formattedSize),
                 _DetailRow(label: 'Added', value: _date(document.attachedAt)),
                 if (document.reference.trim().isNotEmpty)
@@ -203,7 +207,14 @@ class _DetailsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Semantics(
+              container: true,
+              header: true,
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             const SizedBox(height: 8),
             ...children,
           ],
@@ -214,14 +225,19 @@ class _DetailsCard extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.accessibleValue,
+  });
 
   final String label;
   final String value;
+  final String? accessibleValue;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,6 +254,14 @@ class _DetailRow extends StatelessWidget {
           Expanded(child: SelectableText(value)),
         ],
       ),
+    );
+
+    final safeValue = accessibleValue;
+    if (safeValue == null) return row;
+    return Semantics(
+      label: '$label: $safeValue',
+      excludeSemantics: true,
+      child: row,
     );
   }
 }
