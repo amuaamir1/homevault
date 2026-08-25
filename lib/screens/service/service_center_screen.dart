@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/service_form_result.dart';
 import '../../models/service_record.dart';
@@ -410,32 +411,46 @@ class _ServiceCenterScreenState extends State<ServiceCenterScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns =
+                        HomeVaultAccessibility.responsiveColumnCount(
+                          availableWidth: constraints.maxWidth,
+                          textScale: HomeVaultAccessibility.textScaleOf(
+                            context,
+                          ),
+                          maxColumns: 3,
+                        );
+                    const spacing = 8.0;
+                    final width =
+                        (constraints.maxWidth - (spacing * (columns - 1))) /
+                        columns;
+                    final cards = [
+                      _SummaryCard(
                         label: 'Records',
                         value: '${store.totalServiceRecordCount}',
                         icon: Icons.build_circle_outlined,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SummaryCard(
+                      _SummaryCard(
                         label: 'Due 30 days',
                         value: '$dueSoon',
                         icon: Icons.event_available_outlined,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SummaryCard(
+                      _SummaryCard(
                         label: 'Total cost',
                         value: '${_formatIndianCurrency(totalCost)}/-',
                         icon: Icons.payments_outlined,
                       ),
-                    ),
-                  ],
+                    ];
+
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
+                      children: cards
+                          .map((card) => SizedBox(width: width, child: card))
+                          .toList(growable: false),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 Card(
@@ -583,37 +598,42 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 20),
-            const SizedBox(height: 4),
-            SizedBox(
-              height: 24,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+    return Semantics(
+      container: true,
+      label: '$label: $value',
+      child: ExcludeSemantics(
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  Icon(icon, size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          value,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ],
+          ),
         ),
       ),
     );

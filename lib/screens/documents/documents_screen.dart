@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
@@ -603,34 +604,51 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _VaultMetric(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns =
+                            HomeVaultAccessibility.responsiveColumnCount(
+                              availableWidth: constraints.maxWidth,
+                              textScale: HomeVaultAccessibility.textScaleOf(
+                                context,
+                              ),
+                              maxColumns: 3,
+                            );
+                        const spacing = 8.0;
+                        final width =
+                            (constraints.maxWidth - (spacing * (columns - 1))) /
+                            columns;
+                        final metrics = [
+                          _VaultMetric(
                             key: const ValueKey('documentVaultTotalMetric'),
                             label: 'Documents',
                             value: '${summary.totalDocuments}',
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _VaultMetric(
+                          _VaultMetric(
                             key: const ValueKey('documentVaultApplianceMetric'),
                             label: 'Appliances',
                             value: '${summary.appliancesWithDocuments}',
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _VaultMetric(
+                          _VaultMetric(
                             key: const ValueKey(
                               'documentVaultUnavailableMetric',
                             ),
                             label: 'Unavailable',
                             value: '${summary.unavailableDocuments}',
                           ),
-                        ),
-                      ],
+                        ];
+
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: metrics
+                              .map(
+                                (metric) =>
+                                    SizedBox(width: width, child: metric),
+                              )
+                              .toList(growable: false),
+                        );
+                      },
                     ),
                   ),
                   SizedBox(
@@ -779,21 +797,35 @@ class _VaultMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(
-          children: [
-            Text(value, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+    return Semantics(
+      container: true,
+      label: '$label: $value',
+      child: ExcludeSemantics(
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 68),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

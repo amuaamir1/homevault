@@ -14,16 +14,41 @@ class HomeVaultAccessibility {
   static int responsiveColumnCount({
     required double availableWidth,
     required double textScale,
+    int maxColumns = 4,
   }) {
-    if (textScale >= veryLargeTextThreshold || availableWidth < 340) {
-      return 1;
-    }
+    final safeMaximum = maxColumns < 1 ? 1 : maxColumns;
+    final preferredColumns =
+        textScale >= veryLargeTextThreshold || availableWidth < 340
+        ? 1
+        : textScale >= largeTextThreshold || availableWidth < 600
+        ? 2
+        : 4;
 
-    if (textScale >= largeTextThreshold || availableWidth < 600) {
-      return 2;
-    }
+    return preferredColumns.clamp(1, safeMaximum).toInt();
+  }
 
-    return 4;
+  static double contrastRatio(Color first, Color second) {
+    final firstLuminance = first.computeLuminance();
+    final secondLuminance = second.computeLuminance();
+    final lighter = firstLuminance > secondLuminance
+        ? firstLuminance
+        : secondLuminance;
+    final darker = firstLuminance > secondLuminance
+        ? secondLuminance
+        : firstLuminance;
+
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  static Color blendOver(
+    Color foreground,
+    Color background, {
+    required double opacity,
+  }) {
+    return Color.alphaBlend(
+      foreground.withValues(alpha: opacity.clamp(0, 1).toDouble()),
+      background,
+    );
   }
 
   static String countLabel(String label, int count) {
