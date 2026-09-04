@@ -8,7 +8,8 @@ run-name: HomeVault developer release from ${{ github.sha }}
       - develop
       - develop*
       - develop/**
-
+  workflow_dispatch:
+    
 permissions:
   contents: write
 
