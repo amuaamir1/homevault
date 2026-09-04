@@ -34,19 +34,24 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: P15 source safety gate
-        shell: bash
-        run: python3 scripts/ci/homevault_ci.py validate-source
 
       - name: Validate CI inputs
         shell: bash
         env:
           FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION }}
           FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
-        run: python3 scripts/ci/homevault_ci.py validate-ci --mode development
+        run: |
+          set -euo pipefail
+
+          test -n "$FLUTTER_VERSION" || {
+            echo "::error::Repository variable FLUTTER_VERSION is missing."
+            exit 1
+          }
+
+          test -n "$FIREBASE_OPTIONS_DART_BASE64" || {
+            echo "::error::GitHub secret FIREBASE_OPTIONS_DART_BASE64 is missing."
+            exit 1
+          }
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -62,22 +67,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p lib
-          printf '%s' "$FIREBASE_OPTIONS_DART_BASE64" | base64 --decode > lib/firebase_options.dart
+          printf '%s' "$FIREBASE_OPTIONS_DART_BASE64" \
+            | base64 --decode > lib/firebase_options.dart
           test -s lib/firebase_options.dart
 
-      - name: Show deterministic tool versions
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter --version
-          dart --version
-          java -version
-
-      - name: Resolve dependencies without upgrades
+      - name: Resolve dependencies
         run: flutter pub get
-
-      - name: Verify deterministic lockfile
-        run: python3 scripts/ci/homevault_ci.py validate-lock
 
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed lib test
@@ -87,24 +82,3 @@ jobs:
 
       - name: Run tests
         run: flutter test
-
-      - name: FINAL RELEASE GATE - development validation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/ci/homevault_ci.py validate-lock
-          echo "FINAL RELEASE GATE: PASS (development validation)"
-
-      - name: Collect P15 failure diagnostics
-        if: failure()
-        shell: bash
-        run: python3 scripts/ci/homevault_ci.py diagnostics --out p15-diagnostics
-
-      - name: Upload P15 failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: HomeVault-P15-diagnostics-${{ github.run_id }}
-          path: p15-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
