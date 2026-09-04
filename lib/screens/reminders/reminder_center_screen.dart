@@ -428,20 +428,13 @@ class _ReminderSummary extends StatelessWidget {
       ('Notifications on', summary.notificationsOn, AppColors.success),
     ];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var index = 0; index < items.length; index++) ...[
-            if (index > 0) const SizedBox(width: 8),
-            _SummaryPill(
-              label: items[index].$1,
-              value: items[index].$2,
-              color: items[index].$3,
-            ),
-          ],
-        ],
-      ),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final item in items)
+          _SummaryPill(label: item.$1, value: item.$2, color: item.$3),
+      ],
     );
   }
 }
@@ -563,8 +556,6 @@ class _ReminderCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             reminder.applianceName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),

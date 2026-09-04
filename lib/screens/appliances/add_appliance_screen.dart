@@ -1808,6 +1808,7 @@ class _AppliancePhotoField extends StatelessWidget {
                 child: hasLocalPhoto
                     ? Image.file(
                         File(localPath),
+                        semanticLabel: 'Selected appliance photo',
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => const _PhotoPlaceholder(),
                       )
@@ -1826,13 +1827,19 @@ class _AppliancePhotoField extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    document == null
-                        ? 'Add a JPG or PNG up to 10 MB.'
-                        : document!.fileName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Semantics(
+                    label: document == null
+                        ? 'Add a JPG or PNG up to 10 megabytes'
+                        : 'Appliance photo selected',
+                    excludeSemantics: true,
+                    child: Text(
+                      document == null
+                          ? 'Add a JPG or PNG up to 10 MB.'
+                          : document!.fileName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(

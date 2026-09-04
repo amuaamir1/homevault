@@ -128,7 +128,27 @@ void main() {
     expect(find.textContaining('Cloud upload pending'), findsNothing);
     expect(find.textContaining('On this device & cloud'), findsNothing);
 
-    expect(find.byTooltip('Open document'), findsOneWidget);
+    final openAction = find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton &&
+          widget.tooltip?.startsWith('Open document for Invoice, ') == true &&
+          widget.tooltip!.contains('Invoice • Bedroom AC') &&
+          widget.tooltip!.contains('added 8 August 2026'),
+      description: 'contextual cloud-only Invoice open action',
+    );
+    expect(openAction, findsOneWidget);
+    final semanticOpenAction = find.descendant(
+      of: openAction,
+      matching: find.byType(RawTooltip),
+    );
+    expect(semanticOpenAction, findsOneWidget);
+    final accessibleName = tester
+        .getSemantics(semanticOpenAction)
+        .getSemanticsData()
+        .tooltip;
+    expect(accessibleName, isNot(contains(document.id)));
+    expect(accessibleName, isNot(contains(document.fileName)));
+    expect(accessibleName, isNot(contains(document.cloudStoragePath)));
   });
 
   testWidgets('document without local or cloud file shows unavailable', (
@@ -159,6 +179,6 @@ void main() {
 
     expect(find.textContaining('File unavailable'), findsOneWidget);
 
-    expect(find.byTooltip('File unavailable'), findsOneWidget);
+    expect(find.byTooltip('Invoice file unavailable'), findsOneWidget);
   });
 }

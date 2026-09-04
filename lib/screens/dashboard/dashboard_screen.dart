@@ -305,6 +305,7 @@ class _DashboardAppliancePhoto extends StatelessWidget {
       child: ClipOval(
         child: Image.file(
           File(path),
+          excludeFromSemantics: true,
           width: 40,
           height: 40,
           fit: BoxFit.cover,

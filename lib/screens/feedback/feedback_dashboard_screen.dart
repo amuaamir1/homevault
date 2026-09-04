@@ -710,7 +710,7 @@ class _FeedbackCard extends StatelessWidget {
                     ),
                   ),
                   PopupMenuButton<FeedbackWorkflowStatus>(
-                    tooltip: 'Change status',
+                    tooltip: 'Change status for $_actionContext',
                     onSelected: onStatusChanged,
                     itemBuilder: (context) => FeedbackWorkflowStatus.values
                         .map(
@@ -738,11 +738,17 @@ class _FeedbackCard extends StatelessWidget {
                   const Icon(Icons.person_outline, size: 16),
                   const SizedBox(width: 5),
                   Expanded(
-                    child: Text(
-                      item.submitterLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
+                    child: Semantics(
+                      label: item.userEmail.trim().isEmpty
+                          ? 'Anonymous user'
+                          : item.userEmail,
+                      excludeSemantics: true,
+                      child: Text(
+                        item.submitterLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -778,6 +784,45 @@ class _FeedbackCard extends StatelessWidget {
     final local = date.toLocal();
     String two(int value) => value.toString().padLeft(2, '0');
     return '${two(local.day)}/${two(local.month)}/${local.year}';
+  }
+
+  String get _actionContext {
+    final messageSummary = _messageSummary(item.message);
+    return [
+      '${item.category.label} feedback',
+      item.status.label,
+      if (messageSummary.isNotEmpty) messageSummary,
+      'submitted ${_spokenDateTime(item.createdAt)}',
+    ].join(', ');
+  }
+
+  String _messageSummary(String message) {
+    final normalized = message.trim().replaceAll(RegExp(r'\s+'), ' ');
+    const maximumCharacters = 48;
+    final characters = normalized.runes.toList(growable: false);
+    if (characters.length <= maximumCharacters) return normalized;
+    return '${String.fromCharCodes(characters.take(maximumCharacters)).trimRight()}…';
+  }
+
+  String _spokenDateTime(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final local = date.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${local.day} ${months[local.month - 1]} ${local.year} at '
+        '${two(local.hour)}:${two(local.minute)}';
   }
 }
 

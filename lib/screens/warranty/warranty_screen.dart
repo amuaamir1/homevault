@@ -227,26 +227,22 @@ class _WarrantySummary extends StatelessWidget {
       ),
     ];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: items
-            .map((item) {
-              final selected = selectedFilter == item.$4;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: _WarrantyStatPill(
-                  key: item.$5,
-                  label: item.$1,
-                  count: item.$2,
-                  color: item.$3,
-                  selected: selected,
-                  onTap: () => onSelected(item.$4),
-                ),
-              );
-            })
-            .toList(growable: false),
-      ),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items
+          .map((item) {
+            final selected = selectedFilter == item.$4;
+            return _WarrantyStatPill(
+              key: item.$5,
+              label: item.$1,
+              count: item.$2,
+              color: item.$3,
+              selected: selected,
+              onTap: () => onSelected(item.$4),
+            );
+          })
+          .toList(growable: false),
     );
   }
 }

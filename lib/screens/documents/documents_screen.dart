@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../../accessibility/homevault_accessibility.dart';
 import '../../models/appliance.dart';
 import '../../models/document_form_result.dart';
 import '../../models/stored_document.dart';
@@ -377,12 +378,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by appliance')),
             ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by appliance'),
+              ),
+            ),
+            ListTile(
+              selected: _selectedApplianceId == null,
               leading: const Icon(Icons.select_all),
               title: const Text('All appliances'),
               trailing: _selectedApplianceId == null
-                  ? const Icon(Icons.check)
+                  ? const ExcludeSemantics(child: Icon(Icons.check))
                   : null,
               onTap: () {
                 setState(() => _selectedApplianceId = null);
@@ -391,11 +398,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             ),
             ...appliances.map(
               (appliance) => ListTile(
+                selected: _selectedApplianceId == appliance.id,
                 leading: const Icon(Icons.home_repair_service_outlined),
                 title: Text(appliance.name),
                 subtitle: Text('${appliance.brand} • ${appliance.category}'),
                 trailing: _selectedApplianceId == appliance.id
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _selectedApplianceId = appliance.id);
@@ -417,10 +425,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by document type')),
             ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by document type'),
+              ),
+            ),
+            ListTile(
+              selected: _selectedType == null,
               title: const Text('All document types'),
-              trailing: _selectedType == null ? const Icon(Icons.check) : null,
+              trailing: _selectedType == null
+                  ? const ExcludeSemantics(child: Icon(Icons.check))
+                  : null,
               onTap: () {
                 setState(() => _selectedType = null);
                 Navigator.of(sheetContext).pop();
@@ -428,9 +444,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             ),
             ...DocumentVaultService.supportedTypes.map(
               (type) => ListTile(
+                selected: _selectedType == type,
                 title: Text(type.label),
                 trailing: _selectedType == type
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _selectedType = type);
@@ -452,12 +469,18 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Filter by availability')),
+            ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Filter by availability'),
+              ),
+            ),
             ...DocumentVaultAvailability.values.map(
               (availability) => ListTile(
+                selected: _availability == availability,
                 title: Text(availability.label),
                 trailing: _availability == availability
-                    ? const Icon(Icons.check)
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
                     : null,
                 onTap: () {
                   setState(() => _availability = availability);
@@ -479,11 +502,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(title: Text('Sort documents')),
+            ListTile(
+              title: Semantics(
+                header: true,
+                child: const Text('Sort documents'),
+              ),
+            ),
             ...DocumentVaultSort.values.map(
               (sort) => ListTile(
+                selected: _sort == sort,
                 title: Text(sort.label),
-                trailing: _sort == sort ? const Icon(Icons.check) : null,
+                trailing: _sort == sort
+                    ? const ExcludeSemantics(child: Icon(Icons.check))
+                    : null,
                 onTap: () {
                   setState(() => _sort = sort);
                   Navigator.of(sheetContext).pop();
@@ -573,34 +604,51 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _VaultMetric(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns =
+                            HomeVaultAccessibility.responsiveColumnCount(
+                              availableWidth: constraints.maxWidth,
+                              textScale: HomeVaultAccessibility.textScaleOf(
+                                context,
+                              ),
+                              maxColumns: 3,
+                            );
+                        const spacing = 8.0;
+                        final width =
+                            (constraints.maxWidth - (spacing * (columns - 1))) /
+                            columns;
+                        final metrics = [
+                          _VaultMetric(
                             key: const ValueKey('documentVaultTotalMetric'),
                             label: 'Documents',
                             value: '${summary.totalDocuments}',
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _VaultMetric(
+                          _VaultMetric(
                             key: const ValueKey('documentVaultApplianceMetric'),
                             label: 'Appliances',
                             value: '${summary.appliancesWithDocuments}',
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _VaultMetric(
+                          _VaultMetric(
                             key: const ValueKey(
                               'documentVaultUnavailableMetric',
                             ),
                             label: 'Unavailable',
                             value: '${summary.unavailableDocuments}',
                           ),
-                        ),
-                      ],
+                        ];
+
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: metrics
+                              .map(
+                                (metric) =>
+                                    SizedBox(width: width, child: metric),
+                              )
+                              .toList(growable: false),
+                        );
+                      },
                     ),
                   ),
                   SizedBox(
@@ -749,21 +797,35 @@ class _VaultMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(
-          children: [
-            Text(value, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+    return Semantics(
+      container: true,
+      label: '$label: $value',
+      child: ExcludeSemantics(
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 68),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

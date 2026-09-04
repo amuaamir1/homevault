@@ -179,9 +179,15 @@ class _BetaFeedbackScreenState extends State<BetaFeedbackScreen> {
               child: ListTile(
                 leading: const Icon(Icons.screenshot_outlined),
                 title: const Text('Optional screenshot'),
-                subtitle: Text(
-                  _screenshot?.fileName ??
-                      'PNG or JPG, maximum 450 KB. Check that it contains no private information.',
+                subtitle: Semantics(
+                  label: _screenshot == null
+                      ? 'PNG or JPG, maximum 450 kilobytes. Check that it contains no private information.'
+                      : 'Screenshot selected',
+                  excludeSemantics: true,
+                  child: Text(
+                    _screenshot?.fileName ??
+                        'PNG or JPG, maximum 450 KB. Check that it contains no private information.',
+                  ),
                 ),
                 trailing: _screenshot == null
                     ? const Icon(Icons.attach_file)

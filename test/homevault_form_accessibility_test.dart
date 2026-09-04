@@ -24,11 +24,18 @@ void main() {
         ),
       );
 
-      final orderedGroups = tester
-          .widgetList<FocusTraversalGroup>(find.byType(FocusTraversalGroup))
-          .where((group) => group.policy is OrderedTraversalPolicy);
+      final accessibleForm = find.byType(HomeVaultAccessibleForm);
+      expect(accessibleForm, findsOneWidget);
 
-      expect(orderedGroups, hasLength(1));
+      final orderedGroup = find.descendant(
+        of: accessibleForm,
+        matching: find.byType(FocusTraversalGroup),
+      );
+      expect(orderedGroup, findsOneWidget);
+      expect(
+        tester.widget<FocusTraversalGroup>(orderedGroup).policy,
+        isA<OrderedTraversalPolicy>(),
+      );
 
       final form = tester.widget<Form>(find.byType(Form));
       expect(form.autovalidateMode, AutovalidateMode.onUserInteraction);
@@ -36,20 +43,28 @@ void main() {
   );
 
   testWidgets('validation summary is a semantic live region', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: HomeVaultFormValidationSummary(visible: true)),
-      ),
-    );
+    final semanticsHandle = tester.ensureSemantics();
 
-    const summaryKey = ValueKey('p19FormValidationSummary');
-    expect(find.byKey(summaryKey), findsOneWidget);
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: HomeVaultFormValidationSummary(visible: true)),
+        ),
+      );
 
-    final semantics = tester.widget<Semantics>(find.byKey(summaryKey));
-    expect(semantics.properties.liveRegion, isTrue);
-    expect(
-      semantics.properties.label,
-      contains('Check the highlighted fields'),
-    );
+      const summaryKey = ValueKey('p19FormValidationSummary');
+      expect(find.byKey(summaryKey), findsOneWidget);
+
+      expect(
+        tester.getSemantics(find.byKey(summaryKey)),
+        isSemantics(
+          label:
+              'Check the highlighted fields. Correct the errors, then try again.',
+          isLiveRegion: true,
+        ),
+      );
+    } finally {
+      semanticsHandle.dispose();
+    }
   });
 }

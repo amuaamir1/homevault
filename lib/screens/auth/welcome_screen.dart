@@ -294,9 +294,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             key: const Key('loginButton'),
             onPressed: auth.isBusy ? null : _signIn,
             child: _activeAction == _AuthAction.emailSignIn
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? Semantics(
+                    liveRegion: true,
+                    label: 'Signing in',
+                    child: const ExcludeSemantics(
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   )
                 : const Text('Sign in'),
           ),
@@ -394,9 +400,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             key: const Key('registerButton'),
             onPressed: auth.isBusy ? null : _register,
             child: _activeAction == _AuthAction.emailRegister
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? Semantics(
+                    liveRegion: true,
+                    label: 'Creating account',
+                    child: const ExcludeSemantics(
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   )
                 : const Text('Register'),
           ),
@@ -520,10 +532,16 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
           key: const Key('resetPasswordSubmitButton'),
           onPressed: _isSending ? null : _submit,
           child: _isSending
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              ? Semantics(
+                  liveRegion: true,
+                  label: 'Sending password reset link',
+                  child: const ExcludeSemantics(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
                 )
               : const Text('Send reset link'),
         ),
@@ -627,9 +645,15 @@ class _SocialSignInButton extends StatelessWidget {
         side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: isLoading
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ? Semantics(
+              liveRegion: true,
+              label: '$label in progress',
+              child: const ExcludeSemantics(
+                child: SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             )
           : Row(
               mainAxisAlignment: MainAxisAlignment.center,

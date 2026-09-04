@@ -107,6 +107,56 @@ void main() {
     );
   });
 
+  testWidgets('primary navigation exposes destination selected state', (
+    tester,
+  ) async {
+    final semanticsHandle = tester.ensureSemantics();
+    try {
+      final store = await _createStore();
+      addTearDown(store.dispose);
+
+      await _pumpHomeVault(tester, store);
+      final navigationBar = find.byType(NavigationBar);
+      final homeDestination = find.descendant(
+        of: navigationBar,
+        matching: find.text('Home'),
+      );
+      final supportDestination = find.descendant(
+        of: navigationBar,
+        matching: find.text('Support'),
+      );
+
+      final homeSemantics = tester.getSemantics(homeDestination);
+      expect(homeSemantics.getSemanticsData().label, contains('Home'));
+      expect(
+        homeSemantics,
+        isSemantics(isSelected: true, isButton: true, hasTapAction: true),
+      );
+
+      final supportSemantics = tester.getSemantics(supportDestination);
+      expect(supportSemantics.getSemanticsData().label, contains('Support'));
+      expect(
+        supportSemantics,
+        isSemantics(isSelected: false, isButton: true, hasTapAction: true),
+      );
+
+      await tester.tap(supportDestination);
+      await tester.pumpAndSettle();
+
+      final selectedSupportSemantics = tester.getSemantics(supportDestination);
+      expect(
+        selectedSupportSemantics.getSemanticsData().label,
+        contains('Support'),
+      );
+      expect(
+        selectedSupportSemantics,
+        isSemantics(isSelected: true, isButton: true, hasTapAction: true),
+      );
+    } finally {
+      semanticsHandle.dispose();
+    }
+  });
+
   testWidgets('unverified email user can continue into HomeVault', (
     tester,
   ) async {

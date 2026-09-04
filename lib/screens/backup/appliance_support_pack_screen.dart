@@ -300,8 +300,13 @@ class _ApplianceSupportPackScreenState
                             : (value) =>
                                   _toggleDocument(document, value ?? false),
                         title: Text(document.displayTitle),
-                        subtitle: Text(
-                          '${document.fileName} • ${document.formattedSize}\n${_availability(document)}',
+                        subtitle: Semantics(
+                          label:
+                              '${document.formattedSize}, ${_availability(document)}',
+                          excludeSemantics: true,
+                          child: Text(
+                            '${document.fileName} • ${document.formattedSize}\n${_availability(document)}',
+                          ),
                         ),
                         secondary: Icon(
                           document.isAvailableOnDevice

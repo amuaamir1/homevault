@@ -105,6 +105,9 @@ class _ResetPinWithPasswordScreenState
                           labelText: 'Account password',
                           prefixIcon: const Icon(Icons.password_outlined),
                           suffixIcon: IconButton(
+                            tooltip: _hidePassword
+                                ? 'Show account password'
+                                : 'Hide account password',
                             onPressed: () =>
                                 setState(() => _hidePassword = !_hidePassword),
                             icon: Icon(
@@ -168,7 +171,14 @@ class _ResetPinWithPasswordScreenState
                     ],
                     if (auth.isBusy) ...[
                       const SizedBox(height: 16),
-                      const Center(child: CircularProgressIndicator()),
+                      Semantics(
+                        container: true,
+                        liveRegion: true,
+                        label: 'Verifying account password',
+                        child: const ExcludeSemantics(
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
                     ],
                   ],
                 ),

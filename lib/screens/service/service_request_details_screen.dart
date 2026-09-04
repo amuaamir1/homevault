@@ -314,12 +314,12 @@ class ServiceRequestDetailsScreen extends StatelessWidget {
         actions: [
           if (request.status.isActive)
             IconButton(
-              tooltip: 'Edit request',
+              tooltip: 'Edit service request for ${appliance.name}',
               onPressed: () => _edit(context, request),
               icon: const Icon(Icons.edit_outlined),
             ),
           IconButton(
-            tooltip: 'Delete request',
+            tooltip: 'Delete service request for ${appliance.name}',
             onPressed: () => _delete(context, request),
             icon: const Icon(Icons.delete_outline),
           ),

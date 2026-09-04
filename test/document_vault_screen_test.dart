@@ -166,7 +166,15 @@ void main() {
       );
       final menu = find.descendant(
         of: invoiceCard,
-        matching: find.byTooltip('Document actions'),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is PopupMenuButton<String> &&
+              widget.tooltip?.startsWith('Document actions for AC invoice, ') ==
+                  true &&
+              widget.tooltip!.contains('Invoice • Living room AC') &&
+              widget.tooltip!.contains('added 10 August 2026'),
+          description: 'contextual AC invoice action menu',
+        ),
       );
       expect(menu, findsOneWidget);
 

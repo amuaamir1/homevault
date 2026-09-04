@@ -96,6 +96,9 @@ class _LegacyEmailUpgradeScreenState extends State<LegacyEmailUpgradeScreen> {
                           labelText: 'New password',
                           prefixIcon: const Icon(Icons.password_outlined),
                           suffixIcon: IconButton(
+                            tooltip: _hidePassword
+                                ? 'Show new password'
+                                : 'Hide new password',
                             onPressed: () =>
                                 setState(() => _hidePassword = !_hidePassword),
                             icon: Icon(

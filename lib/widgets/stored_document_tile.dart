@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../accessibility/homevault_accessibility.dart';
 import '../models/stored_document.dart';
 
 class StoredDocumentTile extends StatelessWidget {
@@ -49,6 +50,24 @@ class StoredDocumentTile extends StatelessWidget {
     return 'File unavailable';
   }
 
+  String _spokenDate(DateTime value) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${value.day} ${months[value.month - 1]} ${value.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final reference = document.reference.trim();
@@ -59,6 +78,23 @@ class StoredDocumentTile extends StatelessWidget {
       if (reference.isNotEmpty) 'Ref: $reference',
     ].join(' • ');
 
+    final accessibleDetails = [
+      subtitle,
+      document.formattedSize,
+      _availabilityText,
+      if (reference.isNotEmpty) 'Reference: $reference',
+    ].join(', ');
+
+    final normalizedTitle = title.trim();
+    final normalizedSubtitle = subtitle.trim();
+    final documentContext = [
+      normalizedTitle,
+      if (normalizedSubtitle.isNotEmpty &&
+          normalizedSubtitle != normalizedTitle)
+        normalizedSubtitle,
+      'added ${_spokenDate(document.attachedAt)}',
+    ].join(', ');
+
     final hasActions =
         onDetails != null ||
         onSaveCopy != null ||
@@ -67,20 +103,32 @@ class StoredDocumentTile extends StatelessWidget {
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(child: Icon(_icon)),
+      leading: ExcludeSemantics(child: CircleAvatar(child: Icon(_icon))),
       title: Text(title),
-      subtitle: Text('$subtitle\n$fileDetails'),
+      subtitle: Semantics(
+        label: accessibleDetails,
+        excludeSemantics: true,
+        child: Text('$subtitle\n$fileDetails'),
+      ),
       isThreeLine: true,
       trailing: !hasActions
           ? IconButton(
-              tooltip: _canOpen ? 'Open document' : 'File unavailable',
+              tooltip: _canOpen
+                  ? HomeVaultAccessibility.contextualAction(
+                      'Open document',
+                      documentContext,
+                    )
+                  : '$title file unavailable',
               onPressed: _canOpen ? onOpen : null,
               icon: Icon(
                 _canOpen ? Icons.open_in_new : Icons.warning_amber_outlined,
               ),
             )
           : PopupMenuButton<String>(
-              tooltip: 'Document actions',
+              tooltip: HomeVaultAccessibility.contextualAction(
+                'Document actions',
+                documentContext,
+              ),
               onSelected: (action) {
                 switch (action) {
                   case 'open':
@@ -102,11 +150,15 @@ class StoredDocumentTile extends StatelessWidget {
               },
               itemBuilder: (context) => [
                 if (_canOpen)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'open',
-                    child: ListTile(
-                      leading: Icon(Icons.open_in_new),
-                      title: Text('Open'),
+                    child: Semantics(
+                      label: 'Open $documentContext',
+                      excludeSemantics: true,
+                      child: const ListTile(
+                        leading: Icon(Icons.open_in_new),
+                        title: Text('Open'),
+                      ),
                     ),
                   )
                 else
@@ -118,35 +170,51 @@ class StoredDocumentTile extends StatelessWidget {
                     ),
                   ),
                 if (onDetails != null)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'details',
-                    child: ListTile(
-                      leading: Icon(Icons.info_outline),
-                      title: Text('View details'),
+                    child: Semantics(
+                      label: 'View details for $documentContext',
+                      excludeSemantics: true,
+                      child: const ListTile(
+                        leading: Icon(Icons.info_outline),
+                        title: Text('View details'),
+                      ),
                     ),
                   ),
                 if (onSaveCopy != null && _canOpen)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'saveCopy',
-                    child: ListTile(
-                      leading: Icon(Icons.download_outlined),
-                      title: Text('Save a copy'),
+                    child: Semantics(
+                      label: 'Save a copy of $documentContext',
+                      excludeSemantics: true,
+                      child: const ListTile(
+                        leading: Icon(Icons.download_outlined),
+                        title: Text('Save a copy'),
+                      ),
                     ),
                   ),
                 if (onEdit != null)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'edit',
-                    child: ListTile(
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Edit metadata'),
+                    child: Semantics(
+                      label: 'Edit metadata for $documentContext',
+                      excludeSemantics: true,
+                      child: const ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit metadata'),
+                      ),
                     ),
                   ),
                 if (onDelete != null)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_outline),
-                      title: Text('Delete'),
+                    child: Semantics(
+                      label: 'Delete $documentContext',
+                      excludeSemantics: true,
+                      child: const ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                      ),
                     ),
                   ),
               ],

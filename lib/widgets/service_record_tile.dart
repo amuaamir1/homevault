@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../accessibility/homevault_accessibility.dart';
 import '../models/service_record.dart';
 
 class ServiceRecordTile extends StatelessWidget {
@@ -39,6 +40,15 @@ class ServiceRecordTile extends StatelessWidget {
         ? effectiveStatus.label
         : '${effectiveStatus.label} • $ticket';
 
+    final serviceDateContext = effectiveStatus == ServiceStatus.completed
+        ? 'serviced ${_spokenDate(record.serviceDate)}'
+        : 'service ${_spokenDate(record.serviceDate)}';
+    final recordContext = [
+      if (appliance.isNotEmpty) appliance,
+      serviceDateContext,
+      if (ticket.isNotEmpty) 'ticket $ticket',
+    ].join(', ');
+
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -49,7 +59,11 @@ class ServiceRecordTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(child: Icon(_iconForStatus(effectiveStatus))),
+              ExcludeSemantics(
+                child: CircleAvatar(
+                  child: Icon(_iconForStatus(effectiveStatus)),
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -136,7 +150,10 @@ class ServiceRecordTile extends StatelessWidget {
               ),
               if (onEdit != null || onDelete != null)
                 PopupMenuButton<String>(
-                  tooltip: 'Service record options',
+                  tooltip: HomeVaultAccessibility.contextualAction(
+                    'Service record actions',
+                    recordContext,
+                  ),
                   padding: EdgeInsets.zero,
                   onSelected: (value) {
                     if (value == 'edit') onEdit?.call();
@@ -144,21 +161,29 @@ class ServiceRecordTile extends StatelessWidget {
                   },
                   itemBuilder: (context) => [
                     if (onEdit != null)
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'edit',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.edit_outlined),
-                          title: Text('Edit'),
+                        child: Semantics(
+                          label: 'Edit service record for $recordContext',
+                          excludeSemantics: true,
+                          child: const ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Edit'),
+                          ),
                         ),
                       ),
                     if (onDelete != null)
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'delete',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.delete_outline),
-                          title: Text('Delete'),
+                        child: Semantics(
+                          label: 'Delete service record for $recordContext',
+                          excludeSemantics: true,
+                          child: const ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Delete'),
+                          ),
                         ),
                       ),
                   ],
@@ -178,6 +203,24 @@ class ServiceRecordTile extends StatelessWidget {
       ServiceStatus.completed => Icons.task_alt_outlined,
       ServiceStatus.cancelled => Icons.cancel_outlined,
     };
+  }
+
+  String _spokenDate(DateTime value) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${value.day} ${months[value.month - 1]} ${value.year}';
   }
 }
 
