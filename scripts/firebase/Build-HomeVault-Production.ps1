@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$ProductionProjectId,
     [string]$ProjectRoot = 'C:\Projects\homeVaultApp',
@@ -11,6 +11,46 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $DevelopmentProjectId = 'homevault-aamir-india-1701'
+$PrivacyPolicyUrl = 'https://homevault-prod-in-2026-a1.web.app/privacy'
+$TermsOfServiceUrl = 'https://homevault-prod-in-2026-a1.web.app/terms'
+$AccountDeletionUrl = 'https://homevault-prod-in-2026-a1.web.app/delete-account'
+$SupportEmail = 'support.homevault1@gmail.com'
+
+function Assert-HomeVaultProductionLegalUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "$Name is required for a production release."
+    }
+
+    try {
+        $uri = [System.Uri]$Value
+    } catch {
+        throw "$Name is not a valid URL: $Value"
+    }
+
+    $uriHost = $uri.Host.Trim().ToLowerInvariant()
+    if ($uri.Scheme -ne 'https' -or [string]::IsNullOrWhiteSpace($uriHost)) {
+        throw "$Name must be a public HTTPS URL."
+    }
+    if ($uriHost -in @('localhost', '127.0.0.1', '0.0.0.0') -or $uriHost.EndsWith('.local')) {
+        throw "$Name cannot use a local/development host."
+    }
+    if ($Value -match '(?i)placeholder|example\.(com|org|net)') {
+        throw "$Name still contains a placeholder/example value."
+    }
+}
+
+Assert-HomeVaultProductionLegalUrl -Name 'Privacy Policy URL' -Value $PrivacyPolicyUrl
+Assert-HomeVaultProductionLegalUrl -Name 'Terms of Service URL' -Value $TermsOfServiceUrl
+Assert-HomeVaultProductionLegalUrl -Name 'Account deletion URL' -Value $AccountDeletionUrl
+if ($SupportEmail -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$' -or
+    $SupportEmail -match '(?i)placeholder|example\.(com|org|net)') {
+    throw 'HOMEVAULT_SUPPORT_EMAIL must be a real public support email address.'
+}
 $ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
 $ConfigRoot = [System.IO.Path]::GetFullPath($ConfigRoot)
 
@@ -53,19 +93,31 @@ if ($hadAndroid) { Copy-Item $activeAndroid $androidBackup -Force }
 
 $previousExpected = $env:HOMEVAULT_FIREBASE_PROJECT_ID
 $previousAllow = $env:HOMEVAULT_ALLOW_NON_PROD_RELEASE
+$previousPrivacyPolicyUrl = $env:HOMEVAULT_PRIVACY_POLICY_URL
+$previousTermsOfServiceUrl = $env:HOMEVAULT_TERMS_OF_SERVICE_URL
+$previousAccountDeletionUrl = $env:HOMEVAULT_ACCOUNT_DELETION_URL
+$previousSupportEmail = $env:HOMEVAULT_SUPPORT_EMAIL
 
 try {
     Copy-Item $prodDart $activeDart -Force
     Copy-Item $prodAndroid $activeAndroid -Force
 
     $env:HOMEVAULT_FIREBASE_PROJECT_ID = $ProductionProjectId
+    $env:HOMEVAULT_PRIVACY_POLICY_URL = $PrivacyPolicyUrl
+    $env:HOMEVAULT_TERMS_OF_SERVICE_URL = $TermsOfServiceUrl
+    $env:HOMEVAULT_ACCOUNT_DELETION_URL = $AccountDeletionUrl
+    $env:HOMEVAULT_SUPPORT_EMAIL = $SupportEmail
     Remove-Item Env:HOMEVAULT_ALLOW_NON_PROD_RELEASE -ErrorAction SilentlyContinue
 
     $arguments = @(
         'build', $Artifact,
         '--release',
         '--dart-define=HOMEVAULT_ENV=production',
-        "--dart-define=HOMEVAULT_FIREBASE_PROJECT_ID=$ProductionProjectId"
+        "--dart-define=HOMEVAULT_FIREBASE_PROJECT_ID=$ProductionProjectId",
+        "--dart-define=HOMEVAULT_PRIVACY_POLICY_URL=$PrivacyPolicyUrl",
+        "--dart-define=HOMEVAULT_TERMS_OF_SERVICE_URL=$TermsOfServiceUrl",
+        "--dart-define=HOMEVAULT_ACCOUNT_DELETION_URL=$AccountDeletionUrl",
+        "--dart-define=HOMEVAULT_SUPPORT_EMAIL=$SupportEmail"
     )
     if ($BuildName) { $arguments += "--build-name=$BuildName" }
     if ($BuildNumber) { $arguments += "--build-number=$BuildNumber" }
@@ -119,8 +171,23 @@ try {
         $env:HOMEVAULT_ALLOW_NON_PROD_RELEASE = $previousAllow
     }
 
+    $legalEnvironment = @{
+        HOMEVAULT_PRIVACY_POLICY_URL = $previousPrivacyPolicyUrl
+        HOMEVAULT_TERMS_OF_SERVICE_URL = $previousTermsOfServiceUrl
+        HOMEVAULT_ACCOUNT_DELETION_URL = $previousAccountDeletionUrl
+        HOMEVAULT_SUPPORT_EMAIL = $previousSupportEmail
+    }
+    foreach ($entry in $legalEnvironment.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item "Env:$($entry.Key)" -ErrorAction SilentlyContinue
+        } else {
+            Set-Item "Env:$($entry.Key)" $entry.Value
+        }
+    }
+
     Remove-Item $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host 'Production Firebase configuration was restored to its external location only.'
 Write-Host 'Local development Firebase files were restored after the build.'
+

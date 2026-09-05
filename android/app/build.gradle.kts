@@ -1,5 +1,6 @@
 import groovy.json.JsonSlurper
 import java.io.FileInputStream
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -30,6 +31,57 @@ val expectedReleaseFirebaseProjectId =
 val allowNonProductionRelease =
     System.getenv("HOMEVAULT_ALLOW_NON_PROD_RELEASE")
         ?.equals("true", ignoreCase = true) == true
+val releasePrivacyPolicyUrl =
+    System.getenv("HOMEVAULT_PRIVACY_POLICY_URL")?.trim().orEmpty()
+val releaseTermsOfServiceUrl =
+    System.getenv("HOMEVAULT_TERMS_OF_SERVICE_URL")?.trim().orEmpty()
+val releaseAccountDeletionUrl =
+    System.getenv("HOMEVAULT_ACCOUNT_DELETION_URL")?.trim().orEmpty()
+val releaseSupportEmail =
+    System.getenv("HOMEVAULT_SUPPORT_EMAIL")?.trim().orEmpty()
+
+fun isSafePublicHttpsUrl(value: String): Boolean {
+    if (value.isBlank() ||
+        value.contains("placeholder", ignoreCase = true) ||
+        value.contains("example.com", ignoreCase = true) ||
+        value.contains("example.org", ignoreCase = true) ||
+        value.contains("example.net", ignoreCase = true)
+    ) {
+        return false
+    }
+
+    return try {
+        val uri = URI(value)
+        val host = uri.host?.trim()?.lowercase().orEmpty()
+        uri.scheme.equals("https", ignoreCase = true) &&
+            host.isNotBlank() &&
+            host != "localhost" &&
+            host != "127.0.0.1" &&
+            host != "0.0.0.0" &&
+            !host.endsWith(".local")
+    } catch (_: Exception) {
+        false
+    }
+}
+
+fun looksLikePublicSupportEmail(value: String): Boolean {
+    if (value.isBlank() ||
+        value.any { it.isWhitespace() } ||
+        value.contains("placeholder", ignoreCase = true) ||
+        value.contains("example.com", ignoreCase = true) ||
+        value.contains("example.org", ignoreCase = true) ||
+        value.contains("example.net", ignoreCase = true)
+    ) {
+        return false
+    }
+
+    val at = value.indexOf('@')
+    if (at <= 0 || at != value.lastIndexOf('@')) return false
+    val domain = value.substring(at + 1)
+    return domain.contains('.') &&
+        !domain.startsWith('.') &&
+        !domain.endsWith('.')
+}
 
 fun readGoogleServicesProjectId(file: java.io.File): String {
     if (!file.exists()) {
@@ -61,6 +113,31 @@ fun googleServicesContainsApplicationId(
 }
 
 if (releaseBuildRequested) {
+    if (!isSafePublicHttpsUrl(releasePrivacyPolicyUrl)) {
+        throw GradleException(
+            "Release Privacy Policy URL is missing or unsafe. Set " +
+            "HOMEVAULT_PRIVACY_POLICY_URL to the public HTTPS policy URL."
+        )
+    }
+    if (!isSafePublicHttpsUrl(releaseTermsOfServiceUrl)) {
+        throw GradleException(
+            "Release Terms of Service URL is missing or unsafe. Set " +
+            "HOMEVAULT_TERMS_OF_SERVICE_URL to the public HTTPS terms URL."
+        )
+    }
+    if (!isSafePublicHttpsUrl(releaseAccountDeletionUrl)) {
+        throw GradleException(
+            "Release account-deletion URL is missing or unsafe. Set " +
+            "HOMEVAULT_ACCOUNT_DELETION_URL to the public HTTPS deletion URL."
+        )
+    }
+    if (!looksLikePublicSupportEmail(releaseSupportEmail)) {
+        throw GradleException(
+            "Release support email is missing or invalid. Set " +
+            "HOMEVAULT_SUPPORT_EMAIL to the public HomeVault support address."
+        )
+    }
+
     val googleServicesFile = rootProject.file("app/google-services.json")
 
     if (expectedReleaseFirebaseProjectId.isBlank()) {

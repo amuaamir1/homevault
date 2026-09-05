@@ -10,6 +10,7 @@ import '../feedback/feedback_dashboard_screen.dart';
 import '../profile/profile_screen.dart';
 import '../reminders/reminder_center_screen.dart';
 import '../service/service_center_screen.dart';
+import 'about_legal_screen.dart';
 import 'account_data_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -125,7 +126,10 @@ class SettingsScreen extends StatelessWidget {
                           Text(profile!.phoneNumber),
                         ],
                         const SizedBox(height: 2),
-                        const Text('Beta ${AppBuildInfo.versionAndRelease}'),
+                        Text(
+                          'Version ${AppBuildInfo.version} '
+                          '(${AppBuildInfo.buildNumber})',
+                        ),
                       ],
                     ),
                   ),
@@ -219,6 +223,23 @@ class SettingsScreen extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (context) => const ServiceCenterScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  key: const ValueKey('settingsAboutLegalTile'),
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('About & Legal'),
+                  subtitle: const Text(
+                    'Privacy, terms, account deletion, support, and licenses.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const AboutLegalScreen(),
                       ),
                     );
                   },
