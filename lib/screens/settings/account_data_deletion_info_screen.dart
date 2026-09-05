@@ -103,7 +103,7 @@ class AccountDataDeletionInfoScreen extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.delete_forever_outlined),
-            label: const Text('Delete account in HomeVault'),
+            label: const Text('Go to Account & Data'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
