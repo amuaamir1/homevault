@@ -44,8 +44,8 @@ class AccountDeletionService {
         friendlyFirebaseError(
           error,
           fallback:
-              'HomeVault could not remove all cloud account data. Nothing '
-              'else was deleted. Please try again while online.',
+              'HomeVault could not finish removing all cloud account data. Some '
+              'data may already have been removed. Please retry while online.',
         ),
         error,
       );
