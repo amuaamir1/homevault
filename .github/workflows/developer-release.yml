@@ -486,6 +486,10 @@ jobs:
         env:
           HOMEVAULT_FIREBASE_PROJECT_ID: homevault-aamir-india-1701
           HOMEVAULT_ALLOW_NON_PROD_RELEASE: 'true'
+          HOMEVAULT_PRIVACY_POLICY_URL: https://homevault-prod-in-2026-a1.web.app/privacy
+          HOMEVAULT_TERMS_OF_SERVICE_URL: https://homevault-prod-in-2026-a1.web.app/terms
+          HOMEVAULT_ACCOUNT_DELETION_URL: https://homevault-prod-in-2026-a1.web.app/delete-account
+          HOMEVAULT_SUPPORT_EMAIL: support.homevault1@gmail.com
         run: |
           set -euo pipefail
           flutter build apk \
@@ -494,8 +498,11 @@ jobs:
             --build-number="$BUILD_NUMBER" \
             --dart-define=HOMEVAULT_ENV=development \
             --dart-define=HOMEVAULT_FIREBASE_PROJECT_ID="$HOMEVAULT_FIREBASE_PROJECT_ID" \
-            --dart-define=HOMEVAULT_ALLOW_NON_PROD_RELEASE=true
-
+            --dart-define=HOMEVAULT_ALLOW_NON_PROD_RELEASE=true \
+            --dart-define=HOMEVAULT_PRIVACY_POLICY_URL="$HOMEVAULT_PRIVACY_POLICY_URL" \
+            --dart-define=HOMEVAULT_TERMS_OF_SERVICE_URL="$HOMEVAULT_TERMS_OF_SERVICE_URL" \
+            --dart-define=HOMEVAULT_ACCOUNT_DELETION_URL="$HOMEVAULT_ACCOUNT_DELETION_URL" \
+            --dart-define=HOMEVAULT_SUPPORT_EMAIL="$HOMEVAULT_SUPPORT_EMAIL"
       - name: Verify signed APK
         shell: bash
         run: >-
