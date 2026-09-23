@@ -338,6 +338,7 @@ jobs:
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-6-sol
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
           effort: high
