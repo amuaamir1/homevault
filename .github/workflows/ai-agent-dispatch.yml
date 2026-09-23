@@ -1,0 +1,224 @@
+name: HomeVault AI Agent Dispatcher
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+      - labeled
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ai-agent-dispatch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Validate AI development task
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    if: >-
+      contains(github.event.issue.labels.*.name, 'ai-agent-task') &&
+      contains(github.event.issue.labels.*.name, 'needs-orchestration')
+
+    steps:
+      - name: Verify triggering actor has repository write access
+        id: trust
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const actor = context.actor;
+
+            try {
+              const { data } =
+                await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: actor,
+                });
+
+              const trustedPermissions = new Set([
+                'admin',
+                'maintain',
+                'write',
+              ]);
+
+              const trusted = trustedPermissions.has(data.permission);
+
+              core.info(
+                `Trigger actor ${actor} repository permission: ${data.permission}`
+              );
+
+              core.setOutput('trusted', trusted ? 'true' : 'false');
+
+              if (!trusted) {
+                core.warning(
+                  `Ignoring AI task trigger from ${actor}: repository write access is required.`
+                );
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                core.warning(
+                  `Ignoring AI task trigger from ${actor}: no repository write permission found.`
+                );
+                core.setOutput('trusted', 'false');
+                return;
+              }
+
+              throw error;
+            }
+
+      - name: Validate AI task structure
+        id: validate
+        if: steps.trust.outputs.trusted == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+
+            const requiredSections = [
+              '### Problem statement',
+              '### Expected user outcome',
+              '### Human approval boundaries',
+            ];
+
+            const missingSections =
+              requiredSections.filter((section) => !body.includes(section));
+
+            const validTitle =
+              typeof issue.title === 'string' &&
+              issue.title.startsWith('[AI TASK]');
+
+            const valid =
+              validTitle &&
+              missingSections.length === 0 &&
+              body.trim().length > 0;
+
+            core.setOutput('valid', valid ? 'true' : 'false');
+
+            if (!validTitle) {
+              core.warning(
+                'AI task title must begin with [AI TASK].'
+              );
+            }
+
+            if (missingSections.length > 0) {
+              core.warning(
+                `Missing required issue sections: ${missingSections.join(', ')}`
+              );
+            }
+
+      - name: Block malformed AI task
+        if: >-
+          steps.trust.outputs.trusted == 'true' &&
+          steps.validate.outputs.valid != 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const marker = '<!-- homevault-ai-dispatch-invalid:v1 -->';
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              labels: ['agent-blocked', 'needs-human'],
+            });
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                name: 'needs-orchestration',
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              }
+            );
+
+            if (!comments.some(
+              (comment) => comment.body?.includes(marker)
+            )) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `${marker}
+            ## HomeVault AI Dispatcher
+
+            **STATUS: BLOCKED**
+
+            This issue has the AI workflow labels but does not match the required HomeVault AI task structure.
+
+            Please correct the task and reapply the \`needs-orchestration\` label.
+
+            No AI agent was executed and no repository files were changed.`,
+              });
+            }
+
+      - name: Accept task for orchestration
+        if: >-
+          steps.trust.outputs.trusted == 'true' &&
+          steps.validate.outputs.valid == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const marker = '<!-- homevault-ai-dispatch:v1 -->';
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              }
+            );
+
+            if (comments.some(
+              (comment) => comment.body?.includes(marker)
+            )) {
+              core.info(
+                `Issue #${issueNumber} was already accepted by the dispatcher.`
+              );
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `${marker}
+            ## HomeVault AI Dispatcher
+
+            **STATUS: NEEDS_ORCHESTRATION**
+
+            Task \`GH-${issueNumber}\` passed dispatcher validation.
+
+            **Next owner:** \`app_orchestrator\`
+
+            The autonomous Codex execution stage is not enabled yet. This dispatcher currently validates trusted tasks only.
+
+            No application code has been changed.`,
+            });

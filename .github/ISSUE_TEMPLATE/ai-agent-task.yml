@@ -1,0 +1,121 @@
+name: AI Agent Development Task
+description: Submit a HomeVault problem or feature for the autonomous agent development workflow.
+title: "[AI TASK] "
+labels:
+  - ai-agent-task
+  - needs-orchestration
+body:
+
+  - type: markdown
+    attributes:
+      value: |
+        ## HomeVault AI Development Task
+
+        Describe the problem and desired outcome.
+
+        The HomeVault agent team will turn this into requirements,
+        architecture, implementation, QA, security review and code review.
+
+        Do not include passwords, secrets, API keys, signing credentials,
+        personal production data or private Firebase credentials.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem should HomeVault solve?
+      placeholder: |
+        Example:
+        Users should receive warranty reminders 30 days and 7 days before an appliance warranty expires.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_outcome
+    attributes:
+      label: Expected user outcome
+      description: What should the user be able to do or experience when this task is complete?
+      placeholder: |
+        Example:
+        A user with notifications enabled receives reminders at both milestones and tapping the reminder opens the appliance.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: Describe what HomeVault currently does, if known.
+      placeholder: |
+        Example:
+        HomeVault currently supports only one configurable warranty reminder.
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints or requirements
+      description: Add any rules the implementation must follow.
+      placeholder: |
+        Examples:
+        - Must remain backward compatible
+        - Must work offline
+        - Must not introduce a new dependency
+        - Must preserve existing Firebase data
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Add known success conditions. The requirements agent may refine these.
+      placeholder: |
+        - 30-day reminder is scheduled
+        - 7-day reminder is scheduled
+        - Updating warranty expiry reschedules both
+        - Deleting the appliance cancels both reminders
+
+  - type: textarea
+    id: affected_area
+    attributes:
+      label: Known affected areas
+      description: Mention screens, services, Firebase collections or workflows if known.
+      placeholder: |
+        Example:
+        Appliance details, reminder service, notification scheduling.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+      default: 1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: production_impact
+    attributes:
+      label: Could this affect production data, authentication, security or release configuration?
+      options:
+        - "No"
+        - "Possibly"
+        - "Yes"
+        - "Unsure"
+      default: 0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: human_boundaries
+    attributes:
+      label: Human approval boundaries
+      options:
+        - label: I understand agents must not publish to Google Play automatically.
+          required: true
+        - label: I understand destructive production operations require explicit human approval.
+          required: true
+        - label: I have not included credentials or secrets in this issue.
+          required: true
