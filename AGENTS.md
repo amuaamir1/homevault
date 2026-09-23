@@ -1,8 +1,8 @@
-﻿<!-- BEGIN ANDROID-AGENT-TEAM -->
+<!-- BEGIN ANDROID-AGENT-TEAM -->
 # Android / Flutter multi-agent delivery rules
 
 ## Purpose
-This repository uses a nine-agent software-delivery workflow. The primary Codex thread is the control plane. Use custom project agents under `.codex/agents/` when their specialty applies.
+This repository uses a ten-agent software-delivery workflow. The primary Codex thread is the control plane. Use custom project agents under `.codex/agents/` when their specialty applies.
 
 ## Available custom agents
 - `app_orchestrator`: task decomposition, sequencing, status, gates and handoffs.
@@ -13,6 +13,7 @@ This repository uses a nine-agent software-delivery workflow. The primary Codex 
 - `backend_data`: Firebase/API/database/storage/rules/integration implementation and migrations.
 - `qa_automation`: independent test planning, regression validation and failure reporting.
 - `security_privacy`: independent security, privacy, permission, auth and data-handling review.
+- `code_reviewer`: independent engineering review for correctness, architecture, regressions, async behavior, compatibility and test quality.
 - `release_play`: version/build/release readiness, AAB creation guidance and Google Play preparation.
 
 ## Mandatory workflow for non-trivial feature work
@@ -23,8 +24,10 @@ This repository uses a nine-agent software-delivery workflow. The primary Codex 
 5. Do not run multiple write-heavy agents against overlapping files at the same time. Serialize them unless ownership is clearly disjoint.
 6. After implementation, run `qa_automation` and `security_privacy` independently. They may run in parallel after writes stop.
 7. A QA or security FAIL routes back to the relevant implementation agent, then the failed gate must be rerun.
-8. Only after QA and security PASS may `release_play` declare release readiness.
-9. Production publication, irreversible migrations, destructive production data operations, and signing-key changes require explicit human approval.
+8. After QA and security PASS, run `code_reviewer` independently.
+9. A BLOCKER, CRITICAL, or MAJOR code-review finding routes back to the relevant implementation agent. Rerun the affected validation gates and `code_reviewer`.
+10. Only after QA, security, and code review PASS may `release_play` declare release readiness.
+11. Production publication, irreversible migrations, destructive production data operations, and signing-key changes require explicit human approval.
 
 ## Definition of Done
 A task is not DONE merely because it compiles. For applicable work, require evidence for:
@@ -37,6 +40,7 @@ A task is not DONE merely because it compiles. For applicable work, require evid
 - full `flutter test` PASS when practical
 - integration tests PASS when applicable and available
 - security/privacy review PASS
+- independent code review PASS
 - migration/backward-compatibility assessment complete
 - documentation/state updated
 - release-readiness assessment when the task is intended for release
@@ -97,4 +101,7 @@ When one agent finishes work for another, return:
 No agent may claim that an app has been published to Google Play unless an actual authorized publish action occurred. Preparing an AAB, store metadata or rollout plan is not publication. The final production release decision belongs to the human owner.
 
 <!-- END ANDROID-AGENT-TEAM -->
+
+
+
 
