@@ -5,3 +5,42 @@ enabled = true
 max_concurrent_threads_per_session = 6
 interrupt_message = true
 default_subagent_reasoning_effort = "high"
+[agents.app_orchestrator]
+description = "Coordinates HomeVault feature delivery, task decomposition, specialist delegation, quality gates, failure routing, and human handoffs."
+config_file = "agents/app_orchestrator.toml"
+
+[agents.product_requirements]
+description = "Defines HomeVault product requirements, user outcomes, scope, acceptance criteria, edge cases, assumptions, and dependencies before implementation."
+config_file = "agents/product_requirements.toml"
+
+[agents.ux_workflow]
+description = "Reviews and designs HomeVault user journeys, navigation, UI states, validation, accessibility, error recovery, and interaction consistency."
+config_file = "agents/ux_workflow.toml"
+
+[agents.mobile_architect]
+description = "Designs HomeVault Flutter and Android architecture, data flow, persistence, migrations, platform integrations, compatibility, and implementation boundaries."
+config_file = "agents/mobile_architect.toml"
+
+[agents.flutter_developer]
+description = "Implements approved HomeVault Flutter and Android changes with focused tests, validation, backward compatibility, and strict scope control."
+config_file = "agents/flutter_developer.toml"
+
+[agents.backend_data]
+description = "Implements HomeVault Firebase, Firestore, Storage, API, data-model, synchronization, rules, and safe migration changes."
+config_file = "agents/backend_data.toml"
+
+[agents.qa_automation]
+description = "Independently validates HomeVault features, acceptance criteria, regression risk and edge cases, and may add focused automated tests without repairing production code."
+config_file = "agents/qa_automation.toml"
+
+[agents.security_privacy]
+description = "Independently reviews HomeVault authentication, authorization, Firebase rules, Storage, sensitive data, privacy, permissions, secrets and security risks."
+config_file = "agents/security_privacy.toml"
+
+[agents.code_reviewer]
+description = "Independently reviews HomeVault implementations for correctness, architecture, regressions, async behavior, error handling, compatibility, and meaningful test coverage."
+config_file = "agents/code_reviewer.toml"
+
+[agents.release_play]
+description = "Assesses HomeVault Android and Google Play release readiness after QA, security, code review, validation, signing, environment, and artifact gates."
+config_file = "agents/release_play.toml"

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position=0, Mandatory=$true)]
-    [ValidateSet('team','orchestrator','requirements','ux','architect','developer','backend','qa','security','release','list')]
+    [ValidateSet('team','orchestrator','requirements','ux','architect','developer','backend','qa','security','reviewer','release','list')]
     [string]$Role,
 
     [Parameter(Position=1, ValueFromRemainingArguments=$true)]
@@ -26,6 +26,7 @@ if ($Role -eq 'list') {
     Write-Host '  backend       Firebase/API/data implementation'
     Write-Host '  qa            Independent QA/test automation'
     Write-Host '  security      Independent security/privacy review'
+    Write-Host '  reviewer      Independent engineering code review'
     Write-Host '  release       Android/Google Play release readiness'
     exit 0
 }
@@ -56,6 +57,7 @@ $agentMap = @{
     backend      = 'backend_data'
     qa           = 'qa_automation'
     security     = 'security_privacy'
+    reviewer     = 'code_reviewer'
     release      = 'release_play'
 }
 
@@ -65,7 +67,7 @@ Use the project multi-agent delivery workflow in AGENTS.md for this task:
 
 $taskText
 
-Act as the primary control plane. First spawn app_orchestrator to bound the task and gates. Then use product_requirements, ux_workflow, and mobile_architect as applicable before allowing implementation. Wait for those results and consolidate the approved behavior. Use flutter_developer and backend_data only for their assigned approved scope; do not allow overlapping write-heavy agents to edit the same files concurrently. After implementation stops, have qa_automation and security_privacy independently validate the result. A failed gate must route back to the relevant implementation owner and then be rerun. Only after QA and security pass should release_play assess release readiness. Do not publish to Google Play or perform irreversible production operations. Update concise .agent-state records for material work. Return the final gate status and next human action.
+Act as the primary control plane. First spawn app_orchestrator to bound the task and gates. Then use product_requirements, ux_workflow, and mobile_architect as applicable before allowing implementation. Wait for those results and consolidate the approved behavior. Use flutter_developer and backend_data only for their assigned approved scope; do not allow overlapping write-heavy agents to edit the same files concurrently. After implementation stops, have qa_automation and security_privacy independently validate the result. A failed QA or security gate must route back to the relevant implementation owner and then be rerun. After QA and security pass, have code_reviewer independently review correctness, architecture, regressions, async behavior, error handling, backward compatibility, and test quality. Blocking code-review findings must route back to the relevant implementation owner and the affected gates must be rerun. Only after QA, security, and code review all pass should release_play assess release readiness. Do not publish to Google Play or perform irreversible production operations. Update concise .agent-state records for material work. Return the final gate status and next human action.
 "@
     & codex exec --sandbox workspace-write $prompt
     exit $LASTEXITCODE
@@ -85,3 +87,6 @@ Return the specialist's final handoff, including STATUS and exact next action.
 
 & codex exec --sandbox $sandbox $prompt
 exit $LASTEXITCODE
+
+
+
