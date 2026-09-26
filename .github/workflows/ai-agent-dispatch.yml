@@ -753,7 +753,17 @@ jobs:
                 orchestration.body
               );
 
-            if (!orchestrationPassed) {
+            const productRequirementsSelected =
+              orchestration?.body &&
+              /\*\*NEXT_OWNER:\*\*\s*product_requirements\b/i.test(
+                orchestration.body
+              );
+
+            const handoffReady =
+              orchestrationPassed &&
+              productRequirementsSelected;
+
+            if (!handoffReady) {
               core.setOutput(
                 'handoff_ready',
                 'false'
@@ -889,17 +899,21 @@ jobs:
             Analyze the requested behavior against the existing
             HomeVault application.
 
-            For this task specifically inspect relevant existing
-            behavior such as:
+            Inspect repository behavior that is relevant to the
+            current issue before defining requirements.
 
-            - warranty reminder settings
-            - warranty expiry calculation
-            - local notification scheduling
-            - notification identifiers
-            - notification tap/navigation behavior
-            - appliance update behavior
-            - appliance deletion behavior
-            - stored appliance compatibility
+            Depending on the task, relevant behavior may include:
+
+            - existing settings and preferences
+            - domain calculations and business rules
+            - persistence and stored-data behavior
+            - notifications or background scheduling
+            - navigation and user workflows
+            - create, update and deletion behavior
+            - authentication or permissions
+            - backward compatibility
+
+            Only inspect areas that are relevant to the current task.
 
             Do not implement anything.
 
