@@ -327,13 +327,89 @@ jobs:
       needs.dispatch.outputs.valid == 'true'
 
     steps:
+      - name: Check orchestration idempotency
+        id: orchestration_guard
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issueNumber =
+              context.payload.issue.number;
+
+            const marker =
+              '<!-- homevault-codex-orchestration:v1 -->';
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              }
+            );
+
+            const completed = comments.some(
+              (comment) =>
+                comment.user?.login ===
+                  'github-actions[bot]' &&
+                comment.body?.includes(marker)
+            );
+
+            core.setOutput(
+              'should_run',
+              completed ? 'false' : 'true'
+            );
+
+            if (completed) {
+              core.notice(
+                `Issue #${issueNumber} already has completed orchestration. Skipping Codex.`
+              );
+            }
+
+      - name: Normalize already-orchestrated task
+        if: steps.orchestration_guard.outputs.should_run == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issueNumber =
+              context.payload.issue.number;
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              labels: ['agent-in-progress'],
+            });
+
+            for (const label of [
+              'needs-orchestration',
+              'agent-blocked',
+            ]) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }
+
       - name: Checkout trusted HomeVault source
+        if: steps.orchestration_guard.outputs.should_run == 'true'
         uses: actions/checkout@v4
         with:
           ref: develop/feature-developmenet
           persist-credentials: false
 
       - name: Run HomeVault app orchestrator
+        if: steps.orchestration_guard.outputs.should_run == 'true'
         id: codex
         uses: openai/codex-action@v1
         with:
@@ -450,7 +526,7 @@ jobs:
             ----- END UNTRUSTED ISSUE DATA -----
 
       - name: Publish orchestration result
-        if: success()
+        if: steps.orchestration_guard.outputs.should_run == 'true' && success()
         uses: actions/github-script@v7
         env:
           CODEX_RESULT: ${{ steps.codex.outputs.final-message }}
@@ -512,7 +588,7 @@ jobs:
             }
 
       - name: Advance successful orchestration state
-        if: success()
+        if: steps.orchestration_guard.outputs.should_run == 'true' && success()
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
@@ -554,7 +630,7 @@ jobs:
             }
 
       - name: Mark Codex orchestration failure
-        if: failure()
+        if: steps.orchestration_guard.outputs.should_run == 'true' && failure()
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
