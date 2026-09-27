@@ -18,7 +18,7 @@ void main() {
         warrantyExpiryDate: DateTime(2026, 9, 2),
         warrantyProvider: 'Daikin Care',
         warrantyReminderEnabled: true,
-        warrantyReminderDaysBefore: 30,
+        warrantyReminderDaysBefore: 60,
         createdAt: DateTime(2026, 1, 1),
       ),
       Appliance(
@@ -55,10 +55,20 @@ void main() {
     final reminders = service.build(appliances, now: now);
 
     expect(reminders, hasLength(3));
+    expect(
+      reminders.where((item) => item.type == HomeVaultReminderType.warranty),
+      hasLength(1),
+    );
     expect(reminders[0].type, HomeVaultReminderType.maintenance);
     expect(reminders[0].daysUntilDueAt(now), -2);
     expect(reminders[1].type, HomeVaultReminderType.warranty);
     expect(reminders[1].daysUntilDueAt(now), 10);
+    expect(
+      reminders[1].warrantyOccurrences.map(
+        (occurrence) => occurrence.milestone.daysBefore,
+      ),
+      [30, 7],
+    );
     expect(reminders[2].type, HomeVaultReminderType.amc);
     expect(reminders[2].daysUntilDueAt(now), 60);
 

@@ -8,7 +8,10 @@ import 'package:homevault/services/homevault_export_service.dart';
 void main() {
   final createdAt = DateTime(2026, 8, 24);
 
-  Appliance appliance() => Appliance(
+  Appliance appliance({
+    bool warrantyReminderEnabled = false,
+    int warrantyReminderDaysBefore = 30,
+  }) => Appliance(
     id: 'ac-1',
     name: 'Kitchen AC / Main',
     category: 'Air Conditioner',
@@ -17,6 +20,8 @@ void main() {
     serialNumber: 'SERIAL-001',
     purchaseDate: DateTime(2026, 1, 10),
     warrantyExpiryDate: DateTime(2028, 1, 10),
+    warrantyReminderEnabled: warrantyReminderEnabled,
+    warrantyReminderDaysBefore: warrantyReminderDaysBefore,
     serviceRecords: [
       ServiceRecord(
         id: 'service-1',
@@ -63,6 +68,39 @@ void main() {
     },
   );
 
+  test(
+    'warranty report distinguishes the active fixed policy from legacy days',
+    () {
+      const service = HomeVaultExportService();
+      final artifact = service.createWarrantyReportArtifact([
+        appliance(
+          warrantyReminderEnabled: true,
+          warrantyReminderDaysBefore: 90,
+        ),
+      ]);
+      final lines = utf8.decode(artifact.bytes).split('\r\n');
+      final headers = _simpleCsvColumns(lines[0]);
+      final values = _simpleCsvColumns(lines[1]);
+
+      final activePolicyIndex = headers.indexOf(
+        'Active warranty reminder policy',
+      );
+      final legacyDaysIndex = headers.indexOf(
+        'Legacy reminder days before (inactive)',
+      );
+
+      expect(activePolicyIndex, greaterThanOrEqualTo(0));
+      expect(legacyDaysIndex, greaterThanOrEqualTo(0));
+      expect(
+        values[activePolicyIndex],
+        'Fixed 30-day and 7-day reminders before warranty expiry',
+      );
+      expect(values[activePolicyIndex], isNot(contains('90')));
+      expect(values[legacyDaysIndex], '90');
+      expect(headers[legacyDaysIndex], contains('inactive'));
+    },
+  );
+
   test('PDF artifact has a safe filename and valid PDF signature', () async {
     const service = HomeVaultExportService();
 
@@ -77,4 +115,13 @@ void main() {
     expect(artifact.bytes.length, greaterThan(100));
     expect(ascii.decode(artifact.bytes.take(4).toList()), '%PDF');
   });
+}
+
+List<String> _simpleCsvColumns(String row) {
+  final withoutBom = row.replaceFirst('\uFEFF', '');
+  return withoutBom
+      .substring(1, withoutBom.length - 1)
+      .split('","')
+      .map((value) => value.replaceAll('""', '"'))
+      .toList(growable: false);
 }

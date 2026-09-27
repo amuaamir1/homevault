@@ -6,6 +6,43 @@ enum WarrantyStatus { active, expiringSoon, expired, notProvided }
 
 enum WarrantyDurationUnit { months, years }
 
+class WarrantyReminderMilestone {
+  const WarrantyReminderMilestone._(this.daysBefore);
+
+  static const thirtyDays = WarrantyReminderMilestone._(30);
+  static const sevenDays = WarrantyReminderMilestone._(7);
+
+  static const values = [thirtyDays, sevenDays];
+
+  final int daysBefore;
+
+  static WarrantyReminderMilestone fromDays(int days) {
+    return values.firstWhere(
+      (milestone) => milestone.daysBefore == days,
+      orElse: () => throw ArgumentError.value(
+        days,
+        'days',
+        'Only the 30-day and 7-day warranty milestones are supported.',
+      ),
+    );
+  }
+}
+
+class WarrantyReminderOccurrence {
+  const WarrantyReminderOccurrence({
+    required this.milestone,
+    required this.expiryDate,
+    required this.candidateDate,
+  });
+
+  final WarrantyReminderMilestone milestone;
+  final DateTime expiryDate;
+  final DateTime candidateDate;
+
+  bool isEligibleAt(DateTime currentInstant) =>
+      candidateDate.isAfter(currentInstant);
+}
+
 extension WarrantyDurationUnitLabel on WarrantyDurationUnit {
   String get label => switch (this) {
     WarrantyDurationUnit.months => 'Month',
@@ -469,20 +506,54 @@ class Appliance {
     return expiry.difference(today).inDays;
   }
 
-  DateTime? warrantyReminderDateAt({int hour = 9}) {
+  List<WarrantyReminderOccurrence> warrantyReminderOccurrences({int hour = 9}) {
     final expiryDate = effectiveWarrantyExpiryDate;
+    if (expiryDate == null) return const [];
+
+    return List.unmodifiable(
+      WarrantyReminderMilestone.values.map((milestone) {
+        final candidateDay = DateTime(
+          expiryDate.year,
+          expiryDate.month,
+          expiryDate.day - milestone.daysBefore,
+        );
+        return WarrantyReminderOccurrence(
+          milestone: milestone,
+          expiryDate: expiryDate,
+          candidateDate: DateTime(
+            candidateDay.year,
+            candidateDay.month,
+            candidateDay.day,
+            hour,
+          ),
+        );
+      }),
+    );
+  }
+
+  List<WarrantyReminderOccurrence> eligibleWarrantyReminderOccurrencesAt(
+    DateTime currentInstant, {
+    int hour = 9,
+  }) {
+    if (warrantyMarkedExpired || !warrantyReminderEnabled) return const [];
+    return warrantyReminderOccurrences(hour: hour)
+        .where((occurrence) => occurrence.isEligibleAt(currentInstant))
+        .toList(growable: false);
+  }
+
+  /// Compatibility helper for callers that need one fixed milestone date.
+  DateTime? warrantyReminderDateAt({int hour = 9, int milestoneDays = 30}) {
+    final milestone = WarrantyReminderMilestone.fromDays(milestoneDays);
+    final occurrences = warrantyReminderOccurrences(hour: hour);
     if (warrantyMarkedExpired ||
         !warrantyReminderEnabled ||
-        expiryDate == null) {
+        occurrences.isEmpty) {
       return null;
     }
 
-    return DateTime(
-      expiryDate.year,
-      expiryDate.month,
-      expiryDate.day,
-      hour,
-    ).subtract(Duration(days: warrantyReminderDaysBefore));
+    return occurrences
+        .firstWhere((occurrence) => occurrence.milestone == milestone)
+        .candidateDate;
   }
 
   Appliance withServiceRecord(ServiceRecord record) {

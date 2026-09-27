@@ -90,9 +90,10 @@ class ReminderCenterService {
         applianceName: appliance.name,
         dueDate: expiry,
         notificationEnabled: appliance.warrantyReminderEnabled,
-        reminderDaysBefore: appliance.warrantyReminderDaysBefore,
+        reminderDaysBefore: WarrantyReminderMilestone.thirtyDays.daysBefore,
         provider: _warrantyProvider(appliance, expiry),
         notificationDate: appliance.warrantyReminderDateAt(),
+        warrantyOccurrences: appliance.warrantyReminderOccurrences(),
       ),
     );
   }

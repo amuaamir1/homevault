@@ -243,7 +243,7 @@ void main() {
     reloadedStore.dispose();
   });
 
-  test('extended warranty drives status and reminder date', () {
+  test('extended warranty drives fixed ordered reminder milestones', () {
     final appliance = Appliance(
       id: 'tv-1',
       name: 'Living room TV',
@@ -252,7 +252,7 @@ void main() {
       warrantyExpiryDate: DateTime(2026, 1, 1),
       extendedWarrantyExpiryDate: DateTime(2027, 3, 31),
       warrantyReminderEnabled: true,
-      warrantyReminderDaysBefore: 30,
+      warrantyReminderDaysBefore: 60,
       createdAt: DateTime(2026, 1, 1),
     );
 
@@ -261,7 +261,44 @@ void main() {
       WarrantyStatus.active,
     );
     expect(appliance.warrantyReminderDateAt(), DateTime(2027, 3, 1, 9));
+    expect(
+      appliance.warrantyReminderDateAt(milestoneDays: 7),
+      DateTime(2027, 3, 24, 9),
+    );
+    expect(
+      appliance.warrantyReminderOccurrences().map(
+        (occurrence) => occurrence.milestone.daysBefore,
+      ),
+      [30, 7],
+    );
     expect(appliance.warrantyDaysRemainingAt(DateTime(2027, 3, 1)), 30);
+  });
+
+  test('legacy warranty offset survives JSON and rebuild paths unchanged', () {
+    final appliance = Appliance(
+      id: 'legacy-offset',
+      name: 'Legacy appliance',
+      category: 'Other',
+      brand: '',
+      warrantyExpiryDate: DateTime(2027, 1, 31),
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 14,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    final jsonRestored = Appliance.fromJson(appliance.toJson());
+    final rebuilt = jsonRestored.withServiceRecord(
+      ServiceRecord(
+        id: 'service',
+        serviceDate: DateTime(2026, 1, 2),
+        createdAt: DateTime(2026, 1, 2),
+      ),
+    );
+
+    expect(jsonRestored.warrantyReminderDaysBefore, 14);
+    expect(rebuilt.warrantyReminderDaysBefore, 14);
+    expect(rebuilt.toJson()['warrantyReminderDaysBefore'], 14);
+    expect(rebuilt.warrantyReminderDateAt(), DateTime(2027, 1, 1, 9));
   });
 
   test(

@@ -325,7 +325,7 @@ void main() {
       warrantyProvider: 'Daikin Care',
       warrantyExpiryDate: DateTime(2028, 8, 1),
       warrantyReminderEnabled: true,
-      warrantyReminderDaysBefore: 30,
+      warrantyReminderDaysBefore: 90,
       createdAt: DateTime(2026, 8, 1),
     );
 
@@ -363,7 +363,10 @@ void main() {
 
     expect(find.text('Family room AC'), findsOneWidget);
     expect(find.textContaining('Daikin Care'), findsOneWidget);
-    expect(find.textContaining('30 days before expiry'), findsOneWidget);
+    expect(
+      find.textContaining('30 days and 7 days before effective expiry'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('service center shows saved maintenance history', (tester) async {
