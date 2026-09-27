@@ -2,7 +2,8 @@ param(
     [switch]$DryRun,
     [int]$MaxIssues = 10,
     [int]$IssueNumber = 0,
-    [switch]$RunOrchestrator
+    [switch]$RunOrchestrator,
+    [switch]$RunPlanningChain
 )
 
 $ErrorActionPreference = 'Stop'
