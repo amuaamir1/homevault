@@ -91,8 +91,20 @@ $taskText
 
 Act as the primary control plane. First spawn app_orchestrator to bound the task and gates. Then use product_requirements, ux_workflow, and mobile_architect as applicable before allowing implementation. Wait for those results and consolidate the approved behavior. Use flutter_developer and backend_data only for their assigned approved scope; do not allow overlapping write-heavy agents to edit the same files concurrently. After implementation stops, have qa_automation and security_privacy independently validate the result. A failed QA or security gate must route back to the relevant implementation owner and then be rerun. After QA and security pass, have code_reviewer independently review correctness, architecture, regressions, async behavior, error handling, backward compatibility, and test quality. Blocking code-review findings must route back to the relevant implementation owner and the affected gates must be rerun. Only after QA, security, and code review all pass should release_play assess release readiness. Do not publish to Google Play or perform irreversible production operations. Update concise .agent-state records for material work. Return the final gate status and next human action.
 "@
-    $prompt | & codex exec -m $CodexModel --sandbox workspace-write -
-    exit $LASTEXITCODE
+    $previousCodexErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+
+    $codexExitCode = 1
+
+    try {
+        $prompt | & codex exec -m $CodexModel --sandbox workspace-write -
+        $codexExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousCodexErrorActionPreference
+    }
+
+    exit $codexExitCode
 }
 
 $agentName = $agentMap[$Role]
@@ -107,8 +119,20 @@ $taskText
 Return the specialist's final handoff, including STATUS and exact next action.
 "@
 
-$prompt | & codex exec -m $CodexModel --sandbox $sandbox -
-exit $LASTEXITCODE
+$previousCodexErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+
+$codexExitCode = 1
+
+try {
+    $prompt | & codex exec -m $CodexModel --sandbox $sandbox -
+    $codexExitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousCodexErrorActionPreference
+}
+
+exit $codexExitCode
 
 
 
