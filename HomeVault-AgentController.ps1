@@ -2401,15 +2401,9 @@ if ($finalPlanningStatus -ne 'PLANNING_APPROVED') {
     Fail "Implementation cannot start because planning is not approved."
 }
 
-if ($runFlutterDeveloper -ne 'YES') {
-    Write-Host "Planning determined that flutter_developer is not required."
-    Write-Host "No implementation agent will be started."
-    exit 0
-}
-
 #
-# Phase 5A supports exactly one write-capable implementation owner.
-# Multi-writer workflows are intentionally deferred to a later phase.
+# Phase 5A supports Flutter-only implementation.
+# Any task requiring backend_data must stop for human review.
 #
 
 if ($runBackendData -eq 'YES') {
@@ -2420,14 +2414,47 @@ if ($runBackendData -eq 'YES') {
 
     Add-PlanningFailureCheckpoint `
         -Gate 'IMPLEMENTATION' `
-        -Message 'Phase 5A does not support simultaneous Flutter and backend/data implementation.'
+        -Message 'Phase 5A supports Flutter-only implementation and cannot execute backend_data.'
 
-    Fail "Phase 5A requires human review when backend_data is also required."
+    Fail "Phase 5A requires human review because backend_data is required."
+}
+
+if ($runFlutterDeveloper -ne 'YES') {
+    Write-Host "Planning determined that flutter_developer is not required."
+    Write-Host "No implementation agent will be started."
+    exit 0
 }
 
 #
 # Protect controller-owned task state from the implementation agent.
 #
+
+#
+# Protect sensitive local configuration that Git intentionally ignores.
+#
+
+$protectedLocalPaths = @(
+    'lib/firebase_options.dart',
+    'android/app/google-services.json',
+    'android/key.properties'
+)
+
+$protectedLocalHashesBefore = @{}
+
+foreach ($protectedPath in $protectedLocalPaths) {
+
+    if (Test-Path $protectedPath) {
+
+        $protectedLocalHashesBefore[$protectedPath] = (
+            Get-FileHash `
+                -Path $protectedPath `
+                -Algorithm SHA256
+        ).Hash
+    }
+    else {
+        $protectedLocalHashesBefore[$protectedPath] = '__MISSING__'
+    }
+}
 
 $stateHashBeforeImplementation = $null
 
@@ -2568,6 +2595,42 @@ finally {
 $implementationOutput = (
     $implementationLines -join [Environment]::NewLine
 )
+
+#
+# Verify ignored sensitive local configuration was not modified.
+#
+
+foreach ($protectedPath in $protectedLocalPaths) {
+
+    $afterHash = '__MISSING__'
+
+    if (Test-Path $protectedPath) {
+
+        $afterHash = (
+            Get-FileHash `
+                -Path $protectedPath `
+                -Algorithm SHA256
+        ).Hash
+    }
+
+    if ($afterHash -ne $protectedLocalHashesBefore[$protectedPath]) {
+
+        & gh issue edit $selected.number `
+            --repo $Repo `
+            --add-label "agent-blocked"
+
+        Add-PlanningFailureCheckpoint `
+            -Gate 'PROTECTED_LOCAL_CONFIGURATION' `
+            -Message "flutter_developer modified protected local configuration: $protectedPath"
+
+        Fail "flutter_developer modified protected local configuration: $protectedPath"
+    }
+}
+
+#
+# Process flutter_developer execution result only after protected
+# local configuration integrity has been verified.
+#
 
 if ($implementationExitCode -ne 0) {
 
@@ -2864,7 +2927,547 @@ foreach ($changedPath in $implementationSourceChanges) {
 Write-Host ""
 Write-Host "Updated state file: $taskStatePath"
 Write-Host ""
-Write-Host "Phase 5A stops here intentionally."
+Write-Host "Phase 5A implementation gate completed."
+Write-Host "No QA agent was started."
+Write-Host "No security agent was started."
+Write-Host "No commit was created."
+Write-Host "No push was performed."
+Write-Host "No pull request was created."
+Write-Host "No deployment was performed."
+
+#
+# Phase 5B - Deterministic local validation
+#
+
+if (-not $RunImplementation) {
+    exit 0
+}
+
+if ($implementationStatus -ne 'PASS') {
+    Write-Host ""
+    Write-Host "Implementation did not pass; deterministic validation will not run."
+    exit 0
+}
+
+Section "Phase 5 Local Validation"
+
+Write-Host "Validation is controlled by the host controller."
+Write-Host "The implementation agent does not certify its own work."
+Write-Host ""
+
+function Invoke-LocalValidationCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Executable,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    Section "Validate: $Name"
+
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+
+    $exitCode = 1
+
+    try {
+
+        & $Executable @Arguments 2>&1 |
+            ForEach-Object {
+                Write-Host $_.ToString()
+            }
+
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+
+        $ErrorActionPreference = $previousPreference
+    }
+
+    Write-Host ""
+    Write-Host "$Name exit code: $exitCode"
+
+    return $exitCode
+}
+
+function Stop-LocalValidation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Step,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'LOCAL_VALIDATION' `
+        -Message "$Step failed: $Message"
+
+    $failedValidationState = @"
+# $taskId
+
+## GitHub Issue
+
+- Number: $($selected.number)
+- Title: $($selected.title)
+- URL: $($selected.url)
+
+## Status
+
+BLOCKED
+
+## Stage
+
+LOCAL_VALIDATION
+
+## Branch
+
+$taskBranch
+
+## Gates
+
+- Orchestration: PASS
+- Requirements: PASS
+- UX: $uxStatus
+- Architecture: $architectureStatus
+- Planning Reconciliation: PASS
+- Implementation: PASS
+- Local Validation: BLOCKED
+- QA: NOT_RUN
+- Security: NOT_RUN
+- Code Review: NOT_RUN
+- Release Readiness: NOT_RUN
+- Human Review: NOT_RUN
+
+## Repair Attempts
+
+0 / 3
+
+## Current Owner
+
+human
+
+## Planning Reconciliation
+
+- Status: PASS
+- Summary: $planningSummary
+
+## Implementation Handoff
+
+- Status: PASS
+- Summary: $implementationSummary
+- Exact next action: $implementationNextAction
+
+## Implementation Changed Paths
+
+$implementationPathsMarkdown
+
+## Local Validation Failure
+
+- Step: $Step
+- Message: $Message
+
+## Validation
+
+Controller preparation: PASS
+Planning chain: PASS
+flutter_developer: PASS
+Write-boundary enforcement: PASS
+Local Flutter validation: BLOCKED
+
+## Blockers
+
+$Message
+
+## Next Action
+
+Inspect the failed deterministic validation gate before continuing.
+"@
+
+    Set-Content `
+        -Path $taskStatePath `
+        -Value $failedValidationState `
+        -Encoding UTF8
+
+    Fail "Local validation failed at '$Step': $Message"
+}
+
+#
+# Resolve deterministic validation tools.
+#
+
+$pythonTool = Get-Command python -ErrorAction SilentlyContinue
+
+if ($null -eq $pythonTool) {
+    $pythonTool = Get-Command python3 -ErrorAction SilentlyContinue
+}
+
+if ($null -eq $pythonTool) {
+    Stop-LocalValidation `
+        -Step 'Tool preflight' `
+        -Message 'Python was not found.'
+}
+
+$flutterTool = Get-Command flutter -ErrorAction SilentlyContinue
+
+if ($null -eq $flutterTool) {
+    Stop-LocalValidation `
+        -Step 'Tool preflight' `
+        -Message 'Flutter was not found.'
+}
+
+$dartTool = Get-Command dart -ErrorAction SilentlyContinue
+
+if ($null -eq $dartTool) {
+    Stop-LocalValidation `
+        -Step 'Tool preflight' `
+        -Message 'Dart was not found.'
+}
+
+Write-Host "Python:  $($pythonTool.Source)"
+Write-Host "Flutter: $($flutterTool.Source)"
+Write-Host "Dart:    $($dartTool.Source)"
+Write-Host ""
+
+#
+# HomeVault Firebase configuration is intentionally not tracked.
+# Full local analyze/test requires the developer's local copy.
+#
+
+if (-not (Test-Path '.\lib\firebase_options.dart')) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "needs-human"
+
+    Stop-LocalValidation `
+        -Step 'Firebase configuration preflight' `
+        -Message 'lib/firebase_options.dart is not available locally. Restore the normal gitignored development Firebase configuration before rerunning validation.'
+}
+
+#
+# 1. Repository source-safety gate.
+#
+
+$sourceSafetyExit = Invoke-LocalValidationCommand `
+    -Name 'HomeVault source safety' `
+    -Executable $pythonTool.Source `
+    -Arguments @(
+        'scripts/ci/homevault_ci.py',
+        'validate-source'
+    )
+
+if ($sourceSafetyExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Source safety' `
+        -Message "homevault_ci.py validate-source exited with code $sourceSafetyExit."
+}
+
+#
+# 2. Resolve dependencies without upgrades.
+#
+
+$pubGetExit = Invoke-LocalValidationCommand `
+    -Name 'Flutter dependency resolution' `
+    -Executable $flutterTool.Source `
+    -Arguments @(
+        'pub',
+        'get'
+    )
+
+if ($pubGetExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Dependency resolution' `
+        -Message "flutter pub get exited with code $pubGetExit."
+}
+
+#
+# 3. Verify deterministic lockfile.
+#
+
+$lockExit = Invoke-LocalValidationCommand `
+    -Name 'HomeVault lockfile' `
+    -Executable $pythonTool.Source `
+    -Arguments @(
+        'scripts/ci/homevault_ci.py',
+        'validate-lock'
+    )
+
+if ($lockExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Lockfile' `
+        -Message "Lockfile validation exited with code $lockExit."
+}
+
+#
+# 4. Verify repository formatting exactly as development CI does.
+# --output=none guarantees validation does not rewrite source.
+#
+
+$formatExit = Invoke-LocalValidationCommand `
+    -Name 'Dart formatting' `
+    -Executable $dartTool.Source `
+    -Arguments @(
+        'format',
+        '--output=none',
+        '--set-exit-if-changed',
+        'lib',
+        'test'
+    )
+
+if ($formatExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Formatting' `
+        -Message "dart format verification exited with code $formatExit."
+}
+
+#
+# 5. Analyze the complete Flutter application.
+#
+
+$analyzeExit = Invoke-LocalValidationCommand `
+    -Name 'Flutter analyze' `
+    -Executable $flutterTool.Source `
+    -Arguments @(
+        'analyze'
+    )
+
+if ($analyzeExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Flutter analyze' `
+        -Message "flutter analyze exited with code $analyzeExit."
+}
+
+#
+# 6. Run focused tests changed or added by flutter_developer.
+#
+
+$focusedTestPaths = @(
+    $implementationSourceChanges |
+        Where-Object {
+            $_ -match '^test/.+_test\.dart$' -and
+            (Test-Path $_)
+        }
+)
+
+$focusedTestsStatus = 'SKIPPED'
+
+if ($focusedTestPaths.Count -gt 0) {
+
+    Write-Host ""
+    Write-Host "Focused tests:"
+
+    foreach ($focusedPath in $focusedTestPaths) {
+        Write-Host "  $focusedPath"
+    }
+
+    $focusedArguments = @('test') + $focusedTestPaths
+
+    $focusedTestsExit = Invoke-LocalValidationCommand `
+        -Name 'Focused Flutter tests' `
+        -Executable $flutterTool.Source `
+        -Arguments $focusedArguments
+
+    if ($focusedTestsExit -ne 0) {
+        Stop-LocalValidation `
+            -Step 'Focused tests' `
+            -Message "Focused Flutter tests exited with code $focusedTestsExit."
+    }
+
+    $focusedTestsStatus = 'PASS'
+}
+else {
+
+    Write-Host ""
+    Write-Host "No changed *_test.dart files were found."
+    Write-Host "Focused-test gate: SKIPPED"
+    Write-Host "The full Flutter test suite will still run."
+}
+
+#
+# 7. Full Flutter regression suite.
+#
+
+$fullTestsExit = Invoke-LocalValidationCommand `
+    -Name 'Full Flutter test suite' `
+    -Executable $flutterTool.Source `
+    -Arguments @(
+        'test'
+    )
+
+if ($fullTestsExit -ne 0) {
+    Stop-LocalValidation `
+        -Step 'Full Flutter tests' `
+        -Message "flutter test exited with code $fullTestsExit."
+}
+
+#
+# 8. Re-check filesystem boundary after deterministic tooling.
+#
+
+$postValidationTracked = @(
+    & git diff HEAD --name-only --
+)
+
+$postValidationUntracked = @(
+    & git ls-files --others --exclude-standard
+)
+
+$postValidationPaths = @(
+    $postValidationTracked
+    $postValidationUntracked
+) |
+    Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_)
+    } |
+    ForEach-Object {
+        ($_ -replace '\\','/').Trim()
+    } |
+    Sort-Object -Unique
+
+$postValidationSourcePaths = @(
+    $postValidationPaths |
+        Where-Object {
+            $_ -ne $taskStateNormalized
+        }
+)
+
+$postValidationForbidden = @(
+    $postValidationSourcePaths |
+        Where-Object {
+            $_ -notmatch '^(lib|test)/'
+        }
+)
+
+if ($postValidationForbidden.Count -gt 0) {
+
+    $forbiddenAfterValidation = (
+        $postValidationForbidden -join ', '
+    )
+
+    Stop-LocalValidation `
+        -Step 'Post-validation write boundary' `
+        -Message "Files outside lib/** and test/** changed during implementation/validation: $forbiddenAfterValidation"
+}
+
+#
+# Persist successful deterministic validation.
+#
+
+$validatedImplementationState = @"
+# $taskId
+
+## GitHub Issue
+
+- Number: $($selected.number)
+- Title: $($selected.title)
+- URL: $($selected.url)
+
+## Status
+
+IMPLEMENTATION_VALIDATED
+
+## Stage
+
+QA_READY
+
+## Branch
+
+$taskBranch
+
+## Gates
+
+- Orchestration: PASS
+- Requirements: PASS
+- UX: $uxStatus
+- Architecture: $architectureStatus
+- Planning Reconciliation: PASS
+- Implementation: PASS
+- Local Validation: PASS
+- QA: NOT_RUN
+- Security: NOT_RUN
+- Code Review: NOT_RUN
+- Release Readiness: NOT_RUN
+- Human Review: NOT_RUN
+
+## Repair Attempts
+
+0 / 3
+
+## Current Owner
+
+qa_automation
+
+## Planning Reconciliation
+
+- Status: PASS
+- Run Flutter Developer: $runFlutterDeveloper
+- Run Backend Data: $runBackendData
+- Summary: $planningSummary
+- Exact next action: $planningNextAction
+
+## Implementation Handoff
+
+- Status: PASS
+- Summary: $implementationSummary
+- Exact next action: $implementationNextAction
+
+## Implementation Changed Paths
+
+$implementationPathsMarkdown
+
+## Local Validation
+
+- Source safety: PASS
+- Dependency resolution: PASS
+- Lockfile reproducibility: PASS
+- Formatting: PASS
+- Flutter analyze: PASS
+- Focused tests: $focusedTestsStatus
+- Full Flutter tests: PASS
+- Post-validation write boundary: PASS
+
+## Validation
+
+Controller preparation: PASS
+Planning chain: PASS
+flutter_developer: PASS
+Write-boundary enforcement: PASS
+Local Flutter validation: PASS
+
+## Blockers
+
+None.
+
+## Next Action
+
+Run independent QA and security validation in a later controller phase.
+"@
+
+Set-Content `
+    -Path $taskStatePath `
+    -Value $validatedImplementationState `
+    -Encoding UTF8
+
+Section "Local Validation Complete"
+
+Write-Host "Status:                IMPLEMENTATION_VALIDATED"
+Write-Host "Local Validation:      PASS"
+Write-Host "Focused Tests:         $focusedTestsStatus"
+Write-Host "Next stage:            QA_READY"
+Write-Host "Next owner:            qa_automation"
+Write-Host ""
+Write-Host "Updated state file: $taskStatePath"
+Write-Host ""
+Write-Host "Phase 5 stops here intentionally."
 Write-Host "No QA agent was started."
 Write-Host "No security agent was started."
 Write-Host "No commit was created."
