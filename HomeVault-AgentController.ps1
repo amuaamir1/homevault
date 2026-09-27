@@ -709,12 +709,12 @@ Review the orchestrator failure before continuing automation.
 # Extract the machine-readable handoff.
 #
 
-$handoffMatch = [regex]::Match(
+$handoffMatches = [regex]::Matches(
     $agentOutput,
     '(?s)HOMEVAULT_HANDOFF_BEGIN\s*(.*?)\s*HOMEVAULT_HANDOFF_END'
 )
 
-if (-not $handoffMatch.Success) {
+if ($handoffMatches.Count -eq 0) {
 
     Section "Invalid Orchestrator Handoff"
 
@@ -790,6 +790,10 @@ Review the orchestrator output before continuing automation.
 
     exit 1
 }
+
+# Codex may echo the prompt, including the example handoff contract.
+# The final matching block is the specialist's completed handoff.
+$handoffMatch = $handoffMatches[$handoffMatches.Count - 1]
 
 $handoff = $handoffMatch.Groups[1].Value.Trim()
 
