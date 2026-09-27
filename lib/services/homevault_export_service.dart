@@ -133,7 +133,8 @@ class HomeVaultExportService {
         'Claim number',
         'Claim status',
         'Reminder enabled',
-        'Reminder days before',
+        'Legacy reminder days before (inactive)',
+        'Active warranty reminder policy',
       ],
       ...appliances.map(
         (appliance) => <Object?>[
@@ -169,6 +170,9 @@ class HomeVaultExportService {
           appliance.warrantyClaimStatus.label,
           appliance.warrantyReminderEnabled ? 'Yes' : 'No',
           appliance.warrantyReminderDaysBefore,
+          appliance.warrantyReminderEnabled
+              ? 'Fixed 30-day and 7-day reminders before warranty expiry'
+              : 'Disabled',
         ],
       ),
     ];

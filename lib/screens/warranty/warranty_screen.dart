@@ -439,7 +439,7 @@ class _WarrantyCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Reminder ${appliance.warrantyReminderDaysBefore} days before expiry',
+                        'Reminders 30 days and 7 days before effective expiry',
                       ),
                     ),
                   ],

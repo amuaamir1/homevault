@@ -1,3 +1,5 @@
+import 'appliance.dart';
+
 enum HomeVaultReminderType { warranty, amc, maintenance }
 
 extension HomeVaultReminderTypeDetails on HomeVaultReminderType {
@@ -22,6 +24,7 @@ class HomeVaultReminder {
     this.provider = '',
     this.serviceRecordId,
     this.notificationDate,
+    this.warrantyOccurrences = const [],
   });
 
   final String id;
@@ -34,6 +37,7 @@ class HomeVaultReminder {
   final String provider;
   final String? serviceRecordId;
   final DateTime? notificationDate;
+  final List<WarrantyReminderOccurrence> warrantyOccurrences;
 
   int daysUntilDueAt(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);

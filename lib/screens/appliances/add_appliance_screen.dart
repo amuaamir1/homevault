@@ -85,7 +85,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
   WarrantyClaimStatus _warrantyClaimStatus = WarrantyClaimStatus.none;
   bool _warrantyMarkedExpired = false;
   bool _warrantyReminderEnabled = false;
-  int _warrantyReminderDaysBefore = 30;
+  int _legacyWarrantyReminderDaysBefore = 30;
   bool _amcReminderEnabled = false;
   int _amcReminderDaysBefore = 30;
   StoredDocument? _appliancePhotoDocument;
@@ -193,10 +193,8 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
         appliance?.warrantyClaimStatus ?? WarrantyClaimStatus.none;
     _warrantyMarkedExpired = appliance?.warrantyMarkedExpired ?? false;
     _warrantyReminderEnabled = appliance?.warrantyReminderEnabled ?? false;
-    final savedReminderDays = appliance?.warrantyReminderDaysBefore ?? 30;
-    _warrantyReminderDaysBefore = _reminderOptions.contains(savedReminderDays)
-        ? savedReminderDays
-        : 30;
+    _legacyWarrantyReminderDaysBefore =
+        appliance?.warrantyReminderDaysBefore ?? 30;
     _amcReminderEnabled = appliance?.amcReminderEnabled ?? false;
     final savedAmcReminderDays = appliance?.amcReminderDaysBefore ?? 30;
     _amcReminderDaysBefore = _reminderOptions.contains(savedAmcReminderDays)
@@ -896,7 +894,7 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
       warrantyClaimStatus: _warrantyClaimStatus,
       warrantyMarkedExpired: _warrantyMarkedExpired,
       warrantyReminderEnabled: _warrantyReminderEnabled,
-      warrantyReminderDaysBefore: _warrantyReminderDaysBefore,
+      warrantyReminderDaysBefore: _legacyWarrantyReminderDaysBefore,
       invoiceDocument: _invoiceDocument?.copyWith(
         type: DocumentType.invoice,
         title: 'Invoice',
@@ -1598,10 +1596,11 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
               ),
               const SizedBox(height: 4),
               SwitchListTile.adaptive(
+                key: const ValueKey('warrantyReminderSwitch'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Warranty reminder'),
                 subtitle: const Text(
-                  'Schedule a local notification before the effective expiry date.',
+                  'Schedule local reminders 30 days and 7 days before the effective expiry date.',
                 ),
                 value: _warrantyReminderEnabled,
                 onChanged: _warrantyMarkedExpired
@@ -1610,29 +1609,6 @@ class _AddApplianceScreenState extends State<AddApplianceScreen> {
                         setState(() => _warrantyReminderEnabled = value);
                       },
               ),
-              if (_warrantyReminderEnabled) ...[
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  initialValue: _warrantyReminderDaysBefore,
-                  decoration: const InputDecoration(
-                    labelText: 'Remind me before expiry',
-                    prefixIcon: Icon(Icons.notifications_active_outlined),
-                  ),
-                  items: _reminderOptions
-                      .map(
-                        (days) => DropdownMenuItem(
-                          value: days,
-                          child: Text('$days days before'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _warrantyReminderDaysBefore = value);
-                    }
-                  },
-                ),
-              ],
               const SizedBox(height: 24),
               const _SectionTitle(
                 title: 'Customer support',

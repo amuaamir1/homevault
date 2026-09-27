@@ -79,7 +79,7 @@ class _ReminderCenterScreenState extends State<ReminderCenterScreen> {
       final pending = await _notifications.pendingReminderCount();
       if (!mounted) return;
       setState(() {
-        if (enabled != null) _notificationsEnabled = enabled;
+        _notificationsEnabled = enabled;
         _pendingCount = pending;
         _notificationStatusLoading = false;
       });
@@ -260,6 +260,7 @@ class _ReminderCenterScreenState extends State<ReminderCenterScreen> {
                   child: _ReminderCard(
                     reminder: reminder,
                     now: _now,
+                    deviceNotificationsEnabled: _notificationsEnabled,
                     onTap: () => _openAppliance(reminder.applianceId),
                   ),
                 ),
@@ -511,11 +512,13 @@ class _ReminderCard extends StatelessWidget {
   const _ReminderCard({
     required this.reminder,
     required this.now,
+    required this.deviceNotificationsEnabled,
     required this.onTap,
   });
 
   final HomeVaultReminder reminder;
   final DateTime now;
+  final bool? deviceNotificationsEnabled;
   final VoidCallback onTap;
 
   @override
@@ -586,32 +589,45 @@ class _ReminderCard extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          reminder.notificationEnabled
-                              ? Icons.notifications_active_outlined
-                              : Icons.notifications_off_outlined,
-                          size: 17,
-                          color: reminder.notificationEnabled
-                              ? AppColors.success
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                    if (reminder.type == HomeVaultReminderType.warranty)
+                      ...reminder.warrantyOccurrences.map(
+                        (occurrence) => _WarrantyMilestoneRow(
+                          occurrence: occurrence,
+                          reminderEnabled: reminder.notificationEnabled,
+                          deviceNotificationsEnabled:
+                              deviceNotificationsEnabled,
+                          now: now,
                         ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _notificationLabel(reminder, now),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
+                      )
+                    else
+                      Row(
+                        children: [
+                          Icon(
+                            reminder.notificationEnabled
+                                ? Icons.notifications_active_outlined
+                                : Icons.notifications_off_outlined,
+                            size: 17,
+                            color: reminder.notificationEnabled
+                                ? AppColors.success
+                                : Theme.of(
                                     context,
                                   ).colorScheme.onSurfaceVariant,
-                                ),
                           ),
-                        ),
-                        const Icon(Icons.chevron_right, size: 20),
-                      ],
-                    ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _notificationLabel(reminder, now),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, size: 20),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -678,6 +694,62 @@ class _ReminderCard extends StatelessWidget {
       'Dec',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+}
+
+class _WarrantyMilestoneRow extends StatelessWidget {
+  const _WarrantyMilestoneRow({
+    required this.occurrence,
+    required this.reminderEnabled,
+    required this.deviceNotificationsEnabled,
+    required this.now,
+  });
+
+  final WarrantyReminderOccurrence occurrence;
+  final bool reminderEnabled;
+  final bool? deviceNotificationsEnabled;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = occurrence.milestone.daysBefore;
+    return Padding(
+      key: ValueKey('warrantyMilestone_$days'),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$days-day warranty reminder',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _status,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _status {
+    if (!occurrence.candidateDate.isAfter(now)) {
+      return 'Skipped — milestone passed';
+    }
+    if (!reminderEnabled) {
+      return 'Off — warranty reminders not enabled';
+    }
+    final planned = '${_ReminderCard._date(occurrence.candidateDate)}, 9:00 AM';
+    return switch (deviceNotificationsEnabled) {
+      false => 'Device notifications off — planned for $planned',
+      true => 'Scheduled for $planned',
+      null => 'Configured for $planned',
+    };
   }
 }
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:homevault/models/appliance.dart';
+import 'package:homevault/models/appliance_form_result.dart';
 import 'package:homevault/models/service_record.dart';
+import 'package:homevault/screens/appliances/add_appliance_screen.dart';
 import 'package:homevault/screens/reminders/reminder_center_screen.dart';
 import 'package:homevault/services/appliance_repository.dart';
 import 'package:homevault/services/reminder_notification_gateway.dart';
@@ -45,6 +47,8 @@ Future<ApplianceStore> _pumpReminderCenter(
   required List<Appliance> appliances,
   required _FakeReminderNotificationGateway gateway,
   Future<void> Function(String applianceId)? onOpenAppliance,
+  DateTime? now,
+  double textScaleFactor = 1,
 }) async {
   await tester.binding.setSurfaceSize(const Size(900, 1800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -59,8 +63,14 @@ Future<ApplianceStore> _pumpReminderCenter(
     AppScope(
       applianceStore: store,
       child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScaleFactor)),
+          child: child!,
+        ),
         home: ReminderCenterScreen(
-          now: DateTime(2026, 8, 23, 12),
+          now: now ?? DateTime(2026, 8, 23, 12),
           notificationGateway: gateway,
           onOpenAppliance: onOpenAppliance,
         ),
@@ -135,6 +145,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Bedroom AC'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reminderCard_warranty|ac')),
+      findsOneWidget,
+    );
+    expect(find.text('30-day warranty reminder'), findsOneWidget);
+    expect(find.text('7-day warranty reminder'), findsOneWidget);
+    expect(find.text('Skipped — milestone passed'), findsOneWidget);
+    expect(find.text('Scheduled for 26 Aug 2026, 9:00 AM'), findsOneWidget);
     expect(find.text('Water purifier'), findsOneWidget);
     expect(find.text('Washing machine'), findsOneWidget);
     expect(find.textContaining('Warranty •'), findsOneWidget);
@@ -183,6 +201,10 @@ void main() {
     );
 
     expect(find.text('Notifications are off'), findsOneWidget);
+    expect(
+      find.text('Device notifications off — planned for 26 Aug 2026, 9:00 AM'),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey('enableReminderNotificationsButton')),
@@ -192,5 +214,156 @@ void main() {
     expect(gateway.permissionRequests, 1);
     expect(find.text('Notifications enabled'), findsOneWidget);
     expect(find.text('Reminder notifications are enabled.'), findsOneWidget);
+  });
+
+  testWidgets('permission denial does not disable appliance opt-in', (
+    tester,
+  ) async {
+    final gateway = _FakeReminderNotificationGateway(
+      enabled: false,
+      permissionResult: false,
+    );
+    final store = await _pumpReminderCenter(
+      tester,
+      gateway: gateway,
+      appliances: [
+        Appliance(
+          id: 'ac',
+          name: 'Bedroom AC',
+          category: 'Air Conditioner',
+          brand: 'Daikin',
+          warrantyExpiryDate: DateTime(2026, 9, 2),
+          warrantyReminderEnabled: true,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('enableReminderNotificationsButton')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.permissionRequests, 1);
+    expect(store.appliances.single.warrantyReminderEnabled, isTrue);
+    expect(find.text('Notifications are still off.'), findsNothing);
+    expect(find.textContaining('Notifications are still off'), findsOneWidget);
+  });
+
+  testWidgets('shows disabled, unknown, and passed milestone text states', (
+    tester,
+  ) async {
+    final appliance = Appliance(
+      id: 'ac',
+      name: 'Bedroom AC',
+      category: 'Air Conditioner',
+      brand: 'Daikin',
+      warrantyExpiryDate: DateTime(2026, 10, 30),
+      warrantyReminderEnabled: false,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    await _pumpReminderCenter(
+      tester,
+      gateway: _FakeReminderNotificationGateway(enabled: null),
+      appliances: [appliance],
+      now: DateTime(2026, 9, 1),
+    );
+    expect(find.text('Off — warranty reminders not enabled'), findsNWidgets(2));
+
+    await _pumpReminderCenter(
+      tester,
+      gateway: _FakeReminderNotificationGateway(enabled: null),
+      appliances: [
+        Appliance.fromJson({
+          ...appliance.toJson(),
+          'warrantyReminderEnabled': true,
+        }),
+      ],
+      now: DateTime(2026, 9, 30, 9),
+    );
+    expect(find.text('Skipped — milestone passed'), findsOneWidget);
+    expect(find.text('Configured for 23 Oct 2026, 9:00 AM'), findsOneWidget);
+  });
+
+  testWidgets('keeps both milestone rows after both candidates pass', (
+    tester,
+  ) async {
+    await _pumpReminderCenter(
+      tester,
+      gateway: _FakeReminderNotificationGateway(enabled: true),
+      appliances: [
+        Appliance(
+          id: 'ac',
+          name: 'Bedroom AC',
+          category: 'Air Conditioner',
+          brand: 'Daikin',
+          warrantyExpiryDate: DateTime(2026, 9, 2),
+          warrantyReminderEnabled: true,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      ],
+      now: DateTime(2026, 8, 27),
+      textScaleFactor: 2,
+    );
+
+    expect(find.text('30-day warranty reminder'), findsOneWidget);
+    expect(find.text('7-day warranty reminder'), findsOneWidget);
+    expect(find.text('Skipped — milestone passed'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('edit form hides legacy offset and preserves its value', (
+    tester,
+  ) async {
+    ApplianceFormResult? result;
+    final appliance = Appliance(
+      id: 'legacy',
+      name: 'Legacy appliance',
+      category: 'Other',
+      brand: 'Brand',
+      warrantyExpiryDate: DateTime(2028, 1, 1),
+      warrantyReminderEnabled: true,
+      warrantyReminderDaysBefore: 90,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await Navigator.of(context).push<ApplianceFormResult>(
+                MaterialPageRoute(
+                  builder: (_) => AddApplianceScreen(appliance: appliance),
+                ),
+              );
+            },
+            child: const Text('Edit'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('warrantyReminderSwitch')),
+      find.byType(Scrollable).first,
+      const Offset(0, -500),
+    );
+    expect(find.text('Remind me before expiry'), findsNothing);
+    expect(find.textContaining('30 days and 7 days before'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Save changes'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    expect(result?.appliance.warrantyReminderDaysBefore, 90);
+    expect(result?.appliance.warrantyReminderEnabled, isTrue);
   });
 }

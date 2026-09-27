@@ -736,7 +736,7 @@ class ApplianceDetailsScreen extends StatelessWidget {
               _DetailRow(
                 label: 'Reminder',
                 value: appliance.warrantyReminderEnabled
-                    ? '${appliance.warrantyReminderDaysBefore} days before expiry'
+                    ? '30 days and 7 days before effective expiry'
                     : 'Disabled',
               ),
               if (appliance.hasExtendedWarranty) ...[
