@@ -1434,14 +1434,12 @@ Write-Host "Next action:      $requirementsNextAction"
 Write-Host ""
 Write-Host "Updated state file: $taskStatePath"
 Write-Host ""
-Write-Host "Phase 4A stops here intentionally."
-Write-Host "No UX agent was started."
-Write-Host "No architecture agent was started."
-Write-Host "No implementation agent was started."
-Write-Host "No application source code was modified."
-Write-Host "No commit was created."
-Write-Host "No push was performed."
-Write-Host "No pull request was created."
+if ($requirementsStatus -eq 'PASS') {
+    Write-Host "Requirements gate passed; continuing Phase 4 planning chain."
+}
+else {
+    Write-Host "Requirements gate did not pass; planning chain will stop."
+}
 
 
 #
@@ -1452,6 +1450,42 @@ if ($requirementsStatus -ne 'PASS') {
     Write-Host ""
     Write-Host "Planning chain stopped because requirements did not pass."
     exit 0
+}
+
+#
+# Persistent planning failure checkpoint
+#
+
+function Add-PlanningFailureCheckpoint {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Gate,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    if (
+        [string]::IsNullOrWhiteSpace($taskStatePath) -or
+        -not (Test-Path $taskStatePath)
+    ) {
+        return
+    }
+
+    $checkpoint = @(
+        "",
+        "## Controller Failure Checkpoint",
+        "",
+        "- Gate: $Gate",
+        "- Status: BLOCKED",
+        "- Message: $Message",
+        "- Action: Human review required before automated continuation."
+    )
+
+    Add-Content `
+        -Path $taskStatePath `
+        -Value $checkpoint `
+        -Encoding UTF8
 }
 
 function Invoke-PlanningRole {
@@ -1649,7 +1683,11 @@ Do not use multiline values inside the handoff block.
             --repo $Repo `
             --add-label "agent-blocked"
 
-        Fail "ux_workflow exited with code $($uxResult.ExitCode)."
+        Add-PlanningFailureCheckpoint `
+    -Gate 'UX' `
+    -Message "ux_workflow exited with code $($uxResult.ExitCode)."
+
+Fail "ux_workflow exited with code $($uxResult.ExitCode)."
     }
 
     $uxHandoff = Get-FinalPlanningHandoff `
@@ -1875,7 +1913,11 @@ Do not use multiline values inside the handoff block.
             --repo $Repo `
             --add-label "agent-blocked"
 
-        Fail "mobile_architect exited with code $($architectureResult.ExitCode)."
+        Add-PlanningFailureCheckpoint `
+    -Gate 'ARCHITECTURE' `
+    -Message "mobile_architect exited with code $($architectureResult.ExitCode)."
+
+Fail "mobile_architect exited with code $($architectureResult.ExitCode)."
     }
 
     $architectureHandoff = Get-FinalPlanningHandoff `
@@ -2104,7 +2146,11 @@ if ($reconciliationResult.ExitCode -ne 0) {
         --repo $Repo `
         --add-label "agent-blocked"
 
-    Fail "Planning reconciliation exited with code $($reconciliationResult.ExitCode)."
+    Add-PlanningFailureCheckpoint `
+    -Gate 'PLANNING_RECONCILIATION' `
+    -Message "Planning reconciliation exited with code $($reconciliationResult.ExitCode)."
+
+Fail "Planning reconciliation exited with code $($reconciliationResult.ExitCode)."
 }
 
 $planningHandoff = Get-FinalPlanningHandoff `
