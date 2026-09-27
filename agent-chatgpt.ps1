@@ -110,7 +110,37 @@ Act as the primary control plane. First spawn app_orchestrator to bound the task
 $agentName = $agentMap[$Role]
 $sandbox = if ($Role -in @('developer','backend','qa','release')) { 'workspace-write' } else { 'read-only' }
 
-$prompt = @"
+if ($Role -eq 'developer') {
+    $prompt = @"
+Act directly as the HomeVault Flutter implementation specialist for this run.
+
+Do NOT spawn, delegate to, or wait for another agent.
+Do NOT use a nested flutter_developer session.
+
+Read and follow:
+- AGENTS.md
+- .codex/agents/flutter_developer.toml
+
+The task supplied below is authoritative for:
+- approved scope
+- write boundaries
+- safety restrictions
+- final machine-readable handoff format
+
+If the specialist TOML contains a legacy or different response format, the task's requested final handoff format takes precedence.
+
+Execute the approved implementation yourself inside the current Codex process.
+
+Do not create another Codex agent or sub-agent for this implementation.
+
+Task:
+$taskText
+
+Return the exact final handoff required by the task.
+"@
+}
+else {
+    $prompt = @"
 Spawn the project custom agent named '$agentName' for the following task and wait for it to finish. Use that specialist as the primary owner of this run. Follow AGENTS.md. Do not substitute a different role unless the requested agent explicitly reports that another specialist is required.
 
 Task:
@@ -118,6 +148,7 @@ $taskText
 
 Return the specialist's final handoff, including STATUS and exact next action.
 "@
+}
 
 $previousCodexErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
