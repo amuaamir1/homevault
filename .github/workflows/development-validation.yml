@@ -12,9 +12,11 @@ run-name: Validate ${{ github.ref_name }} @ ${{ github.sha }}
       - 'feat/**'
       - 'fix/**'
       - 'hotfix/**'
+      - 'ai/**'
   pull_request:
     branches:
       - develop
+      - 'develop/**'
       - main
   workflow_dispatch:
 
