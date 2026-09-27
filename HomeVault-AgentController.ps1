@@ -3,7 +3,8 @@ param(
     [int]$MaxIssues = 10,
     [int]$IssueNumber = 0,
     [switch]$RunOrchestrator,
-    [switch]$RunPlanningChain
+    [switch]$RunPlanningChain,
+    [switch]$RunImplementation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -473,7 +474,7 @@ Write-Host "No pull request was created."
 # Phase 3 - Optional read-only app_orchestrator
 #
 
-if (-not $RunOrchestrator -and -not $RunPlanningChain) {
+if (-not $RunOrchestrator -and -not $RunPlanningChain -and -not $RunImplementation) {
     Write-Host ""
     Write-Host "Orchestrator execution was not requested."
     Write-Host "Use -RunOrchestrator when you are ready for the read-only planning gate."
@@ -1010,7 +1011,7 @@ Write-Host "No pull request was created."
 # Phase 4A - Product requirements planning gate
 #
 
-if (-not $RunPlanningChain) {
+if (-not $RunPlanningChain -and -not $RunImplementation) {
     exit 0
 }
 
@@ -2374,3 +2375,499 @@ Write-Host "No application source code was modified by the planning chain."
 Write-Host "No commit was created."
 Write-Host "No push was performed."
 Write-Host "No pull request was created."
+
+
+#
+# Phase 5A - Controlled Flutter implementation gate
+#
+
+if (-not $RunImplementation) {
+    exit 0
+}
+
+Section "Phase 5 Implementation Gate"
+
+Write-Host "Planning status:         $finalPlanningStatus"
+Write-Host "Reconciliation:          $planningReconciliationStatus"
+Write-Host "Run Flutter Developer:   $runFlutterDeveloper"
+Write-Host "Run Backend Data:        $runBackendData"
+Write-Host ""
+
+if ($planningReconciliationStatus -ne 'PASS') {
+    Fail "Implementation cannot start because planning reconciliation did not pass."
+}
+
+if ($finalPlanningStatus -ne 'PLANNING_APPROVED') {
+    Fail "Implementation cannot start because planning is not approved."
+}
+
+if ($runFlutterDeveloper -ne 'YES') {
+    Write-Host "Planning determined that flutter_developer is not required."
+    Write-Host "No implementation agent will be started."
+    exit 0
+}
+
+#
+# Phase 5A supports exactly one write-capable implementation owner.
+# Multi-writer workflows are intentionally deferred to a later phase.
+#
+
+if ($runBackendData -eq 'YES') {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "needs-human"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'IMPLEMENTATION' `
+        -Message 'Phase 5A does not support simultaneous Flutter and backend/data implementation.'
+
+    Fail "Phase 5A requires human review when backend_data is also required."
+}
+
+#
+# Protect controller-owned task state from the implementation agent.
+#
+
+$stateHashBeforeImplementation = $null
+
+if (Test-Path $taskStatePath) {
+
+    $stateHashBeforeImplementation = (
+        Get-FileHash `
+            -Path $taskStatePath `
+            -Algorithm SHA256
+    ).Hash
+}
+
+$implementationTask = @"
+Flutter implementation for $taskId.
+
+Planning has completed successfully.
+
+This is the first controlled write-capable implementation gate.
+
+GitHub issue:
+Number: $($issueDetail.number)
+Title: $($issueDetail.title)
+URL: $($issueDetail.url)
+
+Authoritative planning result:
+$planningSummary
+
+Exact implementation action:
+$planningNextAction
+
+Requirements:
+$requirementsSummary
+
+UX:
+Status: $uxStatus
+Summary: $uxSummary
+
+Architecture:
+Status: $architectureStatus
+Summary: $architectureSummary
+
+ISSUE BODY START
+$issueBody
+ISSUE BODY END
+
+Follow AGENTS.md.
+
+Implement only the approved Flutter/client-side scope.
+
+PHASE 5A WRITE BOUNDARY:
+
+You may modify only:
+- lib/**
+- test/**
+
+You must NOT modify:
+- .agent-state/**
+- .github/**
+- .codex/**
+- AGENTS.md
+- HomeVault-AgentController.ps1
+- agent-chatgpt.ps1
+- pubspec.yaml
+- pubspec.lock
+- Firebase configuration
+- Firestore rules
+- Storage rules
+- signing material
+- release metadata
+- CI/CD workflows
+- production state
+
+Do not add dependencies.
+
+Do not commit.
+Do not push.
+Do not create a pull request.
+Do not merge.
+Do not deploy Firebase.
+Do not publish to Google Play.
+Do not modify production data.
+
+Implement the smallest change satisfying the reconciled planning contract.
+
+Add or update focused tests under test/** where required.
+
+Do not run QA, security review, release operations, or repository publication.
+
+At completion, end with exactly:
+
+HOMEVAULT_IMPLEMENTATION_HANDOFF_BEGIN
+STATUS: PASS
+SUMMARY: One concise single-line implementation summary.
+EXACT_NEXT_ACTION: One concise single-line validation action.
+HOMEVAULT_IMPLEMENTATION_HANDOFF_END
+
+Allowed STATUS values:
+PASS
+BLOCKED
+NEEDS_HUMAN
+
+Do not use multiline values inside the handoff block.
+"@
+
+Section "Run flutter_developer"
+
+Write-Host "Model:   $CodexModel"
+Write-Host "Sandbox: workspace-write"
+Write-Host "Task:    $taskId"
+Write-Host ""
+
+$implementationLines = New-Object 'System.Collections.Generic.List[string]'
+
+$previousImplementationPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+
+$implementationExitCode = 1
+
+try {
+
+    & $agentRunner developer $implementationTask 2>&1 |
+        ForEach-Object {
+
+            $line = $_.ToString()
+
+            Write-Host $line
+
+            [void]$implementationLines.Add($line)
+        }
+
+    $implementationExitCode = $LASTEXITCODE
+}
+finally {
+
+    $ErrorActionPreference = $previousImplementationPreference
+}
+
+$implementationOutput = (
+    $implementationLines -join [Environment]::NewLine
+)
+
+if ($implementationExitCode -ne 0) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'IMPLEMENTATION' `
+        -Message "flutter_developer exited with code $implementationExitCode."
+
+    Fail "flutter_developer exited with code $implementationExitCode."
+}
+
+#
+# Verify controller-owned task state was not modified by flutter_developer.
+#
+
+if (-not (Test-Path $taskStatePath)) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Fail "flutter_developer removed the controller-owned task-state file."
+}
+
+$stateHashAfterImplementation = (
+    Get-FileHash `
+        -Path $taskStatePath `
+        -Algorithm SHA256
+).Hash
+
+if (
+    $null -ne $stateHashBeforeImplementation -and
+    $stateHashBeforeImplementation -ne $stateHashAfterImplementation
+) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Fail "flutter_developer modified the controller-owned task-state file."
+}
+
+#
+# Enforce Phase 5A filesystem write boundary.
+#
+
+$trackedImplementationChanges = @(
+    & git diff HEAD --name-only --
+)
+
+$untrackedImplementationChanges = @(
+    & git ls-files --others --exclude-standard
+)
+
+$implementationChangedPaths = @(
+    $trackedImplementationChanges
+    $untrackedImplementationChanges
+) |
+    Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_)
+    } |
+    ForEach-Object {
+        ($_ -replace '\\','/').Trim()
+    } |
+    Sort-Object -Unique
+
+$taskStateNormalized = (
+    ($taskStatePath -replace '\\','/') -replace '^\./',''
+)
+
+$implementationSourceChanges = @(
+    $implementationChangedPaths |
+        Where-Object {
+            $_ -ne $taskStateNormalized
+        }
+)
+
+$forbiddenImplementationChanges = @(
+    $implementationSourceChanges |
+        Where-Object {
+            $_ -notmatch '^(lib|test)/'
+        }
+)
+
+if ($forbiddenImplementationChanges.Count -gt 0) {
+
+    $forbiddenList = (
+        $forbiddenImplementationChanges -join ', '
+    )
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'IMPLEMENTATION_WRITE_BOUNDARY' `
+        -Message "Forbidden implementation paths changed: $forbiddenList"
+
+    Fail "flutter_developer changed files outside lib/** and test/**: $forbiddenList"
+}
+
+if ($implementationSourceChanges.Count -eq 0) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'IMPLEMENTATION' `
+        -Message 'Planning required Flutter implementation but flutter_developer produced no source or test changes.'
+
+    Fail "flutter_developer reported implementation but produced no lib/** or test/** changes."
+}
+
+#
+# Parse the final implementation handoff.
+#
+
+$implementationHandoff = Get-FinalPlanningHandoff `
+    -Output $implementationOutput `
+    -BeginMarker 'HOMEVAULT_IMPLEMENTATION_HANDOFF_BEGIN' `
+    -EndMarker 'HOMEVAULT_IMPLEMENTATION_HANDOFF_END'
+
+if ([string]::IsNullOrWhiteSpace($implementationHandoff)) {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+
+    Add-PlanningFailureCheckpoint `
+        -Gate 'IMPLEMENTATION_HANDOFF' `
+        -Message 'flutter_developer did not return a valid final implementation handoff.'
+
+    Fail "flutter_developer did not return a valid implementation handoff."
+}
+
+$implementationStatus = Get-PlanningHandoffField `
+    -Handoff $implementationHandoff `
+    -Field 'STATUS'
+
+$implementationSummary = Get-PlanningHandoffField `
+    -Handoff $implementationHandoff `
+    -Field 'SUMMARY'
+
+$implementationNextAction = Get-PlanningHandoffField `
+    -Handoff $implementationHandoff `
+    -Field 'EXACT_NEXT_ACTION'
+
+if (
+    [string]::IsNullOrWhiteSpace($implementationStatus) -or
+    [string]::IsNullOrWhiteSpace($implementationSummary) -or
+    [string]::IsNullOrWhiteSpace($implementationNextAction)
+) {
+    Fail "Implementation handoff is missing one or more required fields."
+}
+
+if (@('PASS','BLOCKED','NEEDS_HUMAN') -notcontains $implementationStatus) {
+    Fail "Unsupported implementation STATUS: $implementationStatus"
+}
+
+if ($implementationStatus -eq 'BLOCKED') {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "agent-blocked"
+}
+
+if ($implementationStatus -eq 'NEEDS_HUMAN') {
+
+    & gh issue edit $selected.number `
+        --repo $Repo `
+        --add-label "needs-human"
+}
+
+$implementationPathsMarkdown = (
+    $implementationSourceChanges |
+        ForEach-Object {
+            "- $_"
+        }
+) -join [Environment]::NewLine
+
+if ($implementationStatus -eq 'PASS') {
+    $postImplementationStatus = 'IMPLEMENTATION_UNVALIDATED'
+    $postImplementationStage = 'LOCAL_VALIDATION'
+    $postImplementationOwner = 'controller_validation'
+}
+else {
+    $postImplementationStatus = $implementationStatus
+    $postImplementationStage = 'HUMAN_REVIEW'
+    $postImplementationOwner = 'human'
+}
+
+$implementationState = @"
+# $taskId
+
+## GitHub Issue
+
+- Number: $($selected.number)
+- Title: $($selected.title)
+- URL: $($selected.url)
+
+## Status
+
+$postImplementationStatus
+
+## Stage
+
+$postImplementationStage
+
+## Branch
+
+$taskBranch
+
+## Gates
+
+- Orchestration: PASS
+- Requirements: PASS
+- UX: $uxStatus
+- Architecture: $architectureStatus
+- Planning Reconciliation: PASS
+- Implementation: $implementationStatus
+- Local Validation: NOT_RUN
+- QA: NOT_RUN
+- Security: NOT_RUN
+- Code Review: NOT_RUN
+- Release Readiness: NOT_RUN
+- Human Review: NOT_RUN
+
+## Repair Attempts
+
+0 / 3
+
+## Current Owner
+
+$postImplementationOwner
+
+## Planning Reconciliation
+
+- Status: PASS
+- Run Flutter Developer: $runFlutterDeveloper
+- Run Backend Data: $runBackendData
+- Summary: $planningSummary
+- Exact next action: $planningNextAction
+
+## Implementation Handoff
+
+- Status: $implementationStatus
+- Summary: $implementationSummary
+- Exact next action: $implementationNextAction
+
+## Implementation Changed Paths
+
+$implementationPathsMarkdown
+
+## Validation
+
+Controller preparation: PASS
+Planning chain: PASS
+flutter_developer: $implementationStatus
+Write-boundary enforcement: PASS
+Local Flutter validation: NOT_RUN
+
+## Blockers
+
+$(if ($implementationStatus -eq 'PASS') { 'None.' } else { $implementationSummary })
+
+## Next Action
+
+$implementationNextAction
+"@
+
+Set-Content `
+    -Path $taskStatePath `
+    -Value $implementationState `
+    -Encoding UTF8
+
+Section "Implementation Gate Complete"
+
+Write-Host "Status:       $implementationStatus"
+Write-Host "Next stage:   $postImplementationStage"
+Write-Host "Next owner:   $postImplementationOwner"
+Write-Host "Summary:      $implementationSummary"
+Write-Host "Next action:  $implementationNextAction"
+Write-Host ""
+Write-Host "Changed paths:"
+
+foreach ($changedPath in $implementationSourceChanges) {
+    Write-Host "  $changedPath"
+}
+
+Write-Host ""
+Write-Host "Updated state file: $taskStatePath"
+Write-Host ""
+Write-Host "Phase 5A stops here intentionally."
+Write-Host "No QA agent was started."
+Write-Host "No security agent was started."
+Write-Host "No commit was created."
+Write-Host "No push was performed."
+Write-Host "No pull request was created."
+Write-Host "No deployment was performed."
