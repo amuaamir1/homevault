@@ -376,6 +376,16 @@ class _NotificationStatusCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                'HomeVault schedules warranty reminders on this device.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,

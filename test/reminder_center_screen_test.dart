@@ -82,6 +82,29 @@ Future<ApplianceStore> _pumpReminderCenter(
 }
 
 void main() {
+  testWidgets('shows device scheduling helper once at large text scale', (
+    tester,
+  ) async {
+    await _pumpReminderCenter(
+      tester,
+      gateway: _FakeReminderNotificationGateway(enabled: false),
+      appliances: const [],
+      textScaleFactor: 2,
+    );
+
+    const helperText = 'HomeVault schedules warranty reminders on this device.';
+    final statusCard = find.byKey(
+      const ValueKey('reminderNotificationStatusCard'),
+    );
+
+    expect(
+      find.descendant(of: statusCard, matching: find.text(helperText)),
+      findsOneWidget,
+    );
+    expect(find.text(helperText), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows unified reminder types and notification status', (
     tester,
   ) async {
