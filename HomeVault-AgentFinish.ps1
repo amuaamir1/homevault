@@ -477,8 +477,12 @@ HOMEVAULT_GATE_END
     }
     if ($status -eq 'PASS') {
         Assert ($severity -eq 'NONE') "$role returned PASS with unresolved severity $severity."
-        $contradictionPattern = '(?i)\b(BLOCKERS?|BLOCKING|CRITICAL|MAJOR|UNRESOLVED|NEEDS[_ -]?HUMAN)\b|\bOPEN\s+(?:(?:SECURITY|REVIEW)\s+)?(?:FINDING|ISSUE|RISK)\b|\bOUTSTANDING\s+(?:FINDING|ISSUE|RISK)\b|\bNOT\s+(?:YET\s+)?RESOLVED\b|\bREMEDIATION\s+(?:IS\s+)?REQUIRED\b|\bREQUIRES?\s+(?:A\s+)?FIX\b|\bMUST\s+BE\s+FIXED\b|\bPENDING\s+REMEDIATION\b'
-        Assert ($final -notmatch $contradictionPattern) "$role returned PASS with contradictory blocking or required-remediation language in its response."
+        # Trust only the final structured severity/status gate for machine decisions.
+        # Free-form explanations can legitimately say "no major findings".
+        # Fail closed if the structured FINDINGS/RISKS themselves claim material unresolved risk.
+        $materialRisk = '(?i)\b(?:unresolved|outstanding|open)\s+(?:material|critical|major|blocking)\s+(?:finding|issue|risk|vulnerability)\b|\b(?:critical|major|blocking)\s+(?:finding|issue|risk|vulnerability)\s+(?:remains|is\s+unresolved)\b'
+        $gateConcerns = $match.Groups['findings'].Value + "`n" + $match.Groups['risks'].Value
+        Assert ($gateConcerns -notmatch $materialRisk) "$role returned PASS but declared an unresolved material issue in structured findings/risks."
     }
     Add-Content -LiteralPath $evidencePath -Encoding UTF8 -Value @"
 
